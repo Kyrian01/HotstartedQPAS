@@ -1,0 +1,255 @@
+% ════════════════════════════════════════════════════════════════════════════════════════
+%  A Hot-Started Nullspace Active-Set Method for Regularized Column Generation
+%  with Equality and Inequality Linking Constraints
+%
+%  Compile with:  pdflatex main  (twice, for the references)
+%  Figures in the results chapter are drawn by pgfplots from the tables in data/, which are
+%  produced by scripts/generate_data.jl and scripts/make_plot_data.jl.
+% ════════════════════════════════════════════════════════════════════════════════════════
+
+% Document properties
+\documentclass[11pt]{book}
+\usepackage[a4paper, margin=2.6cm]{geometry}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\title{A Hot-Started Nullspace Active-Set Method for Regularized Column Generation}
+\author{Kyrian Bäumer}
+\date{\today}
+
+
+% Mathematics packages
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{bm}
+
+
+% Graphics
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+
+
+% TikZ plotting
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{pgfplotstable}
+\usepgfplotslibrary{groupplots}
+\usetikzlibrary{arrows.meta, patterns, positioning, calc, fit, decorations.pathreplacing,
+                shapes.geometric, matrix, backgrounds}
+
+
+% Colours used in figures (colour-blind safe)
+\definecolor{cblue}{HTML}{0072B2}
+\definecolor{corange}{HTML}{E69F00}
+\definecolor{cgreen}{HTML}{009E73}
+\definecolor{cred}{HTML}{D55E00}
+\definecolor{cpurple}{HTML}{CC79A7}
+\definecolor{csky}{HTML}{56B4E9}
+\definecolor{cgrey}{HTML}{6E6E6E}
+
+
+% Hyperreferences
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=cblue, citecolor=cgreen, urlcolor=cblue}
+\usepackage[nameinlink, capitalise]{cleveref}
+%\crefname{prop}{Proposition}{Propositions}
+%\crefname{cor}{Corollary}{Corollaries}
+%\crefname{definition}{Definition}{Definitions}
+%\crefname{remark}{Remark}{Remarks}
+%\crefname{note}{Note}{Notes}
+%\crefname{assumption}{Assumption}{Assumptions}
+\crefname{algo}{Algorithm}{Algorithms}
+
+
+% Theorem environment (shared numbering; aliascnt lets cleveref name each type)
+\usepackage{aliascnt}
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}[section]
+\newaliascnt{cor}{theorem}\newtheorem{cor}[cor]{Corollary}\aliascntresetthe{cor}
+\newaliascnt{prop}{theorem}\newtheorem{prop}[prop]{Proposition}\aliascntresetthe{prop}
+\newaliascnt{lemma}{theorem}\newtheorem{lemma}[lemma]{Lemma}\aliascntresetthe{lemma}
+\newaliascnt{example}{theorem}\newtheorem{example}[example]{Example}\aliascntresetthe{example}
+\newaliascnt{definition}{theorem}\newtheorem{definition}[definition]{Definition}\aliascntresetthe{definition}
+\newaliascnt{remark}{theorem}\newtheorem{remark}[remark]{Remark}\aliascntresetthe{remark}
+\newaliascnt{note}{theorem}\newtheorem{note}[note]{Note}\aliascntresetthe{note}
+\newaliascnt{assumption}{theorem}\newtheorem{assumption}[assumption]{Assumption}\aliascntresetthe{assumption}
+\crefname{theorem}{Theorem}{Theorems}
+\crefname{cor}{Corollary}{Corollarys}
+\crefname{prop}{Proposition}{Propositions}
+%\crefname{lemma}{Lemma}{Lemmas}
+%\crefname{example}{Example}{Examples}
+\crefname{definition}{Definition}{Definitions}
+\crefname{remark}{Remark}{Remarks}
+\crefname{note}{Note}{Notes}
+\crefname{assumption}{Assumption}{Assumptions}
+
+
+% Enumeration (Roman)
+\usepackage{enumitem}
+\setlist[enumerate,1]{label=(\roman*)}
+
+
+% Pseudocode and boxes
+\usepackage{tcolorbox}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\newcounter{algo}[chapter]
+\renewcommand{\thealgo}{\thechapter.\arabic{algo}}
+% \begin{algobox}{Title}{label} ... \end{algobox}
+\newenvironment{algobox}[2]{%
+  \par\medskip\refstepcounter{algo}\label{#2}%
+  \begin{tcolorbox}[colback=gray!10!white, colframe=gray!80!black, sharp corners,
+                    boxrule=0.8pt, title={Algorithm \thealgo: #1}]
+  \small\begin{algorithmic}[1]}{%
+  \end{algorithmic}\end{tcolorbox}\medskip}
+
+
+% Table of Contents
+\usepackage{tocloft}
+\setlength{\cftbeforesecskip}{6pt}
+\setlength{\cftbeforesubsecskip}{3pt}
+
+
+% Miscellaneous
+\usepackage{url}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\usepackage{microtype}
+\usepackage[section]{placeins}   % keep floats inside their section
+\raggedbottom
+% expandable input for generated table rows (LaTeX's \input breaks \bottomrule in a tabular)
+\makeatletter
+\newcommand{\tabinput}[1]{\@@input #1 }
+\makeatother
+
+
+% ── notation ──────────────────────────────────────────────────────────────────────────────
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\Sset}{\mathcal{S}}
+\newcommand{\Wx}{\mathcal{W}_x}
+\newcommand{\Nx}{\mathcal{N}_x}
+\newcommand{\Ws}{\mathcal{W}_s}
+\newcommand{\Ns}{\mathcal{N}_s}
+\newcommand{\Wset}{\mathcal{W}}
+\newcommand{\Fset}{\mathcal{F}}
+\newcommand{\rep}{\operatorname{rep}}
+\newcommand{\Heff}{H_{\mathrm{eff}}}
+\newcommand{\Aeff}{A_{\mathrm{eff}}}
+\newcommand{\pieff}{\pi_{\mathrm{eff}}}
+\newcommand{\Abar}{\bar{A}}
+\newcommand{\Cbar}{\bar{C}}
+\newcommand{\cbar}{\bar{c}}
+\newcommand{\Hbar}{\bar{H}}
+\newcommand{\ctil}{\tilde{c}}
+\newcommand{\pihat}{\hat{\pi}}
+\newcommand{\nmax}{n_{\max}}
+\newcommand{\nnz}{\operatorname{nnz}}
+\newcommand{\reach}{\operatorname{reach}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\Null}{\operatorname{Null}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\spn}{\operatorname{span}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+
+
+\begin{document}
+
+\frontmatter
+
+\begin{titlepage}
+\begin{center}
+
+\vspace*{\stretch{2}}
+
+\Large{\textsc{Applied Mathematics}}
+
+\vspace*{\stretch{4}}
+
+\textbf{\huge{\em A Hot-Started Nullspace Active-Set Method}}
+
+\bigskip\medskip
+
+\textbf{\huge{\em for Regularized Column Generation}}
+
+\bigskip\bigskip
+
+\Large{with Equality and Inequality Linking Constraints}
+
+\vspace*{\stretch{5}}
+
+\large{Author: \emph{Kyrian Bäumer}}
+
+\vspace*{\stretch{3}}
+
+\textsc{\today}
+
+\end{center}
+\end{titlepage}
+
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Column generation solves linear programs with a very large number of variables by working
+on a restricted master problem that is enlarged one column at a time. Its classical form is
+known for unstable dual iterates and slow convergence. A quadratic proximal term in the dual
+space removes most of this instability, but it turns every master problem into a convex
+quadratic program, which is considerably more expensive to solve than a linear program.
+
+\medskip
+
+This work develops a \textbf{hot-started nullspace active-set method} for these quadratic
+master problems, for multi-block problems whose linking constraints may be equalities,
+``$\ge$'' inequalities or ``$\le$'' inequalities. Surplus variables bring all linking rows
+into one equality form. The convexity constraints of the blocks then admit a
+reordering of the variables into five sets, which yields an explicit and sparse nullspace
+basis. The reduced KKT system decouples: the surplus part of the search direction is given
+by an explicit formula, and only an \emph{effective reduced Hessian} on the column weights
+has to be factorized. This matrix is the reduced Hessian of the equality rows together with
+the inequality rows whose surplus is fixed at zero. Every change of the working set becomes
+a low-rank modification of a fixed-size $LDL^\top$ factorization, which is updated in place
+with the sparse direct solver CHOLMOD and carried over from one column generation iteration
+to the next. The Lagrange multipliers of the method coincide with the reduced costs of
+column generation and with the dual sign conditions of the inequality rows. Singular reduced
+Hessians are resolved by an exact zero-curvature step, and periodic refactorization controls
+the structural zeros that accumulate in the factor.
+
+\medskip
+
+On generated airline crew scheduling instances the method reproduces the optimum of the
+full linear program, and it solves the regularized master problems two to three orders of
+magnitude faster than a general-purpose quadratic programming solver. The complete column
+generation run is also much faster than classical column generation with a linear master
+problem, and on the larger instances faster than solving the full linear program directly.
+
+
+\cleardoublepage
+\tableofcontents
+
+
+\mainmatter
+
+\input{chapters/01_introduction}
+\input{chapters/02_formulation}
+\input{chapters/03_regularization}
+\input{chapters/04_qpas}
+\input{chapters/05_nullspace}
+\input{chapters/06_updates}
+\input{chapters/07_singular}
+\input{chapters/08_results}
+\input{chapters/09_conclusion}
+
+\backmatter
+\input{chapters/bibliography}
+
+\end{document}

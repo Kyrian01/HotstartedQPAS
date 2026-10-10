@@ -1,0 +1,3 @@
+instance,ineq,V,E,m,pilots,status,cg_iters,columns,total_s,master_s,pricing_s,inner_iters,final_N,slack_free,refactor,singular,rss_GB,exact_s,gap_to_bound,infeas
+S6,0.0,400,5932,960,20,optimal,10755,5980,392.18,388.03,3.16,973835,957,missing,4408,5,0.86,0.0,1.4e-07,1.2e-05
+S6,0.3,400,5932,960,20,optimal,6066,4977,263.46,262.23,1.05,829279,846,112,3734,1,0.95,0.0,-9.7e-08,1.5e-05

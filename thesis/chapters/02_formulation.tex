@@ -1,0 +1,471 @@
+\chapter{Problem Formulation}
+\label{chap:formulation}
+
+\vspace*{\fill}
+
+This chapter introduces the class of problems considered throughout this work: linear
+programs with a multi-block structure, whose blocks are coupled by linking constraints that
+may be equalities or inequalities.
+
+\medskip
+
+We first state the problem in its original (compact) form and then apply the
+\textbf{Dantzig--Wolfe reformulation}, which replaces the variables of each block by convex
+combinations of the extreme points of the block. This leads to the \textbf{master problem},
+a linear program with a very large number of columns, which is solved by
+\textbf{column generation}. We define the restricted master problem, the reduced cost, the
+pricing problem and the Lagrangian bound, and collect them in the classical column
+generation algorithm.
+
+\medskip
+
+Finally, we introduce \textbf{surplus variables} for the inequality rows. They bring every
+linking constraint into equality form and lead to a single, \emph{unified} formulation of the
+master problem in which equality and inequality rows are treated alike. This formulation is
+the starting point for everything that follows. It also reveals the one structural property
+that the inequality rows destroy: the surplus variables belong to no block.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{Multi-Block Linear Programs with Mixed Linking Constraints}
+\label{sec:multiblock}
+
+We consider a linear program whose variables are partitioned into $K$ blocks
+$x_1, \dots, x_K$, with $x_k \in \R^{n_k}$. Each block has its own constraints, and the blocks
+interact only through a set of linking constraints.
+
+\begin{definition}[Multi-block linear program] \label{def:multiblock}
+A \textbf{multi-block linear program with mixed linking constraints} is a problem of the
+form
+\begin{subequations} \label{eq:compact}
+\begin{align}
+\min_{x_1,\dots,x_K} \quad & \sum_{k=1}^{K} c_k^\top x_k \\
+\text{s.t.} \quad
+& \sum_{k=1}^{K} A_{E,k}\, x_k = b_E, \label{eq:compact-eq} \\
+& \sum_{k=1}^{K} A_{I,k}\, x_k \ge b_I, \label{eq:compact-ineq} \\
+& x_k \in P_k, \qquad k = 1,\dots,K, \label{eq:compact-block}
+\end{align}
+\end{subequations}
+where $A_{E,k} \in \R^{m_E\times n_k}$ and $A_{I,k}\in\R^{m_I\times n_k}$ are the
+coefficients of block $k$ in the $m_E$ \textbf{equality linking rows} and the $m_I$
+\textbf{inequality linking rows}, and
+\[
+P_k = \{\, x_k \in \R^{n_k} \;:\; F_k x_k = d_k,\; l_k \le x_k \le u_k \,\}
+\]
+is the \textbf{block polytope} of block $k$. We write $m = m_E + m_I$ for the total number of
+linking rows. Constraints~\eqref{eq:compact-eq}--\eqref{eq:compact-ineq} are the
+\textbf{linking constraints}, and constraints~\eqref{eq:compact-block} are the
+\textbf{block constraints}.
+\end{definition}
+
+\begin{assumption} \label{ass:bounded}
+Every block polytope $P_k$ is nonempty and bounded, and problem~\eqref{eq:compact} is
+feasible.
+\end{assumption}
+
+Under \cref{ass:bounded} the feasible region of~\eqref{eq:compact} is a nonempty polytope,
+so the problem has an optimal solution. Its optimal value is denoted by $z^\star$.
+
+\bigskip
+
+The constraint matrix of~\eqref{eq:compact} has the \textbf{block-angular} structure shown
+in \cref{fig:block-angular}. The block constraints form a block-diagonal matrix, and only
+the linking rows couple different blocks. If the linking rows were absent, the problem would
+decompose into $K$ independent problems over $P_1, \dots, P_K$. Column generation exploits
+exactly this observation.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=0.55cm, y=0.55cm]
+    % linking rows
+    \fill[cblue!25] (0,10) rectangle (16,12);
+    \fill[corange!35] (0,8.6) rectangle (16,10);
+    \foreach \k in {0,1,2,3} {
+        \draw[cblue!70!black] (4*\k,10) rectangle (4*\k+4,12);
+        \draw[corange!80!black] (4*\k,8.6) rectangle (4*\k+4,10);
+        \node at (4*\k+2,11) {\small $A_{E,\the\numexpr\k+1\relax}$};
+        \node at (4*\k+2,9.3) {\small $A_{I,\the\numexpr\k+1\relax}$};
+    }
+    % block-diagonal part
+    \foreach \k in {0,1,2,3} {
+        \fill[cgreen!25] (4*\k, 8.6-2*\k-2) rectangle (4*\k+4, 8.6-2*\k);
+        \draw[cgreen!70!black] (4*\k, 8.6-2*\k-2) rectangle (4*\k+4, 8.6-2*\k);
+        \node at (4*\k+2, 8.6-2*\k-1) {\small $F_{\the\numexpr\k+1\relax}$};
+    }
+    \draw[thick] (0,0.6) rectangle (16,12);
+    % labels
+    \draw[decorate, decoration={brace, amplitude=4pt}] (16.3,12) -- (16.3,10)
+        node[midway, right=5pt] {\small equality rows, $=b_E$};
+    \draw[decorate, decoration={brace, amplitude=4pt}] (16.3,10) -- (16.3,8.6)
+        node[midway, right=5pt] {\small inequality rows, $\ge b_I$};
+    \draw[decorate, decoration={brace, amplitude=4pt}] (16.3,8.6) -- (16.3,0.6)
+        node[midway, right=5pt] {\small block constraints, $x_k\in P_k$};
+    \foreach \k in {0,1,2,3}
+        \node at (4*\k+2, 12.6) {\small $x_{\the\numexpr\k+1\relax}$};
+\end{tikzpicture}
+\caption{Block-angular structure of the multi-block linear program~\eqref{eq:compact} for
+$K = 4$ blocks. The linking rows (top) couple all blocks; the block constraints (bottom) are
+block-diagonal.}
+\label{fig:block-angular}
+\end{figure}
+
+\begin{remark}[Inequalities of the other direction] \label{rem:le-rows}
+A linking row of the form $\sum_k a_{i,k}^\top x_k \le b_i$ is the row
+$\sum_k (-a_{i,k})^\top x_k \ge -b_i$, so the form~\eqref{eq:compact-ineq} covers both
+directions. For the presentation we therefore only consider ``$\ge$'' rows. In
+\cref{sec:unified} we show that a ``$\le$'' row can equivalently be kept as it is, with a
+surplus variable of the opposite sign. This is how such rows are handled in the
+implementation.
+\end{remark}
+
+\begin{example}[Crew scheduling] \label{ex:crew}
+In the crew scheduling problem studied in \cref{chap:results}, block $k$ is the schedule of
+pilot $k$: a path from a source to a sink in a time--space network, with $F_k$ the
+node--edge incidence matrix of the network. The linking rows are the \emph{coverage rows}:
+row $i$ counts how often flight $i$ is operated, summed over all pilots. An equality row
+``$=1$'' requires that the flight is operated exactly once, and an inequality row ``$\ge 1$''
+requires it at least once, which allows a pilot to travel on a flight as a passenger.
+\end{example}
+
+
+\section{Dantzig--Wolfe Reformulation}
+\label{sec:dantzig-wolfe}
+
+Since $P_k$ is a nonempty polytope, it is the convex hull of its finitely many extreme points
+(Minkowski's theorem). Let $\mathcal{J}_k$ be an index set of the extreme points of $P_k$,
+and let $x^{(j)}$, $j\in\mathcal{J}_k$, denote these extreme points. Every $x_k\in P_k$ can be
+written as
+\begin{equation} \label{eq:convex-combination}
+x_k = \sum_{j\in\mathcal{J}_k} \lambda_j\, x^{(j)}, \qquad
+\sum_{j\in\mathcal{J}_k}\lambda_j = 1, \qquad \lambda_j \ge 0 .
+\end{equation}
+Substituting~\eqref{eq:convex-combination} into~\eqref{eq:compact} replaces the variables
+$x_k$ by the weights $\lambda_j$. Each extreme point turns into one column of a new problem,
+which motivates the following definitions.
+
+\begin{definition}[Columns] \label{def:columns}
+Let $\mathcal{J} = \mathcal{J}_1\cup\dots\cup\mathcal{J}_K$ (disjoint union). For
+$j\in\mathcal{J}_k$ we define
+\begin{itemize}
+    \item the \textbf{block} of column $j$: $\psi(j) = k$;
+    \item the \textbf{cost} of column $j$: $c_j = c_k^\top x^{(j)}$;
+    \item the \textbf{linking coefficients} of column $j$:
+          $a_j^E = A_{E,k}\,x^{(j)}\in\R^{m_E}$, $a_j^I = A_{I,k}\,x^{(j)}\in\R^{m_I}$, and
+          $a_j = \bigl[\,a_j^E;\, a_j^I\,\bigr]\in\R^{m}$.
+\end{itemize}
+We collect them in the cost vector $c = (c_j)_{j\in\mathcal{J}}$ and the matrices
+\[
+A_E = \bigl[\, a_j^E \,\bigr]_{j\in\mathcal{J}}\in\R^{m_E\times|\mathcal{J}|}, \qquad
+A_I = \bigl[\, a_j^I \,\bigr]_{j\in\mathcal{J}}\in\R^{m_I\times|\mathcal{J}|}, \qquad
+A = \begin{bmatrix} A_E \\ A_I\end{bmatrix}\in\R^{m\times|\mathcal{J}|}.
+\]
+\end{definition}
+
+\begin{definition}[Convexity matrix] \label{def:convexity}
+The \textbf{convexity matrix} $C\in\{0,1\}^{K\times|\mathcal{J}|}$ has the entries
+$C_{kj} = 1$ if $\psi(j) = k$ and $C_{kj} = 0$ otherwise. The constraint $C\lambda = \one$
+states that the weights of the columns of every block sum to one.
+\end{definition}
+
+\begin{definition}[Master problem] \label{def:master}
+The \textbf{master problem} is the linear program
+\begin{subequations} \label{eq:master}
+\begin{align}
+\min_{\lambda} \quad & c^\top \lambda \\
+\text{s.t.} \quad & A_E\,\lambda = b_E, && (\pi_E) \label{eq:master-eq}\\
+& A_I\,\lambda \ge b_I, && (\pi_I) \label{eq:master-ineq}\\
+& C\lambda = \one, && (\mu) \label{eq:master-conv}\\
+& \lambda \ge 0, \label{eq:master-nonneg}
+\end{align}
+\end{subequations}
+where the symbols in parentheses denote the dual variables of the constraints.
+\end{definition}
+
+\begin{theorem}[Dantzig--Wolfe \cite{dantzig1960decomposition}] \label{thm:dw}
+Under \cref{ass:bounded}, problem~\eqref{eq:master} has the optimal value $z^\star$. If
+$\lambda$ is optimal for~\eqref{eq:master}, then $x_k = \sum_{j\in\mathcal{J}_k}\lambda_j\,
+x^{(j)}$, $k=1,\dots,K$, is optimal for~\eqref{eq:compact}.
+\end{theorem}
+
+\begin{proof}
+By~\eqref{eq:convex-combination}, $x_k\in P_k$ if and only if $x_k$ is a convex combination
+of the $x^{(j)}$, $j\in\mathcal{J}_k$. Under this substitution the objective and the
+linking rows are linear in $\lambda$, with exactly the coefficients of \cref{def:columns}.
+The feasible points of~\eqref{eq:compact} are therefore the images of the feasible points
+of~\eqref{eq:master}, with equal objective values. 
+\end{proof}
+
+The convexity matrix has a very particular structure, which will be essential for the
+nullspace method of \cref{chap:nullspace}.
+
+\begin{definition}[Column generation property] \label{def:cg-property}
+A matrix $C\in\R^{K\times n}$ has the \textbf{column generation property} if
+\begin{enumerate}
+    \item every entry of $C$ is $0$ or $1$;
+    \item every column of $C$ contains exactly one entry equal to $1$;
+    \item every row of $C$ contains at least one entry equal to $1$.
+\end{enumerate}
+\end{definition}
+
+\begin{lemma} \label{lem:cg-property}
+The convexity matrix $C$ of \cref{def:convexity} has the column generation property, and so
+does every submatrix of $C$ formed by a subset of its columns that contains at least one
+column of every block.
+\end{lemma}
+
+\begin{proof}
+Property~(i) holds by definition. Every column belongs to exactly one block, which gives
+property~(ii) for every subset of columns. Property~(iii) holds for a subset of columns if
+and only if every block is represented in it. 
+\end{proof}
+
+\begin{lemma} \label{lem:C-rank}
+If $C\in\R^{K\times n}$ has the column generation property, then $\rank(C) = K$.
+\end{lemma}
+
+\begin{proof}
+By property~(iii), for every row $k$ there is a column $j_k$ with $C_{kj_k} = 1$. By
+property~(ii), this column has no other nonzero entry, i.e.\ it equals the unit vector
+$e_k$. The columns $j_1,\dots,j_K$ therefore form the identity matrix $I_K$. 
+\end{proof}
+
+\subsection*{The dual of the master problem}
+
+The dual of~\eqref{eq:master} has one constraint per column and the sign condition of the
+inequality rows:
+\begin{subequations} \label{eq:master-dual}
+\begin{align}
+\max_{\pi_E,\,\pi_I,\,\mu} \quad & b_E^\top \pi_E + b_I^\top\pi_I + \one^\top\mu \\
+\text{s.t.} \quad & c_j - a_j^\top \pi - \mu_{\psi(j)} \ge 0, \qquad j\in\mathcal{J},
+\label{eq:dual-columns}\\
+& \pi_I \ge 0, \label{eq:dual-sign}
+\end{align}
+\end{subequations}
+where $\pi = [\pi_E;\pi_I]\in\R^m$. Compared with a problem that has only equality linking
+rows, the inequality rows add the \textbf{sign condition}~\eqref{eq:dual-sign}. This is the
+only change in the dual, but much of the work in the following chapters is devoted to it.
+
+
+\section{Column Generation}
+\label{sec:column-generation}
+
+The index set $\mathcal{J}$ is typically far too large to enumerate. In crew scheduling, for
+example, $\mathcal{J}_k$ contains every feasible schedule of pilot $k$. Column generation
+solves~\eqref{eq:master} by working with a small subset of the columns at a time.
+
+\begin{definition}[Restricted master problem] \label{def:rmp}
+For a subset $\mathcal{J}'\subseteq\mathcal{J}$ that contains at least one column of every
+block, the \textbf{restricted master problem} is problem~\eqref{eq:master} with all columns
+outside $\mathcal{J}'$ removed (equivalently, with $\lambda_j = 0$ fixed for
+$j\notin\mathcal{J}'$). We write $n = |\mathcal{J}'|$ for the number of columns in the
+restricted master problem.
+\end{definition}
+
+\begin{definition}[Reduced cost] \label{def:reduced-cost}
+For dual values $(\pi,\mu)$ the \textbf{reduced cost} of a column $j\in\mathcal{J}$ is
+\[
+\bar c_j(\pi,\mu) \;=\; c_j - a_j^\top\pi - \mu_{\psi(j)} .
+\]
+\end{definition}
+
+The reduced cost is the slack of the dual constraint~\eqref{eq:dual-columns}. A column with
+a negative reduced cost violates the dual constraints and can improve the restricted master
+problem. Finding the column of most negative reduced cost in block $k$ is the
+\textbf{pricing problem}
+\begin{equation} \label{eq:pricing}
+\min_{j\in\mathcal{J}_k}\bar c_j(\pi,\mu)
+\;=\; \min_{x_k\in P_k}\bigl(c_k - A_k^\top\pi\bigr)^\top x_k \;-\;\mu_k,
+\qquad A_k = \begin{bmatrix}A_{E,k}\\ A_{I,k}\end{bmatrix},
+\end{equation}
+where the equality holds because a linear function attains its minimum over a polytope at an
+extreme point. The pricing problem is a problem over a single block. In crew scheduling it
+is a shortest path problem with edge weights $c_{e,k} - (A_k^\top\pi)_e$.
+
+\begin{prop}[Optimality test] \label{prop:cg-optimality}
+Let $\lambda'$ be optimal for the restricted master problem, with optimal duals
+$(\pi,\mu)$. If $\pi_I\ge0$ and the pricing problem~\eqref{eq:pricing} has a nonnegative
+optimal value for every block, then $\lambda'$, extended by zeros, is optimal for the master
+problem~\eqref{eq:master}.
+\end{prop}
+
+\begin{proof}
+The extended $\lambda'$ is feasible for~\eqref{eq:master}. The pair $(\pi,\mu)$ satisfies
+the sign condition~\eqref{eq:dual-sign} by assumption and every dual
+constraint~\eqref{eq:dual-columns} by the pricing result, so it is dual feasible. Complementary
+slackness holds for the columns in $\mathcal{J}'$ by optimality of the restricted problem,
+and trivially for the zero weights outside $\mathcal{J}'$. 
+\end{proof}
+
+For a linear restricted master problem the duals satisfy $\pi_I\ge0$ automatically, so the
+pricing test alone decides optimality. With the regularized master problems of the next
+chapter this will no longer be the case. Column generation also provides a lower bound on
+$z^\star$ at every iteration in which all blocks are priced.
+
+\begin{prop}[Lagrangian bound] \label{prop:lagrangian-bound}
+For every $\pi = [\pi_E;\pi_I]$ with $\pi_I\ge0$, the \textbf{Lagrangian bound}
+\[
+\theta(\pi) \;=\; b^\top\pi + \sum_{k=1}^{K}\,\min_{x_k\in P_k}\bigl(c_k - A_k^\top\pi\bigr)^\top x_k,
+\qquad b = \begin{bmatrix}b_E\\ b_I\end{bmatrix},
+\]
+satisfies $\theta(\pi)\le z^\star$.
+\end{prop}
+
+\begin{proof}
+Let $x^\star$ be optimal for~\eqref{eq:compact}. Because $\sum_k A_{E,k}x^\star_k = b_E$,
+$\sum_k A_{I,k}x^\star_k\ge b_I$ and $\pi_I\ge0$, we have
+$\pi^\top\bigl(b - \sum_k A_k x_k^\star\bigr)\le 0$. Hence
+\[
+z^\star = \sum_k c_k^\top x^\star_k
+\;\ge\; \sum_k c_k^\top x^\star_k + \pi^\top\Bigl(b - \sum_k A_k x_k^\star\Bigr)
+= b^\top\pi + \sum_k\bigl(c_k - A_k^\top\pi\bigr)^\top x^\star_k
+\;\ge\; \theta(\pi),
+\]
+since $x_k^\star\in P_k$. 
+\end{proof}
+
+\begin{remark} \label{rem:bound-sign}
+The sign condition $\pi_I\ge0$ in \cref{prop:lagrangian-bound} is essential: for $\pi_i<0$
+in an inequality row, the term $\pi_i\,(b_i - \sum_k a_{i,k}^\top x_k)$ can become arbitrarily
+large. In \cref{sec:center-update} the bound is therefore evaluated at the projection of
+the dual vector onto $\{\pi_I\ge0\}$.
+\end{remark}
+
+The resulting method is summarized in \cref{alg:classical-cg}. The initial columns are
+usually obtained by solving the pricing problem once with zero duals, which gives one
+column per block.
+
+\begin{algobox}{Classical Column Generation}{alg:classical-cg}
+\State \textbf{Input:} initial columns $\mathcal{J}'$ with at least one column per block
+\Repeat
+    \State Solve the (linear) restricted master problem over $\mathcal{J}'$; obtain
+           $\lambda'$ and duals $(\pi,\mu)$
+    \For{each block $k = 1,\dots,K$}
+        \State Solve the pricing problem~\eqref{eq:pricing}; let $j$ be the best column
+        \If{$\bar c_j(\pi,\mu) < 0$}
+            \State $\mathcal{J}'\gets\mathcal{J}'\cup\{j\}$
+        \EndIf
+    \EndFor
+\Until{no column with negative reduced cost was found}
+\State \textbf{Output:} $\lambda'$, optimal for the master problem by \cref{prop:cg-optimality}
+\end{algobox}
+
+\begin{remark}[Instability] \label{rem:instability}
+The duals of a linear restricted master problem are extreme points of its dual feasible
+region. When a column is added, the dual solution can jump to a very different extreme point,
+even if the primal solution hardly changes. As a result, the duals oscillate strongly from
+one iteration to the next, the pricing problem generates many columns that are never used,
+and the method converges slowly in its final phase (the \emph{tailing-off effect}). In the
+dual space, column generation is Kelley's cutting-plane method
+\cite{kelley1960cutting} applied to the Lagrangian dual function, a method known for exactly
+this behaviour. This is the motivation for the regularization of \cref{chap:regularization}.
+\end{remark}
+
+
+\section{Surplus Variables and the Unified Formulation}
+\label{sec:unified}
+
+The two kinds of linking rows in~\eqref{eq:master} behave differently: the equality rows
+fix $A_E\lambda$, while the inequality rows only bound $A_I\lambda$ from below. To treat both
+in the same way, we introduce for every inequality row $i$ a \textbf{surplus variable}
+$s_i\ge0$ with
+\[
+(A_I\lambda)_i - s_i = (b_I)_i, \qquad\text{i.e.}\qquad A_I\lambda - s = b_I .
+\]
+The surplus measures how much the row is over-satisfied.
+
+\begin{definition}[Unified formulation] \label{def:unified}
+Let $s\in\R^{m_I}$ be the vector of surplus variables. The \textbf{unified variable} and the
+\textbf{augmented data} are
+\[
+y = \begin{bmatrix}\lambda\\ s\end{bmatrix}, \qquad
+\Abar = \begin{bmatrix} A_E & 0\\ A_I & -I\end{bmatrix}, \qquad
+\Cbar = \begin{bmatrix} C & 0\end{bmatrix}, \qquad
+\cbar = \begin{bmatrix} c\\ 0\end{bmatrix}, \qquad
+b = \begin{bmatrix}b_E\\ b_I\end{bmatrix}.
+\]
+The \textbf{unified master problem} is
+\begin{equation} \label{eq:unified}
+\min_{y}\;\cbar^\top y \qquad\text{s.t.}\qquad \Abar y = b,\quad \Cbar y = \one,\quad y\ge0 .
+\end{equation}
+\end{definition}
+
+\begin{lemma} \label{lem:unified}
+Problems~\eqref{eq:master} and~\eqref{eq:unified} are equivalent: $\lambda$ is feasible
+for~\eqref{eq:master} if and only if $y = [\lambda;\, A_I\lambda - b_I]$ is feasible
+for~\eqref{eq:unified}, with the same objective value. Moreover, the dual
+of~\eqref{eq:unified} is the dual~\eqref{eq:master-dual} of the master problem.
+\end{lemma}
+
+\begin{proof}
+The first statement follows from $s = A_I\lambda - b_I\ge0$. For the second, the dual
+of~\eqref{eq:unified} has multipliers $\pi$ for $\Abar y = b$ and $\mu$ for $\Cbar y = \one$,
+and one constraint per column of $[\Abar;\Cbar]$. For the columns of $\lambda$ these are the
+constraints~\eqref{eq:dual-columns}. The column of surplus $s_i$ has cost $0$, coefficient
+$-e_i$ in the inequality rows and $0$ in the convexity rows, so its dual constraint reads
+$0 - (-e_i)^\top\pi_I - 0 \ge 0$, i.e.\ $(\pi_I)_i\ge0$. These are exactly the sign
+conditions~\eqref{eq:dual-sign}. 
+\end{proof}
+
+\Cref{lem:unified} shows that the surplus columns \emph{encode the sign conditions as
+ordinary dual constraints}. Problem~\eqref{eq:unified} has the same form as a master problem
+with equality linking rows only, with $(A, C, c)$ replaced by $(\Abar,\Cbar,\cbar)$. All the
+following chapters work with this form.
+
+\begin{remark}[The column generation property is lost] \label{rem:cg-property-lost}
+The augmented convexity matrix $\Cbar = [\,C\;\;0\,]$ has $m_I$ zero columns, one per
+surplus variable, so it violates property~(ii) of \cref{def:cg-property}. The surpluses do
+not belong to any block. \Cref{chap:qpas} shows that this causes no difficulty: zero
+columns are even simpler to handle than unit columns, but they have to be treated as a
+separate group of variables.
+\end{remark}
+
+\begin{remark}[``$\le$'' rows and the slack sign] \label{rem:kappa}
+A row $a_i^\top\lambda\le b_i$ can be written with a \emph{slack} $s_i\ge0$ as
+$a_i^\top\lambda + s_i = b_i$. In general, let $\kappa_i\in\{-1,+1\}$ be the coefficient of
+the slack of inequality row $i$ ($\kappa_i = -1$ for a ``$\ge$'' row, $\kappa_i = +1$ for a
+``$\le$'' row) and $K_s = \diag(\kappa)$. The unified formulation then uses
+\[
+\Abar = \begin{bmatrix} A_E & 0\\ A_I & K_s\end{bmatrix}
+\]
+instead of \cref{def:unified}, and the dual constraint of slack $i$ becomes
+$-\kappa_i(\pi_I)_i\ge0$, i.e.\ $(\pi_I)_i\le0$ for a ``$\le$'' row. Since
+$\kappa_i^2 = 1$, every result of the following chapters holds for both kinds of rows; only a
+few formulas carry a factor $\kappa_i$, and these are collected in \cref{rem:kappa-summary}.
+In the text we write all formulas for ``$\ge$'' rows ($K_s = -I$).
+\end{remark}
+
+\begin{remark}[Range rows] \label{rem:range}
+A row with two different finite bounds $\ell_i\le a_i^\top\lambda\le u_i$ needs a slack with
+an upper bound. Such rows are not considered in this work.
+\end{remark}
+
+
+\section{Summary of Notation}
+
+\begin{table}[ht]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{ll}
+\toprule
+symbol & meaning \\
+\midrule
+$K$, $k$ & number of blocks, block index \\
+$m_E$, $m_I$, $m$ & number of equality, inequality and all linking rows \\
+$\mathcal{J}$, $\mathcal{J}_k$, $\mathcal{J}'$ & all columns, columns of block $k$, columns of the restricted problem \\
+$n$ & number of columns in the restricted master problem \\
+$\psi(j)$ & block of column $j$ \\
+$c_j$, $a_j = [a_j^E; a_j^I]$ & cost and linking coefficients of column $j$ \\
+$A_E$, $A_I$, $A$ & linking coefficient matrices of the columns \\
+$C$ & convexity matrix \\
+$\lambda$, $s$, $y = [\lambda; s]$ & column weights, surpluses, unified variable \\
+$\Abar$, $\Cbar$, $\cbar$ & augmented data of the unified formulation \\
+$\pi = [\pi_E;\pi_I]$, $\mu$ & duals of the linking rows and of the convexity rows \\
+$\bar c_j(\pi,\mu)$ & reduced cost of column $j$ \\
+$\theta(\pi)$ & Lagrangian bound \\
+\bottomrule
+\end{tabular}
+\caption{Notation of \cref{chap:formulation}.}
+\end{table}

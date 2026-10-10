@@ -1,0 +1,529 @@
+\chapter{Efficient Updates of the KKT System}
+\label{chap:updates}
+
+\vspace*{\fill}
+
+Every iteration of the active-set method changes the working set by exactly one index: a
+blocking variable is added, or a variable with a negative multiplier is released. The
+previous chapter showed that everything the method needs is determined by the extended
+ordering and by a factorization of the effective reduced Hessian $\Heff$. This chapter shows
+that a change of the working set changes $\Heff$ only by a \textbf{low-rank modification}, so
+that its $LDL^\top$ factorization can be updated in place instead of being recomputed.
+
+\medskip
+
+We first introduce a \textbf{fixed-length representation}, in which the factorization has a
+fixed dimension and inactive indices are represented by identity rows. We then derive the
+updates for the three ways of \textbf{expanding} the working set and the two ways of
+\textbf{reducing} it, and translate them into row additions, row deletions and rank-one
+modifications of the factorization. Row deletions leave structural zeros in the factor; we
+analyse this effect and the \textbf{periodic refactorization} that controls it.
+
+\medskip
+
+Finally, we show that the state of the method can be carried over from one column generation
+iteration to the next. A new column and a new stability center leave the factorization
+unchanged, which gives a \textbf{hot start} of every master problem. We also analyse the
+center-only iterations of \cref{sec:center-update} in this light.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{Fixed-Length Representation}
+\label{sec:fixed-length}
+
+The number of nullspace columns $|\Nx|$ changes in almost every iteration, and the number of
+columns $n$ grows during column generation. Resizing a sparse factorization at every change
+would be expensive and complicated. Instead, all objects are given a fixed dimension.
+
+\begin{definition}[Fixed-length representation] \label{def:fixed-length}
+Let $\nmax\ge n$ be a fixed \textbf{column capacity}, the maximal number of columns that column
+generation may generate. The \textbf{embedded effective reduced Hessian} is the
+$\nmax\times\nmax$ matrix
+\[
+\bigl(\Heff^{\mathrm{emb}}\bigr)_{kj} =
+\begin{cases}
+(\Heff)_{kj} = u_k^\top D_\rho u_j, & k,j\in\Nx,\\
+1, & k = j\notin\Nx,\\
+0, & \text{otherwise,}
+\end{cases}
+\]
+i.e.\ index $j$ of the embedded matrix is column $j$ of the master problem. Indices of
+columns that are not in $\Nx$, including columns that have not been generated yet, carry an
+identity row and column.
+\end{definition}
+
+In this representation, a column entering $\Nx$ replaces an identity row by a row of $\Heff$,
+and a column leaving $\Nx$ is replaced by an identity row. The dimension never changes. The
+surpluses do not appear at all: by \cref{thm:decoupling} they have no index in the
+factorized matrix, so the inequality rows do not increase the size of the factorization.
+
+\begin{lemma}[Decoupling of inactive indices] \label{lem:embedding}
+Let $\Heff^{\mathrm{emb}} = LDL^\top$ be the $LDL^\top$ factorization without pivoting. Then
+for every $k\notin\Nx$, row and column $k$ of $L$ are $e_k$ and $D_{kk} = 1$. Consequently,
+for a right-hand side $r$ that vanishes outside $\Nx$, the solution of
+$\Heff^{\mathrm{emb}}\eta = r$ vanishes outside $\Nx$, and its restriction to $\Nx$ solves
+$\Heff\eta_x = r_{\Nx}$.
+\end{lemma}
+
+\begin{proof}
+After a symmetric permutation that moves the indices of $\Nx$ to the front,
+$\Heff^{\mathrm{emb}} = \diag(\Heff, I)$. The $LDL^\top$ factorization of a block-diagonal
+matrix is block-diagonal, and that of $I$ is $L = D = I$. Since the factorization without
+pivoting is unique and symmetric permutations only reorder it, the same holds in the
+natural order. The second statement follows from the block-diagonal structure. 
+\end{proof}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=0.32cm, y=0.32cm]
+    % active indices (row b of the matrix is drawn at height 16-b .. 17-b)
+    \foreach \a in {2,5,6,10,13} {
+        \foreach \b in {2,5,6,10,13} {
+            \fill[cblue!60] ({\a-1},{16-\b}) rectangle ({\a},{17-\b});
+        }
+    }
+    % identity on inactive
+    \foreach \k in {1,3,4,7,8,9,11,12,14,15,16} {
+        \fill[cgrey!45] ({\k-1},{16-\k}) rectangle ({\k},{17-\k});
+    }
+    \draw[thick] (0,0) rectangle (16,16);
+    \node[below] at (8,0) {\small $\Heff^{\mathrm{emb}}$, $\nmax = 16$};
+    \begin{scope}[xshift=7.5cm]
+        \fill[cblue!60] (0,10) rectangle (0.6,10.6); \node[right] at (0.8,10.3) {\small entries of $\Heff$ ($\Nx = \{2,5,6,10,13\}$)};
+        \fill[cgrey!45] (0,8.6) rectangle (0.6,9.2); \node[right] at (0.8,8.9) {\small identity on inactive indices};
+        \node[align=left, right] at (0,5.5) {\small A column entering $\Nx$ fills its row and\\ \small column (row addition); a column leaving\\ \small $\Nx$ empties them (row deletion).};
+    \end{scope}
+\end{tikzpicture}
+\caption{Fixed-length representation of the effective reduced Hessian: the active indices
+$\Nx$ are scattered over the fixed index range $1,\dots,\nmax$, and every other index carries
+an identity row.}
+\label{fig:fixed-length}
+\end{figure}
+
+
+\section{Expanding the Working Set}
+\label{sec:expanding}
+
+A step is blocked when a free variable reaches zero. The blocking index $q$ is then added to
+the working set. There are three cases, depending on the set that $q$ belongs to.
+
+\begin{lemma}[Ordering after an expansion] \label{lem:expand-ordering}
+Let $q$ be the blocking index. The extended ordering is updated as follows.
+\begin{enumerate}
+    \item $q\in\Nx$: $\;\Nx\gets\Nx\setminus\{q\}$, $\;\Wx\gets\Wx\cup\{q\}$.
+    \item $q = S_k\in\Sset$: choose a \textbf{replacement} $r\in\nu_k := \{j\in\Nx : \psi(j) = k\}$;
+          then $S_k\gets r$, $\;\Nx\gets\Nx\setminus\{r\}$, $\;\Wx\gets\Wx\cup\{q\}$.
+    \item $q$ is the free surplus $i\in\Ns$: $\;\Ns\gets\Ns\setminus\{i\}$, $\;\Ws\gets\Ws\cup\{i\}$.
+\end{enumerate}
+\end{lemma}
+
+\begin{lemma}[Existence of a replacement] \label{lem:replacement}
+In case~(ii), the set $\nu_k$ is not empty.
+\end{lemma}
+
+\begin{proof}
+The representative $S_k$ can only decrease along the direction if
+$p_{S_k} = -\sum_{j\in\nu_k}\eta_j < 0$ by~\eqref{eq:direction-components}, which requires
+$\nu_k\neq\emptyset$. 
+\end{proof}
+
+Any $r\in\nu_k$ is a valid replacement. A good choice is the column with the largest weight,
+$r = \arg\max_{j\in\nu_k}x_j$, since it is the least likely to block in the next step.
+
+\begin{theorem}[Update of the nullspace basis] \label{thm:Z-update}
+After an expansion, the nullspace basis changes as follows.
+\begin{enumerate}
+    \item $q\in\Nx$: the vector $z_q$ is removed.
+    \item $q = S_k$ with replacement $r$: the vector $z_r$ is removed, and for every
+          $j\in\nu_k\setminus\{r\}$
+          \[
+          z_j' = e_j - e_r = z_j - z_r .
+          \]
+          All other vectors are unchanged.
+    \item $q$ the surplus $i$: the vector $e_{n+i}$ is removed from $Z_s$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+Cases~(i) and~(iii) follow from \cref{cor:z-explicit}, since the index leaves $\Nx$ or $\Ns$.
+In case~(ii), the representative of block $k$ changes from $q$ to $r$, so for
+$j\in\nu_k\setminus\{r\}$, $z_j' = e_j - e_r = (e_j - e_q) - (e_r - e_q) = z_j - z_r$.
+
+\end{proof}
+
+\begin{theorem}[Update of the effective reduced Hessian, expansion] \label{thm:H-expand}
+After an expansion, $\Heff$ changes as follows.
+\begin{enumerate}
+    \item $q\in\Nx$: row and column $q$ are removed.
+    \item $q = S_k$ with replacement $r$: row and column $r$ are removed, and for
+          $i,j\in\nu_k\setminus\{r\}$ and $\ell\notin\nu_k$
+          \[
+          (\Heff')_{\ell j} = (\Heff)_{\ell j} - (\Heff)_{\ell r},\qquad
+          (\Heff')_{ij} = (\Heff)_{ij} - (\Heff)_{ir} - (\Heff)_{rj} + (\Heff)_{rr}.
+          \]
+    \item $q$ the surplus of inequality row $i$: row $i$ joins $\Aeff$, and
+          \begin{equation} \label{eq:rank-one-up}
+          \Heff' = \Heff + v_iv_i^\top,\qquad
+          v_i = Z_x^\top (A_I)_{i,:}^\top,\qquad (v_i)_j = (A_I)_{ij} - (A_I)_{i,\rep(j)}\;\;(j\in\Nx).
+          \end{equation}
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(i) The column $\Aeff z_q$ is removed from $\Aeff Z_x$. (ii) The columns of $\Aeff Z_x$
+change by \cref{thm:Z-update}, $\Aeff z_j' = \Aeff z_j - \Aeff z_r$; inserting this into
+$(\Heff)_{\ell j} = (\Aeff z_\ell)^\top(\Aeff z_j)$ gives the formulas. (iii) The nullspace
+columns are unchanged, and $\Aeff$ gains the row $(A_I)_{i,:}$. Hence
+$\Aeff'Z_x = [\Aeff Z_x;\, (A_I)_{i,:}Z_x]$ and
+$\Heff' = \Heff + Z_x^\top(A_I)_{i,:}^\top (A_I)_{i,:}Z_x$. 
+\end{proof}
+
+The vector $v_i$ is row $i$ of $B_I = A_IZ_x$. Its entry $(v_i)_j$ is nonzero only if exactly
+one of the columns $j$ and $\rep(j)$ has a nonzero coefficient in row $i$; in crew scheduling,
+if exactly one of the two schedules covers flight $i$.
+
+\begin{prop} \label{prop:expand-pd}
+An expansion preserves positive definiteness of $\Heff$.
+\end{prop}
+
+\begin{proof}
+In cases~(i) and~(ii), $\Aeff Z_x$ loses a column or is multiplied from the right by a
+nonsingular matrix (a change of basis of its column space) and then loses a column; full
+column rank is preserved in both cases. In case~(iii), $\Heff + v_iv_i^\top\succeq\Heff\succ0$.
+
+\end{proof}
+
+
+\section{Reducing the Working Set}
+\label{sec:reducing}
+
+At a subspace minimizer with a negative multiplier, the index with the most negative
+multiplier is released from the working set. By \cref{cor:multipliers-minimizer}, the
+multipliers of columns (reduced costs) and of surpluses (duals) are both measured in units
+of cost, so they can be compared directly.
+
+\begin{theorem}[Update of the effective reduced Hessian, reduction] \label{thm:H-reduce}
+\begin{enumerate}
+    \item[(iv)] Column $r\in\Wx$ is released ($\Wx\gets\Wx\setminus\{r\}$, $\Nx\gets\Nx\cup\{r\}$).
+          The basis gains $z_r = e_r - e_{\rep(r)}$, and with $u = \Aeff z_r$,
+          \begin{equation} \label{eq:bordered}
+          \Heff' = \begin{bmatrix}\Heff & h\\ h^\top & h_{rr}\end{bmatrix},\qquad
+          h = (\Aeff Z_x)^\top u,\qquad h_{rr} = u^\top u .
+          \end{equation}
+    \item[(v)] The surplus of inequality row $i$ is released ($\Ws\gets\Ws\setminus\{i\}$,
+          $\Ns\gets\Ns\cup\{i\}$). The basis gains $e_{n+i}$, row $i$ leaves $\Aeff$, and
+          \begin{equation} \label{eq:rank-one-down}
+          \Heff' = \Heff - v_iv_i^\top
+          \end{equation}
+          with $v_i$ as in~\eqref{eq:rank-one-up}.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(iv) $\Aeff Z_x' = [\Aeff Z_x\;\; u]$, and $\Heff' = (\Aeff Z_x')^\top(\Aeff Z_x')$. (v) This is
+the reverse of case~(iii) of \cref{thm:H-expand}. 
+\end{proof}
+
+\begin{lemma}[Descent after a reduction] \label{lem:descent}
+Suppose the reduced Hessian is positive definite after the reduction. Then the next search
+direction moves the released variable away from its bound: $p_r>0$ in case~(iv), and
+$(p_s)_i>0$ in case~(v).
+\end{lemma}
+
+\begin{proof}
+Before the reduction the iterate is a subspace minimizer, so $Z^\top g = 0$. After the
+reduction, the reduced gradient has a single nonzero entry, the one of the new basis vector,
+and it equals the multiplier $\nu<0$ of the released index (\cref{cor:multipliers-minimizer}).
+The new reduced system gives $\eta = -\delta\nu\,\Hbar'^{-1}e$, where $e$ is the unit vector
+of the new basis vector. Its own component is $-\delta\nu\,(\Hbar'^{-1})_{ee}>0$, because
+$\Hbar'^{-1}$ is positive definite. In both cases this component is the change of the released
+variable ($p_r = \eta_r$ for a column, $(p_s)_i = \eta_i$ for a surplus). 
+\end{proof}
+
+Unlike an expansion, a reduction can make the reduced Hessian singular: the new column $u$ in
+case~(iv) can lie in the span of the old ones, and the downdate in case~(v) can remove the
+last direction of curvature. This is the subject of \cref{chap:singular}.
+
+
+\section{Updating the $LDL^\top$ Factorization}
+\label{sec:ldl-updates}
+
+The updates of \cref{sec:expanding,sec:reducing} are applied to the factorization
+$\Heff^{\mathrm{emb}} = LDL^\top$, with $L$ unit lower triangular and $D$ diagonal, in the
+natural order of the indices. We use the sparse direct solver
+CHOLMOD~\cite{chen2008cholmod}, which provides the three required modifications
+\cite{davis1999modifying, davis2005row}:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lll}
+\toprule
+change of the working set & change of $\Heff^{\mathrm{emb}}$ & CHOLMOD routine \\
+\midrule
+(i) column leaves $\Nx$ & row/column $q$ becomes $e_q$ & \code{rowdel} \\
+(ii) representative swap & rows/columns of $\nu_k$ rewritten & \code{rowdel} + \code{rowadd} \\
+(iii) surplus becomes active & $+\,v_iv_i^\top$ & \code{updown} (update) \\
+(iv) column enters $\Nx$ & row/column $r$ set to $[h; h_{rr}]$ & \code{rowadd} \\
+(v) surplus becomes free & $-\,v_iv_i^\top$ & \code{updown} (downdate) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Row additions and deletions}
+
+\begin{prop}[Row addition] \label{prop:rowadd}
+Let row and column $k$ of $\Heff^{\mathrm{emb}}$ currently be $e_k$, and partition the indices
+into $1 = \{1,\dots,k-1\}$, $k$ and $3 = \{k+1,\dots,\nmax\}$:
+\[
+L = \begin{bmatrix} L_{11} & & \\ 0 & 1 & \\ L_{31} & 0 & L_{33}\end{bmatrix},\qquad
+D = \diag(D_1, 1, D_3).
+\]
+If row and column $k$ are set to $(h_1, h_{kk}, h_3)$, the new factor has
+\begin{align*}
+\ell_{k1} &= D_1^{-1}L_{11}^{-1}h_1 &&\text{(triangular solve with the leading block)},\\
+d_k &= h_{kk} - \ell_{k1}^\top D_1\ell_{k1} &&\text{(new pivot)},\\
+\ell_{3k} &= \bigl(h_3 - L_{31}D_1\ell_{k1}\bigr)/d_k &&\text{(new column below $k$)},\\
+L_{33}'D_3'L_{33}'^\top &= L_{33}D_3L_{33}^\top - d_k\,\ell_{3k}\ell_{3k}^\top &&\text{(rank-one downdate)}.
+\end{align*}
+\end{prop}
+
+\begin{proof}
+Multiplying out the new factor, the $(k,1)$ block gives $\ell_{k1}^\top D_1L_{11}^\top = h_1^\top$,
+the $(k,k)$ entry gives $\ell_{k1}^\top D_1\ell_{k1} + d_k = h_{kk}$, the $(3,k)$ block gives
+$L_{31}D_1\ell_{k1} + \ell_{3k}d_k = h_3$, and the $(3,3)$ block must reproduce the unchanged
+$L_{31}D_1L_{31}^\top + L_{33}D_3L_{33}^\top$. 
+\end{proof}
+
+A row deletion is the reverse operation: row and column $k$ are reset to $e_k$, which
+requires the rank-one \emph{update} $L_{33}D_3L_{33}^\top + d_k\ell_{3k}\ell_{3k}^\top$ of the trailing
+block. Two consequences of \cref{prop:rowadd} are important.
+
+\begin{itemize}
+    \item If $k$ is larger than every active index, the trailing block contains no active
+          index, the downdate is trivial, and a row addition costs a single triangular solve
+          with the active part, $O(|\Nx|^2)$ for a dense factor. This is used by the
+          refactorization in \cref{sec:refactorization}.
+    \item The new pivot $d_k$ is the Schur complement of the new entry. If $k$ is the last
+          active index, $d_k = h_{kk} - h^\top\Heff^{-1}h$ with the notation
+          of~\eqref{eq:bordered}, and $\det\Heff' = \det\Heff\cdot d_k$. A vanishing pivot
+          therefore signals a singular $\Heff'$ (\cref{chap:singular}).
+\end{itemize}
+
+\subsection{Rank-one modifications}
+
+The surplus cases (iii) and (v) modify the whole matrix by $\pm v_iv_i^\top$. The factorization
+$LDL^\top\pm vv^\top = L'D'L'^\top$ is computed by the classical rank-one update and downdate
+algorithms \cite{gill1974methods, davis1999modifying}, which process the columns of $L$ along
+the path in the elimination tree that starts at the first nonzero of $v$. Their cost is
+proportional to the number of entries of $L$ in these columns. A downdate can fail to be
+positive definite; by the matrix determinant lemma,
+\[
+\det\bigl(\Heff - v_iv_i^\top\bigr) = \det\Heff\cdot\bigl(1 - v_i^\top\Heff^{-1}v_i\bigr),
+\]
+so this happens exactly when $\omega_i := 1 - v_i^\top\Heff^{-1}v_i\le0$. \Cref{chap:singular}
+shows that for the downdates of the active-set method $\omega_i\ge0$, and treats the case
+$\omega_i = 0$.
+
+\subsection{Sparse solves}
+
+The right-hand side of~\eqref{eq:eff-system} vanishes outside $\Nx$. By \cref{lem:embedding},
+the solve only has to touch the rows of $L$ that can be reached from $\Nx$ in the graph of
+$L$, the set $\reach_L(\Nx)$. CHOLMOD supports such solves directly. Their cost is independent
+of $\nmax$, which is what makes a large capacity $\nmax$ affordable.
+
+\subsection{Assembly of a new row}
+
+A row addition in case~(iv) needs the vector $h$ of~\eqref{eq:bordered}. By~\eqref{eq:implicit},
+$h_k = u_k^\top D_\rho u$ with $u = a_r - a_{\rep(r)}$. In an implementation, $D_\rho u$ is
+scattered into a dense $m$-vector once, with the entries of the rows of free surpluses set to
+zero. Then $h_k = a_k^\top(D_\rho u) - a_{\rep(k)}^\top(D_\rho u)$ is computed for every
+$k\in\Nx$, where the products with the $K$ representatives are computed once and reused. The
+cost is $O\bigl((|\Nx| + K)\,\bar\nu\bigr)$, independent of $n$. A representative swap
+(case~(ii)) rewrites the rows of $\nu_k$ by a row deletion followed by a row addition of the
+freshly assembled row; this costs the same as applying the formulas of \cref{thm:H-expand} and
+needs no stored copy of $\Heff$.
+
+
+\section{Structural Zeros and Periodic Refactorization}
+\label{sec:refactorization}
+
+A row deletion sets row and column $k$ of $L$ to $e_k$ \emph{numerically}, but a sparse
+factorization keeps the positions of the removed entries in its sparsity pattern: the
+pattern of a column of a simplicial factor can only grow. The same holds for rank-one
+modifications. Over a long sequence of updates, the stored pattern of $L$ therefore becomes
+the union of the patterns of all factors that ever existed.
+
+\begin{definition}[Stored and effective entries] \label{def:stored-effective}
+The \textbf{stored entries} of $L$ are the off-diagonal positions in its sparsity pattern.
+The \textbf{effective entries} are the stored entries whose value is nonzero. The difference
+are the \textbf{structural zeros}. The \textbf{dense equivalent} is $|\Nx|(|\Nx|-1)/2$, the
+number of off-diagonal entries of a dense factor of $\Heff$.
+\end{definition}
+
+Every solve and every update iterates over the stored entries of the columns it touches,
+including the structural zeros. Moreover, structural zeros can connect active indices to
+indices that are no longer active, which enlarges $\reach_L(\Nx)$. The stored pattern only
+returns to the effective one when the factorization is rebuilt.
+
+\begin{definition}[Refactorization] \label{def:refactorization}
+A \textbf{refactorization} resets the factor to the identity and re-activates all indices of
+$\Nx$ by row additions \emph{in increasing index order}, with the rows assembled as in
+\cref{sec:ldl-updates}.
+\end{definition}
+
+\begin{prop}[Cost of a refactorization] \label{prop:refactor-cost}
+A refactorization costs $O(|\Nx|^3)$ arithmetic operations for the factor (about
+$|\Nx|^3/3$ for a dense $\Heff$) and $O\bigl(|\Nx|(|\Nx|+K)\,\bar\nu\bigr)$ for the assembly of
+the rows. Its stored pattern contains no structural zeros.
+\end{prop}
+
+\begin{proof}
+When the indices are added in increasing order, every new index is the largest active index,
+so each row addition is a single triangular solve with the current active part
+(\cref{prop:rowadd}), which costs $O(t^2)$ for the $t$-th index. Summing over
+$t = 1,\dots,|\Nx|$ gives $O(|\Nx|^3)$, with the constant $1/3$ of a dense Cholesky
+factorization. Since no row is ever deleted, every stored entry is computed from the current
+matrix. 
+\end{proof}
+
+The method refactorizes after every $\tau$ updates of the factorization (row additions, row
+deletions and rank-one modifications), and whenever a pivot has become too small
+(\cref{chap:singular}). The interval $\tau$ balances the cost of a rebuild against the growth
+of the structural zeros, which is roughly proportional to the number of updates. Its effect is
+studied in \cref{sec:results-fill}.
+
+\begin{remark}[Natural ordering] \label{rem:natural-ordering}
+Sparse direct solvers usually reorder a matrix to reduce fill-in. For $\Heff$ this would gain
+nothing: the effective factor is almost exactly as dense as a dense factor of $\Heff$
+(\cref{sec:results-fill}), because columns of the same block share their representative and
+are therefore strongly coupled. The natural ordering has two advantages: index $j$ of the
+factor is column $j$ of the master problem, and the refactorization of
+\cref{def:refactorization} only appends rows.
+\end{remark}
+
+
+\section{Hot Start Between Column Generation Iterations}
+\label{sec:hot-start}
+
+Between two master problems, regularized column generation adds columns and moves the
+stability center (\cref{alg:rcg}). Both changes can be absorbed without touching the
+factorization.
+
+\begin{theorem}[Hot start] \label{thm:hot-start}
+Let $y = [x;s]$ be the final iterate of a master problem, with its extended ordering and the
+factorization of $\Heff$.
+\begin{enumerate}
+    \item \textbf{New column.} If a column $n+1\le\nmax$ is added with weight $x_{n+1} = 0$
+          and placed in the working set $\Wx$, then $y$ remains feasible, $\pi(y)$ is
+          unchanged, and the nullspace basis, $\Aeff$, $\Heff$ and its factorization are
+          unchanged. The multiplier of the new column is its reduced cost, which is negative
+          because pricing selected it.
+    \item \textbf{New center.} If the center changes from $\pihat$ to $\pihat + \Delta$,
+          then $y$ remains feasible, the ordering and the factorization are unchanged, and the
+          dual estimate becomes $\pi(y) + \Delta$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(i) The convexity constraint of the block of the new column still holds because its weight
+is zero, and $\Abar y$ does not change. The new index is in $\Wx$, so the sets $\Sset$, $\Nx$,
+$\Ns$ and with them $Z$ and $\Heff$ are unchanged; in the fixed-length representation, index
+$n+1$ already carries an identity row. The multiplier is given by
+\cref{cor:multipliers-minimizer}. (ii) The constraints do not involve $\pihat$, and
+$\Heff$ does not depend on it (\cref{rem:factor-independent}). The formula for $\pi(y)$
+follows from~\eqref{eq:pi-of-y}. 
+\end{proof}
+
+After a new column, the previous optimum is a subspace minimizer whose only negative
+multipliers are those of the new columns. The next master problem therefore typically starts
+by releasing the new column (case~(iv)). After a new center, the reduced gradient changes and
+the iterate is in general no longer a subspace minimizer; the next master problem starts with
+a direction computation on the inherited factorization. The surpluses are never added or
+removed, and their status is carried over like that of the columns.
+
+\subsection{Center-only iterations}
+
+The hot start also explains the behaviour of the center-only iterations of
+\cref{sec:center-update}, in which the center moves to the current dual and no column is
+added. Let $\Pi$ denote the orthogonal projector onto the range of $\Abar Z$.
+
+\begin{prop}[Center-only iterations] \label{prop:center-only}
+Let $y$ be optimal for the current master problem, with residual $r = b - \Abar y$ and dual
+$\pi = \pihat + r/\delta$, and let the center move to $\pihat' = \pi$. Suppose that the next
+master problem takes one full step and keeps the working set. Then
+\begin{enumerate}
+    \item the new residual is $r' = (I-\Pi)\,r$ and the new dual is $\pi' = \pi + (I-\Pi)\,r/\delta$;
+    \item if the working set stays the same in the following center-only iterations, the
+          primal iterate no longer changes, and every further iteration moves the dual by the
+          fixed vector $r'/\delta$:
+          \[
+          \pi^{(t+1)} = \pi^{(t)} + \frac{r'}{\delta},\qquad
+          (\nu_x)_j^{(t+1)} = (\nu_x)_j^{(t)} - \frac{u_j^\top r'}{\delta},\qquad
+          (\nu_s)_i^{(t+1)} = (\nu_s)_i^{(t)} + \frac{r'_i}{\delta}.
+          \]
+\end{enumerate}
+\end{prop}
+
+\begin{proof}
+With $\Delta = \pi - \pihat = r/\delta$, the new dual at the old iterate is $\pi + \Delta$ by
+\cref{thm:hot-start}, and the reduced gradient becomes $Z^\top g - (\Abar Z)^\top\Delta =
+-(\Abar Z)^\top\Delta$, since $Z^\top g = 0$ at the old optimum. The reduced
+system~\eqref{eq:reduced-system} gives $\eta = \delta\,\Hbar^{-1}(\Abar Z)^\top\Delta$, hence
+$\Abar p = \Abar Z\eta = \delta\,\Pi\Delta$. After the full step,
+$\pi' = \pi + \Delta - \frac{1}{\delta}\Abar p = \pi + (I-\Pi)\Delta$, and
+$r' = \delta(\pi' - \pihat') = (I-\Pi)\,r$. This is~(i).
+
+For~(ii), $r'$ is orthogonal to the range of $\Abar Z$. In the next center-only iteration,
+$\Delta' = r'/\delta$, so the reduced gradient $-(\Abar Z)^\top\Delta'$ vanishes, the direction
+is zero, and $y$ does not move. The dual becomes $\pi' + \Delta'$, the residual stays $r'$,
+and the same argument applies again. The multipliers change by~\eqref{eq:gradient-split}:
+$g_j - g_{\rep(j)}$ changes by $-(a_j - a_{\rep(j)})^\top\Delta'$, and $g_{n+i} = \pi_i$ by
+$\Delta'_i$. 
+\end{proof}
+
+\Cref{prop:center-only} shows that in a center-only phase the dual walks along a fixed
+direction with step length $\lVert r'\rVert/\delta$, while the primal iterate stays put. The
+walk ends when a multiplier changes sign, so that the working set changes, or when pricing
+finds an improving column. If the residual $r'$ is small, many such iterations are needed,
+which explains the long tail of center-only iterations observed in \cref{sec:results-phases}.
+Each of them is cheap: one direction computation, which returns zero, and one multiplier test.
+
+
+\section{The Complete Method}
+\label{sec:complete}
+
+\Cref{alg:hot-qpas} combines the results of
+\cref{chap:qpas,chap:nullspace,chap:updates}. It is called in the first line of the loop of
+regularized column generation (\cref{alg:rcg}), and its state, consisting of the iterate, the
+extended ordering and the factorization, is kept from one call to the next.
+
+\begin{algobox}{Hot-Started Nullspace Active-Set Method}{alg:hot-qpas}
+\State \textbf{Input:} state of the previous call (iterate $y$, ordering, factor of $\Heff$),
+       new columns, new center $\pihat$
+\State Put the new columns into $\Wx$ with weight $0$ \Comment{\cref{thm:hot-start}}
+\State $\pi\gets\pihat + (b - \Abar y)/\delta$
+\Repeat
+    \If{the last step was not a full step}
+        \State Compute $p$ by \cref{alg:nullspace-iteration} (lines 2--4)
+    \Else
+        \State $p\gets0$ \Comment{\cref{prop:full-step}}
+    \EndIf
+    \If{$p\approx0$}
+        \State Compute the multipliers (\cref{cor:multipliers-minimizer})
+        \If{all multipliers $\ge-\varepsilon$} \textbf{return} $y$, $\pi$, $\mu$ \EndIf
+        \State Release the most negative index: \code{rowadd} (column) or downdate (surplus)
+        \State If the new pivot is too small, resolve the singularity (\cref{alg:singular})
+    \Else
+        \State Ratio test over $\Sset\cup\Nx\cup\Ns$; $y\gets y + \alpha p$;
+               $\pi\gets\pi - \frac{\alpha}{\delta}\Abar p$
+        \If{blocked by $q$}
+            \State Expand: \code{rowdel} ($q\in\Nx$), representative swap ($q\in\Sset$), or
+                   update ($q\in\Ns$)
+        \EndIf
+    \EndIf
+    \State Refactorize if $\tau$ updates have passed since the last refactorization
+\Until{returned}
+\end{algobox}

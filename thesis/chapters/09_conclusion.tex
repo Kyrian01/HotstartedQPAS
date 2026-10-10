@@ -1,0 +1,76 @@
+\chapter{Conclusion}
+\label{chap:conclusion}
+
+This work developed a hot-started nullspace active-set method for the quadratic master
+problems of regularized column generation, for multi-block linear programs whose linking
+constraints may be equalities or inequalities of either direction.
+
+\section{Summary}
+
+The starting point was a \textbf{unified formulation} (\cref{chap:formulation}): surplus
+variables bring every linking row into equality form, and the sign conditions of the
+inequality rows become ordinary dual constraints of the surplus columns. Proximal
+regularization of the dual then leads to a convex quadratic master problem
+(\cref{chap:regularization}). Because all linking rows are equalities, its auxiliary variable
+can be eliminated for all rows, and the result has only the convexity constraints and
+nonnegativity bounds. Two identities underlie everything that follows: the duals of the
+linking rows are an explicit affine function of the primal iterate, and the gradient of the
+quadratic objective consists of the reduced costs of the columns and the duals of the
+inequality rows.
+
+\medskip
+
+For the active-set method (\cref{chap:qpas}), the constraint matrix of a working set admits a
+\textbf{reordering into five sets}: representatives, working-set columns, nullspace columns,
+active surpluses and free surpluses. The surpluses violate the column generation property of
+the convexity matrix, but this only adds two groups of columns with identity structure. The
+reordering yields an explicit nullspace basis of vectors $e_j - e_{\rep(j)}$ and unit vectors,
+which is never stored (\cref{chap:nullspace}). The reduced KKT system \textbf{decouples}: the
+surplus part of the direction is explicit, and only the \textbf{effective reduced Hessian}
+$\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$ has to be factorized. Here $\Aeff$ holds the equality rows
+and the inequality rows with active surplus. The column part of the method is thus the method
+for equality rows, applied to a linking matrix whose rows change with the surplus working set.
+The Lagrange multipliers are the reduced costs and the dual signs, so the optimality test of
+the master problem and the pricing test are the same test.
+
+\medskip
+
+Every change of the working set is a row addition, a row deletion or a rank-one modification
+of a fixed-size $LDL^\top$ factorization (\cref{chap:updates}). A new column or a new
+stability center leaves the factorization unchanged, which gives a hot start of every master
+problem. Structural zeros left by the updates are controlled by periodic refactorization in
+increasing index order. Singular reduced Hessians are resolved by an exact zero-curvature
+step, which removes the dependency and keeps every working-set variable at its bound, for
+released columns and released surpluses alike (\cref{chap:singular}).
+
+\medskip
+
+On generated crew scheduling instances (\cref{chap:results}), the method reproduces the optimum
+of the full linear program and certifies it by the Lagrangian bound. Its master problems cost
+between $0.01$ and $7$\,ms on average. That is two to three orders of magnitude less than a
+general-purpose QP solver, and fast enough to make regularized column generation much faster
+than classical column generation with a warm-started LP master: 7.7\,s instead of 650\,s on
+the largest instance on which both were run. From medium-sized instances on, the complete
+column generation run is even faster than solving the full linear program directly.
+Inequality rows are handled at no extra cost and lead to shorter runs.
+
+
+\section{Outlook}
+
+The experiments point to three directions for further work.
+\begin{itemize}
+    \item \textbf{Dense factorization for large nullspaces.} The factor of $\Heff$ turned out
+          to be dense. For large $|\Nx|$, a dense $LDL^\top$ (or $QR$) factorization with
+          rank-one updates would avoid the overhead of sparse data structures and would make
+          the periodic refactorization unnecessary.
+    \item \textbf{Adaptive stabilization in the proximal phase.} The long tail of center-only
+          iterations is a property of the proximal point method with a fixed $\delta$
+          (\cref{prop:center-only}). Since $\delta$ does not enter the factorization, it can be
+          decreased in this phase at no cost to the linear algebra.
+    \item \textbf{Range rows and inexact master solves.} Linking rows with two finite bounds
+          need surpluses with upper bounds, which fit into the same framework as an additional
+          working-set state. Moreover, since the multipliers are the reduced costs, pricing
+          could be called at any subspace minimizer instead of only at the optimum of the
+          master problem. This would turn column generation into a single active-set method
+          over all columns.
+\end{itemize}

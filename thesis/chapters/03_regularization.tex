@@ -1,0 +1,393 @@
+\chapter{Regularization of the Master Problem}
+\label{chap:regularization}
+
+\vspace*{\fill}
+
+This chapter replaces the linear restricted master problem by a regularized one. The
+regularization is formulated in the dual space, where it adds a quadratic penalty on the
+distance between the dual iterate and a \textbf{stability center}. Translated back to the
+primal space, it yields a convex quadratic program with an auxiliary variable, the
+\textbf{explicit regularized master problem}.
+
+\medskip
+
+Because all linking rows of the unified formulation are equalities, the auxiliary variable
+can be eliminated for equality and inequality rows alike. The result, the
+\textbf{eliminated regularized master problem}, is a convex quadratic program whose only
+constraints are the convexity constraints and the nonnegativity of the variables. This is the
+problem that the active-set method of the following chapters solves.
+
+\medskip
+
+Two identities derived in this chapter are used throughout the rest of the work. The first
+expresses the duals of the linking rows as an explicit function of the primal iterate. The
+second shows that the gradient of the quadratic objective consists of the reduced costs of
+the columns and the duals of the inequality rows. The chapter ends with the regularized
+column generation algorithm, its exact stopping criterion and the accuracy that this
+criterion guarantees.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{Proximal Stabilization of the Dual}
+\label{sec:proximal}
+
+Consider the restricted master problem in the unified form~\eqref{eq:unified}, over the
+columns $\mathcal{J}'$ and all $m_I$ surpluses. Its dual is
+\begin{equation} \label{eq:restricted-dual}
+\max_{\pi,\,\mu}\; b^\top\pi + \one^\top\mu
+\qquad\text{s.t.}\qquad
+c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0 \;\;(j\in\mathcal{J}'),\qquad \pi_I\ge0 .
+\end{equation}
+Its optimal dual solutions are extreme points of the feasible region, which causes the
+instability described in \cref{rem:instability}. Proximal stabilization adds a penalty on the
+distance to a given point $\pihat\in\R^m$.
+
+\begin{definition}[Stabilized dual problem] \label{def:stabilized-dual}
+Let $\pihat\in\R^m$ be the \textbf{stability center} and $\delta>0$ the
+\textbf{stabilization parameter}. The \textbf{stabilized dual problem} is
+\begin{equation} \label{eq:stabilized-dual}
+\max_{\pi,\,\mu}\; b^\top\pi + \one^\top\mu - \frac{\delta}{2}\,\lVert\pi-\pihat\rVert^2
+\qquad\text{s.t.}\qquad
+c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0 \;\;(j\in\mathcal{J}'),\qquad \pi_I\ge0 .
+\end{equation}
+\end{definition}
+
+The objective of~\eqref{eq:stabilized-dual} is strictly concave in $\pi$, so the optimal
+$\pi$ is unique. A large $\delta$ keeps $\pi$ close to $\pihat$ (strong stabilization), and
+$\delta\to0$ recovers~\eqref{eq:restricted-dual}. Replacing the center $\pihat$ by the
+solution $\pi$ and solving again is one step of the \textbf{proximal point method}
+\cite{rockafellar1976monotone} applied to the restricted dual problem. If the center is only
+moved when it improves the Lagrangian bound, we obtain a \textbf{proximal bundle method}
+\cite{kiwiel1990proximity, briant2008comparison}. Both rules are discussed in
+\cref{sec:center-update}.
+
+
+\section{The Explicit Regularized Master Problem}
+\label{sec:explicit}
+
+The primal counterpart of~\eqref{eq:stabilized-dual} has an auxiliary vector
+$w\in\R^m$, one entry per linking row.
+
+\begin{definition}[Explicit regularized master problem] \label{def:explicit}
+The \textbf{explicit regularized master problem} is
+\begin{subequations} \label{eq:explicit}
+\begin{align}
+\min_{y,\,w}\quad & \cbar^\top y + \frac{\delta}{2}\lVert w + \pihat\rVert^2
+                     - \frac{\delta}{2}\lVert\pihat\rVert^2 \\
+\text{s.t.}\quad & \Abar y + \delta w = b, && (\pi) \label{eq:explicit-link}\\
+& \Cbar y = \one, && (\mu)\\
+& y\ge0 .
+\end{align}
+\end{subequations}
+\end{definition}
+
+\begin{theorem} \label{thm:explicit-duality}
+The dual of~\eqref{eq:explicit} is the stabilized dual problem~\eqref{eq:stabilized-dual}.
+Strong duality holds, and at a pair of optimal solutions
+\begin{equation} \label{eq:pi-w}
+\pi = \pihat + w .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+The Lagrangian of~\eqref{eq:explicit}, with multipliers $\pi$, $\mu$ and $\nu\ge0$ for
+$y\ge0$, is
+\[
+\mathcal{L} = \cbar^\top y + \tfrac{\delta}{2}\lVert w+\pihat\rVert^2
+- \tfrac{\delta}{2}\lVert\pihat\rVert^2
++ \pi^\top(b - \Abar y - \delta w) + \mu^\top(\one - \Cbar y) - \nu^\top y .
+\]
+It is a strictly convex quadratic function of $w$, minimized where
+$\delta(w + \pihat) - \delta\pi = 0$, i.e.\ at $w = \pi - \pihat$. Inserting this,
+\[
+\tfrac{\delta}{2}\lVert\pi\rVert^2 - \tfrac{\delta}{2}\lVert\pihat\rVert^2
+- \delta\pi^\top(\pi-\pihat) = -\tfrac{\delta}{2}\lVert\pi-\pihat\rVert^2 .
+\]
+The Lagrangian is linear in $y$, and its infimum over $y$ is finite only if
+$\cbar - \Abar^\top\pi - \Cbar^\top\mu - \nu = 0$ for some $\nu\ge0$, i.e.\ only if
+$\cbar - \Abar^\top\pi - \Cbar^\top\mu\ge0$. The dual function is therefore
+$b^\top\pi + \one^\top\mu - \frac{\delta}{2}\lVert\pi-\pihat\rVert^2$, subject to this
+condition. Written per column, the condition for the columns of $\lambda$
+is~\eqref{eq:dual-columns}, and the condition for the surplus columns is $\pi_I\ge0$
+(\cref{lem:unified}). This is~\eqref{eq:stabilized-dual}. Problem~\eqref{eq:explicit} is a
+feasible convex quadratic program with linear constraints (it is feasible because $w$ is
+free), so strong duality holds, and the minimizing $w$ satisfies~\eqref{eq:pi-w}. 
+\end{proof}
+
+\begin{remark} \label{rem:sign-in-dual}
+\Cref{thm:explicit-duality} shows that the sign condition $\pi_I\ge0$ is part of the
+stabilized dual problem automatically, through the surplus columns. The stability center
+$\pihat$ itself may violate it. The proximal step then moves $\pi$ back into the region
+$\pi_I\ge0$.
+\end{remark}
+
+\begin{remark} \label{rem:why-surplus}
+Without surplus variables, an inequality row $(A_I\lambda)_i\ge(b_I)_i$ would enter the
+explicit problem as $(A_I\lambda)_i + \delta w_i\ge(b_I)_i$, and $w_i$ would no longer be
+determined by $\lambda$. The surpluses make every row of~\eqref{eq:explicit-link} an
+equality, so that $w$ can be eliminated for all rows in the next section.
+\end{remark}
+
+
+\section{The Eliminated Regularized Master Problem}
+\label{sec:eliminated}
+
+From~\eqref{eq:explicit-link} we get $w = (b - \Abar y)/\delta$ for every feasible point.
+Substituting this into the objective of~\eqref{eq:explicit} removes $w$ completely.
+
+\begin{theorem}[Eliminated regularized master problem] \label{thm:eliminated}
+Problem~\eqref{eq:explicit} is equivalent to the convex quadratic program
+\begin{subequations} \label{eq:eliminated}
+\begin{align}
+\min_{y}\quad & f(y) = \frac{1}{2\delta}\, y^\top\Abar^\top\Abar\, y + \ctil^\top y \\
+\text{s.t.}\quad & \Cbar y = \one, \label{eq:eliminated-conv}\\
+& y\ge0, \label{eq:eliminated-bounds}
+\end{align}
+\end{subequations}
+with the linear cost
+\begin{equation} \label{eq:ctilde}
+\ctil = \cbar - \Abar^\top\Bigl(\pihat + \frac{b}{\delta}\Bigr).
+\end{equation}
+More precisely, $(y, w)$ is optimal for~\eqref{eq:explicit} if and only if $y$ is optimal
+for~\eqref{eq:eliminated} and $w = (b - \Abar y)/\delta$. The objective values are related by
+\begin{equation} \label{eq:objective-relation}
+\Phi(y) := \cbar^\top y + \frac{\delta}{2}\lVert w+\pihat\rVert^2 - \frac{\delta}{2}\lVert\pihat\rVert^2
+= f(y) + \frac{1}{2\delta}\lVert b\rVert^2 + \pihat^\top b .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Let $r = b - \Abar y$, so $w = r/\delta$. Then
+\[
+\tfrac{\delta}{2}\lVert r/\delta + \pihat\rVert^2 - \tfrac{\delta}{2}\lVert\pihat\rVert^2
+= \tfrac{1}{2\delta}\lVert r\rVert^2 + \pihat^\top r
+= \tfrac{1}{2\delta}\lVert\Abar y\rVert^2 - \tfrac{1}{\delta}b^\top\Abar y
+  + \tfrac{1}{2\delta}\lVert b\rVert^2 + \pihat^\top b - \pihat^\top\Abar y .
+\]
+Adding $\cbar^\top y$ and collecting the terms that are linear in $y$ gives $f(y)$ plus the
+constant in~\eqref{eq:objective-relation}. The constraint~\eqref{eq:explicit-link} only
+defines $w$, so the remaining constraints are~\eqref{eq:eliminated-conv}
+and~\eqref{eq:eliminated-bounds}. 
+\end{proof}
+
+The Hessian of $f$ is $\frac{1}{\delta}\Abar^\top\Abar$, with the block structure
+\begin{equation} \label{eq:hessian-blocks}
+\frac{1}{\delta}\Abar^\top\Abar
+= \frac{1}{\delta}\begin{bmatrix} A_E^\top A_E + A_I^\top A_I & -A_I^\top\\ -A_I & I\end{bmatrix}.
+\end{equation}
+It is positive semidefinite but in general singular: it has rank at most $m$, while the
+number of variables $n + m_I$ grows with every generated column. Problem~\eqref{eq:eliminated}
+nevertheless has an optimal solution, because its feasible region is bounded in the $\lambda$
+part and the objective grows quadratically in $s$.
+
+\subsection{The dual vector as a function of the primal iterate}
+
+Relation~\eqref{eq:pi-w} with $w = (b-\Abar y)/\delta$ suggests the following definition,
+which applies to \emph{every} $y$, not only to the optimal one.
+
+\begin{definition}[Dual estimate] \label{def:dual-estimate}
+For $y = [\lambda; s]$ the \textbf{dual estimate} is
+\begin{equation} \label{eq:pi-of-y}
+\pi(y) = \pihat + \frac{1}{\delta}\bigl(b - \Abar y\bigr),
+\qquad\text{i.e.}\qquad
+\begin{aligned}
+\pi_E(y) &= \pihat_E + \tfrac{1}{\delta}\bigl(b_E - A_E\lambda\bigr),\\
+\pi_I(y) &= \pihat_I + \tfrac{1}{\delta}\bigl(b_I - A_I\lambda + s\bigr).
+\end{aligned}
+\end{equation}
+\end{definition}
+
+A surplus raises the dual of its row: an over-covered inequality row with a positive
+surplus has a larger $\pi_i$ than it would have without the surplus. The next lemma is the
+central identity of this work.
+
+\begin{lemma}[Gradient--dual relation] \label{lem:gradient-dual}
+For every $y$,
+\begin{equation} \label{eq:gradient-dual}
+\nabla f(y) = \cbar - \Abar^\top\pi(y),
+\qquad\text{i.e.}\qquad
+g_j := \frac{\partial f}{\partial\lambda_j} = c_j - a_j^\top\pi(y), \qquad
+\frac{\partial f}{\partial s_i} = \pi_i(y)\quad (i\in\{1,\dots,m_I\}).
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+$\nabla f(y) = \frac{1}{\delta}\Abar^\top\Abar y + \cbar - \Abar^\top\pihat - \frac{1}{\delta}\Abar^\top b
+= \cbar - \Abar^\top\bigl(\pihat + \frac{1}{\delta}(b - \Abar y)\bigr)$. The rows of
+$\Abar^\top$ belonging to $\lambda_j$ are $a_j^\top$, and the rows belonging to $s_i$ are
+$-e_i^\top$ (in the inequality part). 
+\end{proof}
+
+\Cref{lem:gradient-dual} has two consequences that are used throughout this work.
+\begin{itemize}
+    \item The gradient component of a column, $g_j = c_j - a_j^\top\pi$, is the
+          \textbf{reduced cost of column $j$ without the convexity dual}. The gradient
+          component of a surplus is the dual of its row.
+    \item The gradient, an $(n+m_I)$-vector whose length grows with every column, is
+          determined by the $m$-vector $\pi(y)$. An implementation can store $\pi$ and
+          evaluate $g_j$ only where it is needed.
+\end{itemize}
+
+\begin{prop}[Objective value] \label{prop:objective-value}
+For every $y$, with $\pi = \pi(y)$,
+\[
+\Phi(y) = c^\top\lambda + \frac{\delta}{2}\lVert\pi\rVert^2 - \frac{\delta}{2}\lVert\pihat\rVert^2 .
+\]
+\end{prop}
+
+\begin{proof}
+In~\eqref{eq:objective-relation}, $\Phi(y) = \cbar^\top y + \frac{\delta}{2}\lVert w+\pihat\rVert^2
+- \frac{\delta}{2}\lVert\pihat\rVert^2$ with $w+\pihat = \pi(y)$, and $\cbar^\top y = c^\top\lambda$
+because the surpluses have zero cost. 
+\end{proof}
+
+\begin{prop}[Uniqueness of the dual] \label{prop:pi-unique}
+The optimal value of $\Abar y$, and hence the optimal dual vector $\pi$, is the same for all
+optimal solutions of~\eqref{eq:eliminated}, even if the optimal $y$ is not unique.
+\end{prop}
+
+\begin{proof}
+Let $y_1, y_2$ be optimal with $\Abar y_1\ne\Abar y_2$. Their midpoint $\bar y$ is feasible.
+The linear part of $f$ is affine, while $\lVert\Abar y\rVert^2$ is strictly convex as a
+function of $\Abar y$, so $f(\bar y) < \frac12\bigl(f(y_1)+f(y_2)\bigr)$, a contradiction.
+
+\end{proof}
+
+\begin{prop}[Residual and dual distance] \label{prop:residual}
+For every $y$,
+\[
+b - \Abar y = \delta\bigl(\pi(y) - \pihat\bigr).
+\]
+In particular, $y$ is feasible for the unified master problem~\eqref{eq:unified} if and only
+if $\pi(y) = \pihat$.
+\end{prop}
+
+\begin{proof}
+This is~\eqref{eq:pi-of-y} rearranged. 
+\end{proof}
+
+
+\section{Regularized Column Generation}
+\label{sec:center-update}
+
+Column generation with the regularized master problem follows the classical scheme of
+\cref{alg:classical-cg}, with two differences: the duals passed to the pricing problem are
+the stabilized duals $\pi(y)$, and the stability center has to be updated.
+
+\subsection{Center updates}
+
+Two rules for the center update are common.
+\begin{itemize}
+    \item \textbf{Proximal point rule:} after every master problem, $\pihat\gets\pi$. Every
+          iteration is a step of the proximal point method on the current restricted dual
+          problem.
+    \item \textbf{Bundle rule:} $\pihat\gets\pi$ only if the Lagrangian bound improves,
+          $\theta(\pi) > \theta(\pihat)$ (a \emph{serious step}). Otherwise the center stays
+          (a \emph{null step}). This requires the Lagrangian bound at every iteration, i.e.\
+          all blocks must be priced every iteration.
+\end{itemize}
+
+\subsection{Exact termination}
+
+In classical column generation, the pricing test alone decides optimality
+(\cref{prop:cg-optimality}). With regularization this is no longer true: when pricing finds
+no improving column, the regularized master problem may still be infeasible for the
+unregularized one, since $\Abar y\ne b$ as long as $\pi\ne\pihat$ (\cref{prop:residual}).
+
+\begin{theorem}[Exact termination] \label{thm:exact-termination}
+Let $y = [\lambda; s]$ be optimal for the eliminated regularized master
+problem~\eqref{eq:eliminated} over the columns $\mathcal{J}'$, with dual estimate
+$\pi = \pi(y)$ and convexity duals $\mu$. If
+\begin{enumerate}
+    \item $\pi = \pihat$, and
+    \item the pricing problem~\eqref{eq:pricing} has a nonnegative optimal value for every
+          block,
+\end{enumerate}
+then $\lambda$, extended by zeros, is optimal for the master problem~\eqref{eq:master}, and
+$(\pi,\mu)$ is optimal for its dual~\eqref{eq:master-dual}.
+\end{theorem}
+
+\begin{proof}
+By \cref{prop:residual}, $\pi = \pihat$ gives $\Abar y = b$, i.e.\ $A_E\lambda = b_E$ and
+$A_I\lambda = b_I + s\ge b_I$, so $\lambda$ is primal feasible. The optimality conditions
+of~\eqref{eq:eliminated}, which are derived in \cref{thm:kkt-master} below, state that every
+column of $\mathcal{J}'$ has a nonnegative reduced cost (with equality where $\lambda_j>0$),
+that $\pi_I\ge0$, and that $\pi_i = 0$ whenever $s_i>0$. Condition~(ii) extends the
+nonnegativity of the reduced costs to all columns. So $(\pi,\mu)$ is dual feasible, and
+complementary slackness holds for the columns, the zero weights outside $\mathcal{J}'$ and the
+inequality rows. 
+\end{proof}
+
+If pricing finds no improving column while $\pi\ne\pihat$, the restricted master problem
+contains the right columns for the moment, but the proximal term still keeps $\pi$ away from
+the restricted dual optimum. The algorithm then moves the center to $\pi$ and solves the
+master problem again \emph{without adding a column}. We call this a
+\textbf{center-only iteration}. It is one proximal point step on the current restricted
+model. Along the way, the duals move, and pricing may find improving columns again. A run of
+regularized column generation therefore consists of two kinds of iterations, which
+\cref{sec:results-phases} studies in detail: iterations that add columns, and center-only
+iterations that drive $\pi$ towards $\pihat$.
+
+\begin{prop}[Accuracy of the stopping test] \label{prop:stop-accuracy}
+In practice condition~(i) of \cref{thm:exact-termination} is tested as
+\begin{equation} \label{eq:center-test}
+\lVert\pi - \pihat\rVert_\infty \;\le\; \tau\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr)
+\end{equation}
+with a tolerance $\tau>0$. When this test holds, the violation of the linking rows by
+$\lambda$ is bounded by
+\[
+\lVert b - \Abar y\rVert_\infty \;\le\; \delta\,\tau\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr).
+\]
+\end{prop}
+
+\begin{proof}
+This follows from \cref{prop:residual}. 
+\end{proof}
+
+The accuracy of the final solution is thus relative to the size of the duals, and it scales
+with $\delta$. The objective value $\Phi$ and the Lagrangian bound are much less affected by
+this residual than the cost $c^\top\lambda$ of a slightly infeasible $\lambda$, as the
+results in \cref{sec:results-correctness} show.
+
+\subsection{The Lagrangian bound with inequality rows}
+
+The Lagrangian bound of \cref{prop:lagrangian-bound} requires $\pi_I\ge0$. The duals of the
+regularized master problem satisfy this condition only up to the tolerance of the master
+solver, and a tiny negative entry would make the bound useless (\cref{rem:bound-sign}). The
+bound is therefore evaluated at the projection
+\[
+\pi^+ = \bigl[\,\pi_E;\;\max(\pi_I, 0)\,\bigr],
+\]
+which always satisfies the sign condition, so that $\theta(\pi^+)\le z^\star$ holds by
+\cref{prop:lagrangian-bound}. The same projected vector is passed to the pricing problem.
+For problems with equality rows only, $\pi^+ = \pi$.
+
+\subsection{The algorithm}
+
+\begin{algobox}{Regularized Column Generation}{alg:rcg}
+\State \textbf{Input:} initial columns $\mathcal{J}'$ (one per block), center $\pihat$,
+       parameter $\delta>0$, tolerances $\tau$, $\varepsilon_{\mathrm{rc}}$
+\Repeat
+    \State Solve the eliminated regularized master problem~\eqref{eq:eliminated}; obtain $y$,
+           $\pi = \pi(y)$ and $\mu$
+    \State $\pi^+\gets[\pi_E;\max(\pi_I,0)]$
+    \State Price the blocks in random order with $(\pi^+,\mu)$; add the first column with
+           $\bar c_j < -\varepsilon_{\mathrm{rc}}$ to $\mathcal{J}'$
+    \If{no column was added (all blocks priced)}
+        \State $\theta\gets\theta(\pi^+)$ \Comment{valid lower bound on $z^\star$}
+        \If{$\lVert\pi-\pihat\rVert_\infty\le\tau\max(1,\lVert\pi\rVert_\infty)$}
+            \State \textbf{stop}: $\lambda$ is optimal (\cref{thm:exact-termination})
+        \EndIf
+        \State $\pihat\gets\pi$ \Comment{center-only iteration}
+    \Else
+        \State $\pihat\gets\pi$ \Comment{proximal point rule (bundle rule: only if $\theta$ improves)}
+    \EndIf
+\Until{stopped}
+\end{algobox}
+
+In the experiments of \cref{chap:results} we use the proximal point rule,
+$\delta = 1$, $\tau = 10^{-6}$ and $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The remaining
+chapters develop the method used to solve the master problem in the first line of the loop.

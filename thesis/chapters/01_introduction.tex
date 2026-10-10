@@ -1,0 +1,144 @@
+\chapter{Introduction}
+\label{chap:introduction}
+
+\vspace*{\fill}
+
+Many large-scale planning problems, such as crew scheduling, vehicle routing and cutting stock,
+lead to linear programs with a block structure: a number of independent subproblems, one per
+crew member, vehicle or machine, are coupled by a comparatively small set of
+\textbf{linking constraints}. In crew scheduling, for instance, every pilot follows a
+schedule of their own, while the linking constraints require that each flight is covered by
+the pilots together.
+
+\medskip
+
+\textbf{Column generation} is the standard method for such problems. The problem is first
+rewritten in terms of complete solutions of the subproblems (a schedule, a route, a cutting
+pattern), so that every variable, or \emph{column}, represents one such solution. There are
+far too many columns to write down, but only a few of them are needed in an optimal
+solution. Column generation therefore works with a \textbf{restricted master problem} over a
+small set of columns and asks the subproblems, in the \textbf{pricing problem}, for a new
+column that can improve the current solution.
+
+\medskip
+
+In its classical form the restricted master problem is a linear program. Its dual solutions,
+which drive the pricing problem, are known to jump from one extreme point to another, which
+makes the method unstable and slow in its final phase \cite{lubbecke2005selected}. A
+well-established remedy is \textbf{proximal stabilization}
+\cite{dumerle1999stabilized, briant2008comparison}: the dual problem is augmented by a
+quadratic term that keeps the dual iterate close to a \emph{stability center}. The price of this regularization is
+that every restricted master problem becomes a \textbf{convex quadratic program}.
+
+\medskip
+
+This work is about solving this sequence of quadratic programs efficiently, for linking
+constraints that may be equalities as well as inequalities.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{The Computational Problem}
+
+Two consecutive restricted master problems in column generation are almost identical. The
+new problem contains one more column, and with stabilization the stability center may have
+moved. A general-purpose quadratic programming solver does not exploit this: it rebuilds and
+refactorizes its internal linear algebra for every master problem, and its cost per master
+problem grows with the number of generated columns.
+
+\bigskip
+
+\textbf{Active-set methods} are well suited for sequences of closely related quadratic
+programs. They move between faces of the feasible region by adding or removing one
+constraint at a time, and the linear system they solve at each step changes only by a
+low-rank term. In the \textbf{nullspace} variant, this system is the reduced Hessian on the
+nullspace of the active constraints. Its size equals the number of degrees of freedom of the
+current face, not the number of variables.
+
+\bigskip
+
+The question addressed in this work is how far this structure can be exploited for the
+regularized master problem of column generation, in particular:
+\begin{enumerate}
+    \item What is the structure of the active constraints of the regularized master problem,
+          and does it allow an explicit nullspace basis?
+    \item How small is the linear system that has to be factorized, and how does it change
+          when the working set changes?
+    \item Can the factorization be carried over from one column generation iteration to the
+          next, so that a new column or a new stability center costs (almost) nothing?
+    \item What changes when the linking constraints are inequalities, which add sign
+          conditions on the dual variables and destroy part of the structure?
+    \item How does the resulting method compare in practice with general-purpose solvers and
+          with classical column generation?
+\end{enumerate}
+
+
+\section{Contributions}
+
+The main results of this work are the following.
+
+\begin{itemize}
+    \item \textbf{A unified formulation for mixed linking constraints.} Equality rows and
+          inequality rows of both directions are written as equalities with surplus
+          variables. The regularized master problem then has a single form for all cases
+          (\cref{chap:formulation,chap:regularization}).
+
+    \item \textbf{A five-set column ordering and an explicit nullspace basis.} The convexity
+          constraints of the blocks, together with the surplus variables, admit an ordering
+          of the variables into representatives, working-set columns, nullspace columns,
+          active surpluses and free surpluses. The nullspace basis consists of vectors
+          $e_j - e_{\rep(j)}$ and unit vectors, and it is never stored
+          (\cref{chap:qpas,chap:nullspace}).
+
+    \item \textbf{Decoupling and the effective reduced Hessian.} The reduced KKT system splits
+          into an explicit formula for the surplus directions and a system with the
+          \emph{effective reduced Hessian} $\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$. Here $\Aeff$
+          holds the equality rows together with the inequality rows whose surplus is fixed at
+          zero. Its dimension never exceeds the number of linking constraints
+          (\cref{chap:nullspace}).
+
+    \item \textbf{Multipliers are reduced costs.} The Lagrange multipliers of the active-set
+          method are exactly the reduced costs of column generation and the dual sign
+          conditions of the inequality rows. The optimality test of the master problem and
+          the pricing test are therefore the same test, applied inside and outside the
+          restricted master problem (\cref{chap:nullspace}).
+
+    \item \textbf{Updates and hot start.} Every change of the working set is a row
+          addition, a row deletion or a rank-one modification of a fixed-size $LDL^\top$
+          factorization. A new column or a new stability center leaves the factorization
+          unchanged (\cref{chap:updates}).
+
+    \item \textbf{Exact treatment of singular reduced Hessians.} A dependent nullspace
+          direction is resolved by a zero-curvature step that keeps every working-set
+          variable exactly at its bound (\cref{chap:singular}).
+
+    \item \textbf{A computational study} on generated crew scheduling instances with equality
+          and inequality coverage rows: correctness against the full linear program, timing,
+          the two phases of convergence, and the effect of refactorization on the fill of the
+          factor (\cref{chap:results}).
+\end{itemize}
+
+
+\section{Outline}
+
+\Cref{chap:formulation} introduces the multi-block linear program with mixed linking
+constraints, its Dantzig--Wolfe reformulation, column generation and the surplus
+formulation. \Cref{chap:regularization} adds the proximal regularization, eliminates the
+auxiliary variable and derives the relation between the gradient of the quadratic master
+problem and the reduced costs. \Cref{chap:qpas} sets up the active-set method for the
+regularized master problem and establishes the five-set reordering of the constraint matrix.
+\Cref{chap:nullspace} constructs the nullspace basis, solves the reduced KKT system with the
+effective reduced Hessian and recovers the Lagrange multipliers. \Cref{chap:updates}
+describes the updates of the factorization when the working set changes, the fixed-length
+representation, periodic refactorization and the hot start between column generation
+iterations. \Cref{chap:singular} treats singular reduced Hessians. \Cref{chap:results}
+presents the computational results, and \cref{chap:conclusion} concludes.
+
+\bigskip
+
+Throughout, the reader is assumed to be familiar with linear programming duality, the basic
+idea of column generation and the basic idea of a primal active-set method for quadratic
+programming, as found in standard texts such as \cite{nocedal2006numerical,
+desaulniers2005column}. Everything beyond this is derived in the text.
