@@ -129,6 +129,26 @@ end
         @test r.objective ≈ ref rtol = 1e-6
     end
 
+    @testset "diagnostics traces" begin
+        inst = test_instance(:small; seed = 1, inequality_fraction = 0.3)
+        o = CGOptions(max_columns = 2_000, diagnostics_every = 25)
+        r = solve_column_generation(inst, QPASMaster(); options = o)
+        d = r.stats.diagnostics
+        @test length(d) == r.stats.iterations ÷ 25 + (r.stats.iterations % 25 == 0 ? 0 : 1)
+        @test d[end].iteration == r.stats.iterations              # final snapshot
+        @test all(x -> x.factor_stored >= x.factor_effective, d)
+        @test all(x -> x.factor_effective <= x.factor_dense, d)
+        @test all(x -> x.reach >= 0 && x.peak_rss_MB > 0 && x.cholmod_MB > 0, d)
+        path = write_diagnostics_csv(tempname() * ".csv", r.stats)
+        @test countlines(path) == length(d) + 1
+        # masters without internals still get the memory columns
+        r2 = solve_column_generation(inst, HighsLPMaster(); options = o)
+        @test haskey(r2.stats.diagnostics[end], :julia_heap_MB)
+        @test !haskey(r2.stats.diagnostics[end], :factor_stored)
+        # off by default
+        @test isempty(solve_column_generation(inst, QPASMaster()).stats.diagnostics)
+    end
+
     @testset "limits and reporting" begin
         inst = test_instance(:small; seed = 1)
         r = solve_column_generation(inst, HighsLPMaster(); options = CGOptions(max_iterations = 5))

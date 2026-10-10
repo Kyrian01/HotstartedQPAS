@@ -14,6 +14,8 @@ _common_offset(name::Symbol) =
 
 const COMMON_STATUS_OFFSET = _common_offset(:status)
 const COMMON_PRINT_OFFSET = _common_offset(:print)
+const COMMON_MEMORY_INUSE_OFFSET = _common_offset(:memory_inuse)   # bytes held by CHOLMOD now
+const COMMON_MEMORY_USAGE_OFFSET = _common_offset(:memory_usage)   # peak bytes since start
 
 "Exception raised when a CHOLMOD call reports failure."
 struct CholmodError <: Exception
@@ -50,6 +52,14 @@ function finish!(c::CholmodCommon)
     c.finished = true
     return nothing
 end
+
+"Bytes currently allocated by CHOLMOD through this workspace (factor, buffers, workspace)."
+memory_inuse(c::CholmodCommon) =
+    Int(GC.@preserve c unsafe_load(Ptr{Csize_t}(common_ptr(c) + COMMON_MEMORY_INUSE_OFFSET)))
+
+"Peak number of bytes ever allocated by CHOLMOD through this workspace."
+memory_peak(c::CholmodCommon) =
+    Int(GC.@preserve c unsafe_load(Ptr{Csize_t}(common_ptr(c) + COMMON_MEMORY_USAGE_OFFSET)))
 
 "Throw a [`CholmodError`](@ref) unless `ret` is CHOLMOD's TRUE."
 @inline function check_call(ret::Cint, c::CholmodCommon, func::String)

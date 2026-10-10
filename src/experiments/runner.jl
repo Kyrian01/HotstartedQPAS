@@ -57,6 +57,9 @@ function run_experiment(e::Experiment; io::IO = stdout)
         @printf(io, "%s, %d iterations, %.3f s\n", r.status, r.stats.iterations, total_time(r))
         flush(io)
         e.write_traces && write_trace_csv(joinpath(dir, "$solver.csv"), r.stats)
+        # sampled memory / factor diagnostics, if enabled with diagnostics_every > 0
+        e.write_traces && !isempty(r.stats.diagnostics) &&
+            write_diagnostics_csv(joinpath(dir, "$(solver)_diagnostics.csv"), r.stats)
     end
 
     report = sprint() do s

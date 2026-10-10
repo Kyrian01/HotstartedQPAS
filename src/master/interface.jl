@@ -20,6 +20,7 @@
 #
 #   solver_details(m)              -> Vector{Pair{String,Any}} of solver-specific statistics
 #   release!(m)                    free external resources early
+#   diagnostics(m)                 -> NamedTuple snapshot of internal sizes (or nothing)
 
 """
 Supertype of all restricted master problem solvers. See `src/master/interface.jl` for the
@@ -80,6 +81,8 @@ function supports_inequalities end
 
 solver_details(::AbstractMasterSolver) = Pair{String,Any}[]
 release!(::AbstractMasterSolver) = nothing
+"Snapshot of solver-internal sizes for diagnostics traces (`nothing` if not provided)."
+diagnostics(::AbstractMasterSolver) = nothing
 
 set_center!(m::AbstractMasterSolver, ::AbstractVector) =
     throw(ArgumentError("$(method_name(m)) is not a stabilized master"))

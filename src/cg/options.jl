@@ -37,6 +37,8 @@ Settings of [`solve_column_generation`](@ref).
 | `seed`                | 1234               | seed of the pricing order RNG                                   |
 | `verbose`             | false              | print a progress line every `log_every` iterations              |
 | `log_every`           | 100                |                                                                 |
+| `diagnostics_every`   | 0                  | record memory use and solver internals (factor nnz, set sizes)  |
+|                       |                    | every k iterations and at the end; 0 = off                      |
 
 Termination is exact: column generation stops when a complete pricing round over all pilots
 finds no column with negative reduced cost (and, for stabilized masters, the stability
@@ -54,6 +56,7 @@ Base.@kwdef struct CGOptions
     seed::Int = 1234
     verbose::Bool = false
     log_every::Int = 100
+    diagnostics_every::Int = 0
 end
 
 function validate(opts::CGOptions)
@@ -62,6 +65,7 @@ function validate(opts::CGOptions)
     opts.stabilization.center_update in (:every_iteration, :best_bound) ||
         throw(ArgumentError("center_update must be :every_iteration or :best_bound"))
     opts.stabilization.delta > 0 || throw(ArgumentError("δ must be positive"))
+    opts.diagnostics_every >= 0 || throw(ArgumentError("diagnostics_every must be ≥ 0"))
     opts.max_columns >= 1 || throw(ArgumentError("max_columns must be positive"))
     return opts
 end

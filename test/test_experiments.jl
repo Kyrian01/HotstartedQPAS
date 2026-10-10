@@ -71,6 +71,8 @@ end
             edge_probability = 0.2
             n_tasks = 12
             n_pilots = 3
+            [defaults.column_generation]
+            diagnostics_every = 50
             [defaults.output]
             directory = "$(escape_string(out))"
             save_instance = true
@@ -89,7 +91,7 @@ end
         ineq = results["tiny_ineq"]
         @test length(ineq) == 3                              # qpas handles inequality rows
         @test ineq[3].objective ≈ ineq[1].objective rtol = 1e-6
-        for f in ("summary.txt", "lp.csv", "qpas.csv", "instance.jls")
+        for f in ("summary.txt", "lp.csv", "qpas.csv", "qpas_diagnostics.csv", "instance.jls")
             @test isfile(joinpath(out, "tiny_eq", f))
         end
         @test countlines(joinpath(out, "summary.csv")) == 1 + 3 + 3

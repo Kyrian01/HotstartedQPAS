@@ -32,7 +32,7 @@ include("ldlt_factor.jl")
 
 export LDLtFactor, CholmodError
 export rowadd!, rowdel!, updown!, solve!, rhs_buffer, pivot, min_scaled_pivot, reset!, dimension
-export factor_matrices
+export factor_matrices, factor_stats, last_reach
 export cholmod_version
 
 function __init__()

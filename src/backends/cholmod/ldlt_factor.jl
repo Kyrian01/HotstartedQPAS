@@ -285,6 +285,63 @@ function min_scaled_pivot(F::LDLtFactor, indices::AbstractVector{<:Integer},
 end
 
 """
+    factor_stats(F, active) -> NamedTuple
+
+Contents of the factor `L` (strictly lower part; the diagonal holds `D` and is not counted):
+
+- `allocated`: entries CHOLMOD has reserved for `L` (`nzmax`, including the diagonal)
+- `stored`: off-diagonal entries currently stored in the pattern of `L`. `rowdel` and
+  rank-one updates zero entries numerically but keep them in the pattern, so this is what
+  every solve and update actually pays for
+- `effective`: stored off-diagonal entries that are numerically nonzero
+- `active_stored`, `active_effective`: the same, restricted to the columns in `active`
+- `memory`, `memory_peak`: bytes held by CHOLMOD now / at most since the factor was created
+
+One pass over the stored entries, `O(stored + n)`.
+"""
+function factor_stats(F::LDLtFactor, active::AbstractVector{<:Integer})
+    _check_open(F)
+    f = unsafe_load(F.L)
+    is_active = falses(F.n)
+    for k in active
+        is_active[k] = true
+    end
+    stored = effective = astored = aeffective = 0
+    @inbounds for j in 1:F.n
+        start = unsafe_load(f.p, j)           # 0-based start of column j
+        cnt = unsafe_load(f.nz, j)            # stored entries of column j, diagonal first
+        # off-diagonal entries: positions start+1 … start+cnt-1
+        nzj = 0
+        for t in (start + 1):(start + cnt - 1)
+            unsafe_load(f.x, t + 1) != 0.0 && (nzj += 1)
+        end
+        stored += cnt - 1
+        effective += nzj
+        if is_active[j]
+            astored += cnt - 1
+            aeffective += nzj
+        end
+    end
+    return (allocated = Int(f.nzmax), stored = stored, effective = effective,
+            active_stored = astored, active_effective = aeffective,
+            memory = memory_inuse(F.common), memory_peak = memory_peak(F.common))
+end
+
+"""
+    last_reach(F) -> Int
+
+Size of `reach_L(Bset)` of the last sparse right-hand-side solve, i.e. the number of rows
+of the factor that solve touched (0 if no sparse solve has happened yet).
+"""
+function last_reach(F::LDLtFactor)
+    _check_open(F)
+    F.Xset[] == C_NULL && return 0
+    Xh = unsafe_load(F.Xset[])
+    # Xset is an n × 1 pattern: its column pointer p[1] = 0, p[2] = number of entries
+    return Int(unsafe_load(Xh.p, 2))
+end
+
+"""
     reset!(F)
 
 Discard the current factorization and reinitialise `F` to the identity.

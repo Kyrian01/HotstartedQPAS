@@ -89,7 +89,7 @@ export AbstractMasterSolver, HighsLPMaster, HighsExplicitQPMaster, HighsEliminat
 export QPASMaster, QPASOptions
 # results and statistics
 export objective_value, method_name, total_time, edge_flows, active_columns
-export CGStats, ExactStats, compare_results, print_details, write_trace_csv
+export CGStats, ExactStats, compare_results, print_details, write_trace_csv, write_diagnostics_csv
 export mean_master_time, total_master_time, first_feasible_iteration, best_lower_bound
 # experiments
 export Experiment, load_experiments, run_experiment, run_experiments

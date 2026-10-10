@@ -155,6 +155,9 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
                           n_columns = pool.n, inner_iterations = sol.inner_iterations,
                           columns_added = n_new, center_updated = center_moved)
         copyto!(prev_π, sol.π)
+        if options.diagnostics_every > 0 && iter % options.diagnostics_every == 0
+            _record_diagnostics!(stats, master, pool, iter, (time_ns() - t_start) * 1e-9)
+        end
         final = (solution = sol, cost = op_cost, infeasibility = infeas)   # copied after the loop
 
         if options.verbose && (iter % options.log_every == 0 || converged)
@@ -173,6 +176,11 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
         end
     end
 
+    # one final snapshot, unless the last iteration was already sampled
+    if options.diagnostics_every > 0 &&
+       (isempty(stats.diagnostics) || stats.diagnostics[end].iteration != stats.iterations)
+        _record_diagnostics!(stats, master, pool, stats.iterations, (time_ns() - t_start) * 1e-9)
+    end
     stats.status = status
     stats.total_time = (time_ns() - t_start) * 1e-9
     stats.details = solver_details(master)
@@ -189,6 +197,18 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
 end
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────────
+
+# Snapshot of memory use and solver internals (`CGOptions(diagnostics_every = k)`).
+function _record_diagnostics!(stats::CGStats, master::AbstractMasterSolver, pool::ColumnPool,
+                              iter::Integer, elapsed::Float64)
+    base = (iteration = Int(iter), time = elapsed, columns = pool.n,
+            # live Julia heap, peak resident set of the whole process, the column pool
+            julia_heap_MB = Base.gc_live_bytes() / 2^20, peak_rss_MB = Sys.maxrss() / 2^20,
+            pool_MB = pool_memory(pool) / 2^20)
+    d = diagnostics(master)                    # solver internals, e.g. the QPAS factor
+    push!(stats.diagnostics, d === nothing ? base : merge(base, d))
+    return nothing
+end
 
 """
     coupling_dual_term(π, lower, upper) -> Float64

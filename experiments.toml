@@ -47,6 +47,8 @@ compute_bound          = false              # price all pilots every iteration (
 seed                   = 1234               # seed of the pricing order
 verbose                = false              # progress line every log_every iterations
 log_every              = 100
+diagnostics_every      = 0                  # memory, factor nnz, |N|, … every k iterations
+                                            #   → <solver>_diagnostics.csv (0 = off)
 
 # ── stabilization (explicit_qp, eliminated_qp, qpas) ─────────────────────────────────────
 [defaults.stabilization]
@@ -132,3 +134,13 @@ log_every  = 250
 # n_tasks             = 40
 # n_pilots            = 4
 # inequality_fraction = 0.3
+
+[[experiment]]
+name = "I2_ineq"
+[experiment.instance]
+n_nodes             = 150
+edge_probability    = 0.09
+n_tasks             = 230
+n_pilots            = 15
+inequality_fraction = 0.5
+

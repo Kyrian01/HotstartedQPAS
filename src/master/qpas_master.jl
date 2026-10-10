@@ -97,6 +97,8 @@ function solve!(m::QPASMaster)
     return sol
 end
 
+diagnostics(m::QPASMaster) = m.state === nothing ? nothing : qpas_diagnostics(m.state)
+
 function solver_details(m::QPASMaster)
     st = m.state
     st === nothing && return Pair{String,Any}[]
@@ -113,6 +115,13 @@ function solver_details(m::QPASMaster)
         "refactorizations" => c.refactorizations,
         "final |N| (nullspace dim.)" => nullspace_dimension(st.kkt.ordering),
     ]
+    # contents of the final factor: stored pattern vs numerically nonzero entries
+    dg = qpas_diagnostics(st)
+    push!(details, "factor nnz stored / effective (off-diag.)" =>
+                   "$(dg.factor_stored) / $(dg.factor_effective)")
+    push!(details, "  dense factor of H_eff would have" => dg.factor_dense)
+    push!(details, "CHOLMOD memory now / peak [MB]" =>
+                   "$(round(dg.cholmod_MB; digits = 2)) / $(round(dg.cholmod_peak_MB; digits = 2))")
     sp = st.kkt.surplus
     if n_surplus(sp) > 0
         # inequality rows: slack activity and the size of A_eff

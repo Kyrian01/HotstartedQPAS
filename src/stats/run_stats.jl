@@ -19,7 +19,9 @@ Per-iteration traces (all of equal length `iterations`):
 | `columns_added`    | columns added by the pricing round                                      |
 | `center_updated`   | stabilised runs: whether the stability center moved                     |
 
-`details` holds solver-specific totals (e.g. QPAS working-set updates and time breakdown)
+`diagnostics` holds sampled snapshots (one `NamedTuple` per sample, see
+`CGOptions(diagnostics_every = k)`): memory use and solver internals such as the factor
+size. `details` holds solver-specific totals (e.g. QPAS working-set updates and time breakdown)
 as an ordered list of `name => value` pairs.
 """
 mutable struct CGStats
@@ -40,13 +42,14 @@ mutable struct CGStats
     inner_iterations::Vector{Int}
     columns_added::Vector{Int}
     center_updated::Vector{Bool}
+    diagnostics::Vector{NamedTuple}
     details::Vector{Pair{String,Any}}
 end
 
 CGStats(method::AbstractString) =
     CGStats(String(method), :not_started, 0, 0.0, 0.0, 0,
             Float64[], Float64[], Float64[], Float64[], Float64[], Float64[], Float64[],
-            Int[], Int[], Int[], Bool[], Pair{String,Any}[])
+            Int[], Int[], Int[], Bool[], NamedTuple[], Pair{String,Any}[])
 
 "Append one CG iteration to the traces."
 function record_iteration!(s::CGStats; master_time, pricing_time, master_objective,
@@ -97,6 +100,25 @@ struct ExactStats
     n_variables::Int
     n_constraints::Int
     n_nonzeros::Int
+end
+
+"""
+    write_diagnostics_csv(path, stats::CGStats)
+
+Write the sampled diagnostics of a CG run (`CGOptions(diagnostics_every = k)`) as CSV, one
+row per sample. Columns are the fields of the first sample; missing fields are left empty.
+"""
+function write_diagnostics_csv(path::AbstractString, s::CGStats)
+    mkpath(dirname(abspath(path)))
+    isempty(s.diagnostics) && return path
+    keys_ = collect(keys(s.diagnostics[1]))
+    open(path, "w") do io
+        println(io, join(keys_, ','))
+        for d in s.diagnostics
+            println(io, join((haskey(d, k) ? d[k] : "" for k in keys_), ','))
+        end
+    end
+    return path
 end
 
 """

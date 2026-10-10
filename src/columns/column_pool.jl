@@ -106,6 +106,15 @@ end
     @inbounds return t <= hi - lo + 1 && pool.rowval[lo + t - 1] == i ? pool.nzval[lo + t - 1] : 0.0
 end
 
+"Bytes held by the column pool (coefficients, costs, blocks, stored paths, signatures)."
+function pool_memory(pool::ColumnPool)
+    b = sizeof(pool.colptr) + sizeof(pool.rowval) + sizeof(pool.nzval) + sizeof(pool.cost) +
+        sizeof(pool.block)
+    # each path is a separate vector of edge indices
+    b += sum(sizeof, pool.paths; init = 0)
+    return b
+end
+
 "`‖a_j‖²`."
 @inline function column_norm2(pool::ColumnPool, j::Integer)
     s = 0.0

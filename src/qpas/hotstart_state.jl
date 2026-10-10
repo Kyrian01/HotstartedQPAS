@@ -175,6 +175,39 @@ function masked_duals!(st::QPASState)
     return st.πm, st.μm
 end
 
+"""
+    qpas_diagnostics(state) -> NamedTuple
+
+Snapshot of the solver's internal size, for traces (`CGOptions(diagnostics_every = k)`):
+
+| field | meaning |
+|:------|:--------|
+| `N`, `W`, `N_s` | sizes of the nullspace set, the working set and the free-slack set |
+| `factor_stored` | off-diagonal entries stored in `L` (incl. zeros left by `rowdel`/`updown`) |
+| `factor_effective` | stored off-diagonal entries that are numerically nonzero |
+| `factor_dense` | `|N|(|N|-1)/2`, the off-diagonal entries of a dense factor of `H_eff` |
+| `factor_fill` | `effective / dense`: how dense the true factor of `H_eff` is |
+| `factor_waste` | `(stored - effective) / stored`: share of stored entries that are zeros |
+| `factor_allocated` | entries reserved by CHOLMOD for `L` |
+| `reach` | rows touched by the last sparse solve (`|reach_L(N)|`, ≥ `|N|`) |
+| `updates_since_refactor` | row updates since the last rebuild (structural zeros accumulate) |
+| `cholmod_MB`, `cholmod_peak_MB` | memory held by CHOLMOD now / at its peak |
+"""
+function qpas_diagnostics(st::QPASState)
+    kkt = st.kkt
+    Nset = items(kkt.ordering.N)
+    fs = Cholmod.factor_stats(kkt.factor, Nset)
+    nN = length(Nset)
+    dense = nN * (nN - 1) ÷ 2
+    return (N = nN, W = length(kkt.ordering.W), N_s = length(kkt.surplus.free),
+            factor_stored = fs.stored, factor_effective = fs.effective, factor_dense = dense,
+            factor_fill = dense == 0 ? 0.0 : fs.effective / dense,
+            factor_waste = fs.stored == 0 ? 0.0 : (fs.stored - fs.effective) / fs.stored,
+            factor_allocated = fs.allocated, reach = Cholmod.last_reach(kkt.factor),
+            updates_since_refactor = kkt.updates_since_refactor,
+            cholmod_MB = fs.memory / 2^20, cholmod_peak_MB = fs.memory_peak / 2^20)
+end
+
 "`cᵀx` over the registered columns."
 cost_term(st::QPASState) = total_cost(st.pool, st.x)
 

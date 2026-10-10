@@ -131,6 +131,30 @@ end
         @test min(Cholmod.pivot(F, 1), Cholmod.pivot(F, 3)) <= 1e-12
     end
 
+    @testset "factor statistics" begin
+        F = Cholmod.LDLtFactor(6)
+        Cholmod.rowadd!(F, 2, [2], [4.0], 1)
+        Cholmod.rowadd!(F, 4, [2, 4], [1.0, 3.0], 2)
+        Cholmod.rowadd!(F, 5, [2, 4, 5], [1.0, 1.0, 5.0], 3)
+        L, _ = Cholmod.factor_matrices(F)
+        fs = Cholmod.factor_stats(F, [2, 4, 5])
+        @test fs.effective == count(!iszero, L - I)                # numerically nonzero
+        @test fs.stored >= fs.effective
+        @test fs.active_effective == fs.effective                  # only N couples
+        @test fs.memory > 0 && fs.memory_peak >= fs.memory
+        # rowdel zeroes row/column 4 numerically but leaves its entries in the pattern
+        Cholmod.rowdel!(F, 4)
+        fs2 = Cholmod.factor_stats(F, [2, 5])
+        L2, _ = Cholmod.factor_matrices(F)
+        @test fs2.effective == count(!iszero, L2 - I)
+        @test fs2.stored > fs2.effective
+        rhs = Cholmod.rhs_buffer(F)
+        rhs[2] = 1.0
+        Cholmod.solve!(F, [2], 1)
+        rhs[2] = 0.0
+        @test Cholmod.last_reach(F) >= 1
+    end
+
     @testset "rhs buffer is not modified by solve" begin
         F = Cholmod.LDLtFactor(5)
         Cholmod.rowadd!(F, 2, [2, 4], [4.0, 1.0], 2)
