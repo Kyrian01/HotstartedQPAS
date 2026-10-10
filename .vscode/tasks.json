@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Julia: run all experiments",
+            "type": "shell",
+            "command": "julia --project=. run.jl",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Julia: run selected experiments",
+            "type": "shell",
+            "command": "julia --project=. run.jl --only ${input:experiments}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Julia: run tests",
+            "type": "shell",
+            "command": "julia --project=. -e 'using Pkg; Pkg.test()'",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Julia: quickstart",
+            "type": "shell",
+            "command": "julia --project=. scripts/quickstart.jl",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "experiments",
+            "type": "promptString",
+            "description": "Comma-separated experiment names from experiments.toml",
+            "default": "I1,I2"
+        }
+    ]
+}

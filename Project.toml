@@ -1,0 +1,31 @@
+name = "HotstartedQPAS"
+uuid = "5b8f2a9e-3c1d-4e7a-9f60-2d4b8c1a7e53"
+version = "0.1.0"
+authors = ["Kyrian Baumer <kyrian.baumer@motulus.com>"]
+
+[deps]
+HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SuiteSparse_jll = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[compat]
+HiGHS = "1"
+LinearAlgebra = "1"
+Printf = "1"
+Random = "1"
+Serialization = "1"
+SparseArrays = "1"
+SuiteSparse_jll = "7"
+TOML = "1"
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

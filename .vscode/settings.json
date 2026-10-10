@@ -1,0 +1,12 @@
+{
+    "julia.NumThreads": 1,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "editor.rulers": [100],
+    "[julia]": {
+        "editor.tabSize": 4
+    },
+    "files.exclude": {
+        "**/results": false
+    }
+}

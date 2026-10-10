@@ -1,0 +1,44 @@
+# QPAS debug runs on I1–I3.
+#   julia --project run.jl debug.toml
+#
+# qpas.debug = true verifies after EVERY active-set iteration that the CHOLMOD LDLᵀ factor
+# equals (AZ)ᵀ(AZ) recomputed from scratch on N, that the incrementally tracked reduced
+# Hessian matches it, and that the [S, W, N] ordering is consistent. Any mismatch stops the
+# run with an error. This is much slower than a normal run.
+
+[defaults.solvers]
+qpas = true                   # only the QPAS backend (all others default to false)
+
+[defaults.qpas]
+debug = true
+
+[defaults.column_generation]
+verbose   = true              # print CG iteration information
+log_every = 10                # every 10th iteration (1 = every iteration)
+
+[defaults.output]
+directory = "results/debug"
+
+[[experiment]]
+name = "I1"
+[experiment.instance]
+n_nodes          = 50
+edge_probability = 0.098
+n_tasks          = 40
+n_pilots         = 4
+
+[[experiment]]
+name = "I2"
+[experiment.instance]
+n_nodes          = 150
+edge_probability = 0.09
+n_tasks          = 230
+n_pilots         = 7
+
+[[experiment]]
+name = "I3"
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10

@@ -1,0 +1,11 @@
+# generated output
+results/
+*.jls
+*.cov
+*.mem
+
+# editor / OS
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json

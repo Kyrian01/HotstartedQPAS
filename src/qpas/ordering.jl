@@ -1,0 +1,87 @@
+# Column generation ordering [S, W, N] (thesis Theorem 4.2.3).
+#
+#   S : list of representatives, one column per block (S[b] = rep[b])
+#   W : working set, columns fixed at zero
+#   N : nullspace set, the remaining free columns; one nullspace vector zⱼ = eⱼ - e_rep(j) each
+#
+# Every column registered with the QPAS is in exactly one of the three sets; `set_of[j]`
+# records which, so membership tests are O(1).
+
+const NOT_REGISTERED = 0x00
+const IN_S = 0x01
+const IN_W = 0x02
+const IN_N = 0x03
+
+"""
+    ColumnOrdering(n_blocks, capacity)
+
+The partition `[S, W, N]` of the registered columns with O(1) updates. `rep[b]` is the
+representative column of block `b` (the list `S`).
+"""
+struct ColumnOrdering
+    rep::Vector{Int}
+    W::IndexSet
+    N::IndexSet
+    set_of::Vector{UInt8}
+end
+
+ColumnOrdering(n_blocks::Integer, capacity::Integer) =
+    ColumnOrdering(zeros(Int, n_blocks), IndexSet(capacity), IndexSet(capacity),
+                   fill(NOT_REGISTERED, capacity))
+
+"Representative `rep(j) = S[ψ(j)]` of column `j` (thesis eq. 4.28)."
+@inline representative(ord::ColumnOrdering, block::Vector{Int}, j::Integer) =
+    @inbounds ord.rep[block[j]]
+
+@inline in_S(ord::ColumnOrdering, j::Integer) = @inbounds ord.set_of[j] == IN_S
+@inline in_W(ord::ColumnOrdering, j::Integer) = @inbounds ord.set_of[j] == IN_W
+@inline in_N(ord::ColumnOrdering, j::Integer) = @inbounds ord.set_of[j] == IN_N
+
+"Dimension of the nullspace, `|N| = n - p - |W|`."
+nullspace_dimension(ord::ColumnOrdering) = length(ord.N)
+
+function move_to_W!(ord::ColumnOrdering, j::Integer)
+    s = ord.set_of[j]
+    s == IN_N && delete!(ord.N, j)
+    push!(ord.W, j)
+    ord.set_of[j] = IN_W
+    return ord
+end
+
+function move_to_N!(ord::ColumnOrdering, j::Integer)
+    s = ord.set_of[j]
+    s == IN_W && delete!(ord.W, j)
+    push!(ord.N, j)
+    ord.set_of[j] = IN_N
+    return ord
+end
+
+function make_representative!(ord::ColumnOrdering, block::Vector{Int}, j::Integer)
+    s = ord.set_of[j]
+    s == IN_N && delete!(ord.N, j)
+    s == IN_W && delete!(ord.W, j)
+    ord.rep[block[j]] = j
+    ord.set_of[j] = IN_S
+    return ord
+end
+
+"""
+    check_ordering(ord, pool, n)
+
+Verify the invariants of the ordering for the first `n` columns (used by tests / debug mode).
+"""
+function check_ordering(ord::ColumnOrdering, pool::ColumnPool, n::Integer)
+    for b in eachindex(ord.rep)
+        r = ord.rep[b]
+        (r != 0 && ord.set_of[r] == IN_S && pool.block[r] == b) ||
+            error("ordering: invalid representative for block $b")
+    end
+    nS = count(==(IN_S), view(ord.set_of, 1:n))
+    nW = count(==(IN_W), view(ord.set_of, 1:n))
+    nN = count(==(IN_N), view(ord.set_of, 1:n))
+    nS == length(ord.rep) || error("ordering: |S| = $nS ≠ p")
+    nW == length(ord.W) || error("ordering: W list out of sync")
+    nN == length(ord.N) || error("ordering: N list out of sync")
+    nS + nW + nN == n || error("ordering: unregistered columns among the first $n")
+    return true
+end

@@ -1,0 +1,134 @@
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#  Experiment configuration
+#
+#  Run all experiments:        julia --project run.jl
+#  Run some of them:           julia --project run.jl --only I1,I2
+#  Use another config file:    julia --project run.jl my_experiments.toml
+#
+#  Structure
+#    [defaults.*]     settings shared by every experiment (all parameters are listed here)
+#    [[experiment]]   one test; it only needs to list what differs from [defaults]
+#
+#  Results go to <output.directory>/<experiment name>/ plus one <output.directory>/summary.csv
+# ══════════════════════════════════════════════════════════════════════════════════════════
+
+# ── which solvers to run ─────────────────────────────────────────────────────────────────
+[defaults.solvers]
+exact         = true    # full edge-based LP, one HiGHS solve (reference optimum)
+lp            = true    # column generation, LP master (HiGHS simplex, Big-M slacks)
+explicit_qp   = true    # column generation, stabilized QP master keeping w (HiGHS QP)
+eliminated_qp = true    # column generation, stabilized QP master without w (HiGHS QP)
+qpas          = true    # column generation, stabilized QP master, hot-started QPAS
+
+# ── instance generator ───────────────────────────────────────────────────────────────────
+[defaults.instance]
+n_nodes             = 50     # network nodes |V| (time-ordered DAG, backbone i → i+1)
+edge_probability    = 0.1    # probability of each skip edge i → j (j ≥ i+2)
+n_tasks             = 40     # candidate tasks; only coverable ones are kept, so the final m is smaller
+max_tasks_per_edge  = 10     # maximum number of tasks one edge can carry
+task_window         = 0      # how far (in tasks) an edge's tasks may lie from its position; 0 = n_tasks ÷ 10
+n_pilots            = 4      # pilots = blocks = convexity rows
+task_fraction       = 1.0    # fraction of the coverable tasks that become coupling rows
+inequality_fraction = 0.0    # fraction of coupling rows turned into "cover ≥ 1" rows
+                             #   (eliminated_qp and qpas skip such instances for now)
+pilot_cost_spread   = 0.1    # pilot k pays c_e · (1 + spread · U(0,1)) on edge e
+seed                = 1      # random seed of the generator
+
+# ── column generation ────────────────────────────────────────────────────────────────────
+[defaults.column_generation]
+max_iterations         = 100000
+max_columns            = 20000              # column capacity n_max (fixed-size structures)
+time_limit             = 600.0              # seconds per solver run (use inf for none)
+pricing                = "first_improving"  # "first_improving": random pilot order, add the first
+                                            #   improving column; "all_blocks": one column per pilot
+reduced_cost_tolerance = 1e-6               # a column improves if its reduced cost < -tol
+center_tolerance       = 1e-6               # stabilized runs stop once ‖π − π̂‖∞ ≤ tol·max(1, ‖π‖∞)
+compute_bound          = false              # price all pilots every iteration (Lagrangian bound trace)
+seed                   = 1234               # seed of the pricing order
+verbose                = false              # progress line every log_every iterations
+log_every              = 100
+
+# ── stabilization (explicit_qp, eliminated_qp, qpas) ─────────────────────────────────────
+[defaults.stabilization]
+delta         = 1.0                 # proximal parameter δ (larger = stronger stabilization)
+center_update = "every_iteration"   # "every_iteration" (proximal point) or "best_bound" (bundle)
+
+# ── QPAS solver ──────────────────────────────────────────────────────────────────────────
+[defaults.qpas]
+max_iterations     = 100000   # active-set iterations per master solve
+step_tolerance     = 1e-10    # ‖p‖∞ below which the direction counts as zero
+dual_tolerance     = 1e-10    # optimal if all multipliers ≥ −tol · max(1, max|c|)
+ratio_tolerance    = 1e-14    # direction components ≥ −tol are ignored in the ratio test
+singular_tolerance = 1e-10    # relative pivot below which the reduced Hessian is singular
+check_pivots       = true     # inspect pivots after expansions
+refactor_interval  = 150      # rebuild the LDLᵀ factor every this many row updates (0 = never)
+sparse_solves      = true     # solve only on the nullspace set N (cost independent of n_max)
+debug              = false    # verify the factor after every iteration (very slow)
+
+# ── LP master ────────────────────────────────────────────────────────────────────────────
+[defaults.lp]
+big_m = 1e4                   # penalty on the artificial slacks
+
+# ── output ───────────────────────────────────────────────────────────────────────────────
+[defaults.output]
+directory     = "results"     # results/<experiment name>/summary.txt, <solver>.csv
+write_traces  = true          # per-iteration CSV for every column generation run
+save_instance = false         # also save the generated instance (instance.jls)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#  Experiments (sizes as in thesis Table 5.1)
+# ══════════════════════════════════════════════════════════════════════════════════════════
+
+[[experiment]]
+name = "I1"
+[experiment.instance]
+n_nodes          = 50
+edge_probability = 0.098
+n_tasks          = 40
+n_pilots         = 4
+
+[[experiment]]
+name = "I2"
+[experiment.instance]
+n_nodes          = 150
+edge_probability = 0.09
+n_tasks          = 230
+n_pilots         = 7
+
+[[experiment]]
+name = "I3"
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]          # the HiGHS QP masters take 10+ minutes here
+explicit_qp   = false
+eliminated_qp = false
+
+[[experiment]]
+name = "I4"                   # stress test: about twice the size of I3
+[experiment.instance]
+n_nodes          = 225
+edge_probability = 0.09
+n_tasks          = 500
+n_pilots         = 13
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+time_limit = 3600.0
+verbose    = true
+log_every  = 250
+
+# Example: mixed equality / inequality coverage rows (uncomment to use)
+# [[experiment]]
+# name = "I1_ineq"
+# [experiment.instance]
+# n_nodes             = 50
+# edge_probability    = 0.098
+# n_tasks             = 40
+# n_pilots            = 4
+# inequality_fraction = 0.3
