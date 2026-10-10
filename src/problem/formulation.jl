@@ -20,7 +20,9 @@ Constraint matrix of the direct formulation (thesis eq. 5.2):
 function stacked_constraint_matrix(network::FlowNetwork, task_matrix::SparseMatrixCSC,
                                    n_pilots::Integer)
     F = incidence_matrix(network)
+    # every pilot's edges cover tasks the same way: coupling block [A_task ⋯ A_task]
     coupling = repeat(task_matrix, 1, n_pilots)
+    # flow conservation is separate per pilot: block-diagonal diag(F, …, F)
     flows = blockdiag(ntuple(_ -> F, n_pilots)...)
     return vcat(coupling, flows)
 end

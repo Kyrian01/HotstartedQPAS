@@ -53,12 +53,14 @@ function generate_instance(cfg::InstanceConfig)
     network, base_cost, task_edges = generate_network(rng, cfg.n_nodes, cfg.edge_probability)
     task_matrix = generate_task_matrix(rng, network, task_edges, cfg)
 
+    # keep only tasks that some feasible schedule covers, then subsample task_fraction of them
     covered = coverable_tasks(network, task_matrix, cfg.n_pilots)
     keep = [t for t in covered if rand(rng) < cfg.task_fraction]
     isempty(keep) && error("generated instance has no coverable tasks; adjust the configuration")
     A = task_matrix[keep, :]
     T = length(keep)
 
+    # all rows start as equalities Σₖ A_task xₖ = 1; a random subset is relaxed to ≥ 1
     lower = ones(T)
     upper = ones(T)
     n_ineq = round(Int, cfg.inequality_fraction * T)
@@ -66,6 +68,7 @@ function generate_instance(cfg::InstanceConfig)
         upper[i] = Inf                       # cover at least once
     end
 
+    # pilot-specific costs: multiplicative perturbation of the shared base edge cost
     costs = Matrix{Float64}(undef, length(base_cost), cfg.n_pilots)
     for k in 1:cfg.n_pilots, e in eachindex(base_cost)
         costs[e, k] = base_cost[e] * (1 + cfg.pilot_cost_spread * rand(rng))
@@ -97,10 +100,12 @@ function generate_network(rng::AbstractRNG, n_nodes::Integer, edge_probability::
     head = Int[]
     skip_edges = Int[]
     for i in 1:n_nodes
+        # backbone edge i → i+1 (keeps the sink reachable)
         if i < n_nodes
             push!(tail, i)
             push!(head, i + 1)
         end
+        # random skip edges i → j, j ≥ i+2 (the only edges that may carry tasks)
         for j in (i + 2):n_nodes
             if rand(rng) < edge_probability
                 push!(tail, i)
@@ -109,6 +114,7 @@ function generate_network(rng::AbstractRNG, n_nodes::Integer, edge_probability::
             end
         end
     end
+    # cost grows with the time span j − i of the edge, plus U(0,1) noise
     cost = [(head[e] - tail[e]) + rand(rng) for e in eachindex(tail)]
     return FlowNetwork(n_nodes, tail, head), cost, skip_edges
 end
@@ -134,8 +140,10 @@ function generate_task_matrix(rng::AbstractRNG, net::FlowNetwork, skip_edges::Ve
     cols = Int[]
     valid = Int[]
     for e in skip_edges
+        # map the edge's midpoint in time to a task index; tasks are searched in ±window of it
         progress = ((net.tail[e] - 1) + (net.head[e] - 1)) / (2M)
         center = min(floor(Int, progress * T), T - 1) + 1
+        # candidate tasks: e must overlap all edges already on t (≤ 1 coverage per path)
         empty!(valid)
         for t in max(1, center - window):min(T, center + window)
             if all(e2 -> _overlap(net, e, e2), task_edges[t])
@@ -143,6 +151,7 @@ function generate_task_matrix(rng::AbstractRNG, net::FlowNetwork, skip_edges::Ve
             end
         end
         isempty(valid) && continue
+        # attach e to a random subset of 1..max_tasks_per_edge valid tasks
         n_pick = rand(rng, 1:min(length(valid), cfg.max_tasks_per_edge))
         for t in valid[randperm(rng, length(valid))[1:n_pick]]
             push!(rows, t)
@@ -165,9 +174,11 @@ function coverable_tasks(net::FlowNetwork, task_matrix::SparseMatrixCSC, n_pilot
     T = size(task_matrix, 1)
     A = stacked_constraint_matrix(net, task_matrix, n_pilots)
     nvar = size(A, 2)
+    # objective weight of edge e = number of tasks it covers, i.e. 1ᵀA_task
     cover_weight = vec(sum(task_matrix; dims = 1))
     cost = -repeat(cover_weight, n_pilots)            # maximise coverage
     flow_rhs = stacked_flow_rhs(net, n_pilots)
+    # coverage rows Σₖ A_task xₖ ≤ 1; flow rows F xₖ = b as equalities
     row_lower = vcat(fill(-Inf, T), flow_rhs)
     row_upper = vcat(ones(T), flow_rhs)
 
@@ -182,6 +193,7 @@ function coverable_tasks(net::FlowNetwork, task_matrix::SparseMatrixCSC, n_pilot
     get_solution!(model, x, zeros(nvar), zeros(size(A, 1)), zeros(size(A, 1)))
     close(model)
 
+    # aggregate edge flows over pilots (x is pilot-major) and compute A_task Σₖ xₖ
     E = n_edges(net)
     total_flow = zeros(E)
     for k in 1:n_pilots

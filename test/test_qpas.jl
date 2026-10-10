@@ -33,17 +33,41 @@ function _highs_reference(pool, b, δ, center)
     return (objective = sol.objective, π = copy(sol.π), μ = copy(sol.μ))
 end
 
-# First-order optimality of the QPAS iterate (independent of the solver's own bookkeeping).
+# Reference with inequality rows lo ≤ AXλ ≤ hi: the explicit form (thesis eq. 4.3) in HiGHS.
+function _highs_ineq_reference(pool, lo, hi, δ, center)
+    spec = HQ.MasterSpec(lo, hi, pool.n_blocks, pool.capacity, δ)
+    master = HighsExplicitQPMaster()
+    HQ.initialize!(master, spec, pool)
+    HQ.set_center!(master, center)
+    sol = HQ.solve!(master)
+    @test sol.status === :optimal
+    return (objective = sol.objective, π = copy(sol.π))
+end
+
+# QPAS state for coupling rows lo ≤ AXλ ≤ hi (slacks built as in QPASMaster).
+function _ineq_state(pool, lo, hi, δ; options = QPASOptions(debug = true))
+    b, rows, signs = HQ.slack_structure(lo, hi)
+    return HQ.QPASState(pool, b, δ; options, slack_rows = rows, slack_signs = signs)
+end
+
+# First-order optimality of the QPAS iterate (independent of the solver's own bookkeeping),
+# including the slacks of inequality rows: s ≥ 0, sign condition -κπᵢ ≥ 0, complementarity.
 function _check_kkt(st; tol = 1e-7)
     pool = st.pool
     n = pool.n
     x = st.x[1:n]
     @test all(x .>= 0)
+    @test all(st.s .>= 0)
     for b in 1:pool.n_blocks
         @test sum(x[j] for j in 1:n if pool.block[j] == b) ≈ 1 atol = 1e-10
     end
     A = Matrix(HQ.column_matrix(pool))
-    π = st.center .+ (st.rhs .- A * x) ./ st.delta
+    sp = st.kkt.surplus
+    Ks = zeros(pool.n_rows)
+    for σ in eachindex(st.s)
+        Ks[sp.row[σ]] += sp.sign[σ] * st.s[σ]
+    end
+    π = st.center .+ (st.rhs .- A * x .- Ks) ./ st.delta
     @test π ≈ st.π atol = 1e-9
     g = pool.cost[1:n] .- A' * π
     for j in 1:n
@@ -51,6 +75,25 @@ function _check_kkt(st; tol = 1e-7)
         @test λj >= -tol
         x[j] > 1e-9 && @test abs(λj) <= tol
     end
+    for σ in eachindex(st.s)
+        λσ = -sp.sign[σ] * π[sp.row[σ]]
+        @test λσ >= -tol
+        st.s[σ] > 1e-9 && @test abs(λσ) <= tol
+    end
+end
+
+# Random row types: equality (b = 1), "≥ 1" or "≤ 1" with the given fractions.
+function _random_rows(rng, m; ge = 0.4, le = 0.2)
+    lo, hi = ones(m), ones(m)
+    for i in 1:m
+        r = rand(rng)
+        if r < ge
+            hi[i] = Inf
+        elseif r < ge + le
+            lo[i] = -Inf
+        end
+    end
+    return lo, hi
 end
 
 @testset "QPAS" begin
@@ -137,6 +180,119 @@ end
         _check_kkt(st)
         ref = _highs_reference(pool, b, 1.0, zeros(2))
         @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-7
+    end
+
+    # ── inequality coupling rows (docs/qpas_inequality_extension.md) ─────────────────────
+    @testset "inequality rows: single solve vs HiGHS (m=$m, P=$P, n=$n, δ=$δ, ≥=$ge, ≤=$le)" for
+            (m, P, n, δ, ge, le) in [(8, 2, 12, 1.0, 0.5, 0.0), (20, 4, 60, 0.5, 0.4, 0.2),
+                                     (30, 5, 120, 2.0, 0.3, 0.3), (15, 1, 40, 1.0, 1.0, 0.0),
+                                     (12, 3, 50, 1.0, 0.0, 1.0), (25, 3, 90, 0.1, 0.5, 0.5)]
+        rng = Xoshiro(100 + m + P + n)
+        pool = _random_pool(rng, m, P, n, 200)
+        lo, hi = _random_rows(rng, m; ge, le)
+        center = randn(rng, m)
+        st = _ineq_state(pool, lo, hi, δ)
+        HQ.set_center!(st, center)
+        @test HQ.qpas_solve!(st) === :optimal
+        _check_kkt(st)
+        ref = _highs_ineq_reference(pool, lo, hi, δ, center)
+        @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-6
+        @test st.π ≈ ref.π atol = 1e-4
+    end
+
+    @testset "inequality rows: hot-started sequence (seed $seed)" for seed in 1:3
+        rng = Xoshiro(200 + seed)
+        m, P, δ = 25, 4, 1.0
+        pool = _random_pool(rng, m, P, P, 400)
+        lo, hi = _random_rows(rng, m; ge = 0.4, le = 0.3)
+        # seed 3 refactors often, which exercises the rebuild under a row mask
+        opts = QPASOptions(debug = true, refactor_interval = seed == 3 ? 7 : 150)
+        st = _ineq_state(pool, lo, hi, δ; options = opts)
+        center = zeros(m)
+        for it in 1:60
+            HQ.set_center!(st, center)
+            @test HQ.qpas_solve!(st) === :optimal
+            _check_kkt(st)
+            if it % 10 == 0
+                ref = _highs_ineq_reference(pool, lo, hi, δ, center)
+                @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-6
+            end
+            center = copy(st.π)                       # proximal center update
+            _add_random_column!(rng, pool, rand(rng, 1:P))
+            HQ.register_columns!(st)
+        end
+        @test st.total.slack_expansions > 0 && st.total.slack_reductions > 0
+    end
+
+    @testset "inequality rows: dependent columns" begin
+        rng = Xoshiro(13)
+        m, P, δ = 6, 2, 1.0
+        pool = _random_pool(rng, m, P, 8, 100; density = 0.5)
+        for _ in 1:30
+            src = rand(rng, 1:pool.n)
+            rows = collect(HQ.column_rows(pool, src))
+            _add_random_column!(rng, pool, rand(rng, 1:P); rows)
+        end
+        lo, hi = _random_rows(rng, m; ge = 0.5, le = 0.2)
+        st = _ineq_state(pool, lo, hi, δ)
+        HQ.set_center!(st, randn(rng, m))
+        @test HQ.qpas_solve!(st) === :optimal
+        _check_kkt(st)
+        ref = _highs_ineq_reference(pool, lo, hi, δ, st.center)
+        @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-6
+    end
+
+    # Releasing the slack of the only row removes the only row of A_eff: H_eff - vvᵀ = 0.
+    # One block, rep a₁ = 0, a₂ = ±e₁, c₂ = -0.2. Column 2 is released first; at the
+    # resulting subspace minimizer the slack multiplier is -0.2 < 0 and the downdate is
+    # singular. The zero-curvature step lowers the representative, which blocks (swap branch).
+    #   "≥" row  x₂ ≥ 0.5     (κ = -1)
+    #   "≤" row -x₂ ≤ -0.5    (κ = +1, the same constraint written the other way round)
+    @testset "singular slack downdate, $(label) row" for (label, lo, hi, a2) in
+            [("≥", 0.5, Inf, 1.0), ("≤", -Inf, -0.5, -1.0)]
+        pool = HQ.ColumnPool(1, 1, 10)
+        HQ.add_column!(pool, 1, 0.0, Int[], Float64[], [1])
+        HQ.add_column!(pool, 1, -0.2, [1], [a2], [2])
+        st = _ineq_state(pool, [lo], [hi], 1.0)
+        @test HQ.qpas_solve!(st) === :optimal
+        @test st.total.singular_steps >= 1
+        @test st.total.slack_reductions >= 1
+        @test st.total.representative_swaps >= 1
+        _check_kkt(st)
+        @test st.x[2] ≈ 1.0 atol = 1e-12
+        @test st.s[1] ≈ 0.5 atol = 1e-12
+        @test st.π[1] ≈ 0.0 atol = 1e-12
+        ref = _highs_ineq_reference(pool, [lo], [hi], 1.0, zeros(1))
+        @test HQ.master_objective(st) ≈ ref.objective atol = 1e-9
+    end
+
+    # A column released while its only row has a free slack: the masked column is zero
+    # (h_rr = 0), so the zero-curvature step along z₂ (plus the slack) is taken until the
+    # slack blocks; the row becomes active and the column then enters N normally.
+    # First solve (rep only): the "≤ 0.5" row is slack, s = 0.5, π = 0. Hot start with
+    # column 2 (c₂ = -0.2 < c_rep): it is released while its row is masked.
+    @testset "released column with a fully masked Hessian column" begin
+        pool = HQ.ColumnPool(1, 1, 10)
+        HQ.add_column!(pool, 1, 0.0, Int[], Float64[], [1])
+        st = _ineq_state(pool, [-Inf], [0.5], 1.0)
+        @test HQ.qpas_solve!(st) === :optimal
+        @test st.s[1] ≈ 0.5 && HQ.any_free(st.kkt.surplus)
+        HQ.add_column!(pool, 1, -0.2, [1], [1.0], [2])
+        HQ.register_columns!(st)
+        @test HQ.qpas_solve!(st) === :optimal
+        @test st.last.singular_steps >= 1
+        @test st.last.slack_expansions >= 1
+        _check_kkt(st)
+        ref = _highs_ineq_reference(pool, [-Inf], [0.5], 1.0, zeros(1))
+        @test HQ.master_objective(st) ≈ ref.objective atol = 1e-9
+        @test st.π ≈ ref.π atol = 1e-6
+    end
+
+    @testset "row classification" begin
+        b, rows, signs = HQ.slack_structure([1.0, 2.0, -Inf, 0.0], [1.0, Inf, 3.0, 0.0])
+        @test b == [1.0, 2.0, 3.0, 0.0] && rows == [2, 3] && signs == [-1.0, 1.0]
+        @test_throws ArgumentError HQ.slack_structure([0.0], [1.0])      # range row
+        @test_throws ArgumentError HQ.slack_structure([-Inf], [Inf])     # free row
     end
 
     @testset "periodic refactorization" begin

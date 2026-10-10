@@ -64,6 +64,7 @@ function add_column!(pool::ColumnPool, block::Integer, cost::Real,
     is_full(pool) && throw(ArgumentError("column pool is full (capacity $(pool.capacity))"))
     1 <= block <= pool.n_blocks || throw(BoundsError(1:pool.n_blocks, block))
     length(rows) == length(vals) || throw(DimensionMismatch("rows and vals"))
+    # append column j in CSC form: rows/values at the end, colptr[j+1] closes it
     j = pool.n + 1
     append!(pool.rowval, rows)
     append!(pool.nzval, vals)
@@ -72,6 +73,7 @@ function add_column!(pool::ColumnPool, block::Integer, cost::Real,
     pool.block[j] = block
     p = collect(Int, path)
     push!(pool.paths, p)
+    # register (block, path) for the duplicate check during pricing
     push!(get!(Vector{Int}, pool.signatures, _signature(block, p)), j)
     pool.n = j
     return j
@@ -94,6 +96,14 @@ end
         y[pool.rowval[t]] += α * pool.nzval[t]
     end
     return y
+end
+
+"`(a_j)ᵢ`, the coefficient of column `j` in coupling row `i` (0 if absent)."
+@inline function column_entry(pool::ColumnPool, j::Integer, i::Integer)
+    lo, hi = pool.colptr[j], pool.colptr[j + 1] - 1
+    # row indices of a column are sorted (add_column!): binary search for i
+    t = searchsortedfirst(view(pool.rowval, lo:hi), i)
+    @inbounds return t <= hi - lo + 1 && pool.rowval[lo + t - 1] == i ? pool.nzval[lo + t - 1] : 0.0
 end
 
 "`‖a_j‖²`."

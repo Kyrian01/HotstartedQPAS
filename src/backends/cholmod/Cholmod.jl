@@ -6,7 +6,8 @@ QPAS needs:
 
 - a simplicial LDLᵀ factor in natural ordering that starts as the identity,
 - in-place symmetric row/column modifications with `cholmod_l_rowadd` / `cholmod_l_rowdel`
-  (thesis §4.4.3),
+  (thesis §4.4.3), and rank-one updates/downdates with `cholmod_l_updown` (inequality rows,
+  `docs/qpas_inequality_extension.md` §4.3),
 - repeated solves with `cholmod_l_solve2`, whose workspace is allocated once and reused.
 
 File layout:
@@ -30,7 +31,7 @@ include("common.jl")
 include("ldlt_factor.jl")
 
 export LDLtFactor, CholmodError
-export rowadd!, rowdel!, solve!, rhs_buffer, pivot, min_scaled_pivot, reset!, dimension
+export rowadd!, rowdel!, updown!, solve!, rhs_buffer, pivot, min_scaled_pivot, reset!, dimension
 export factor_matrices
 export cholmod_version
 

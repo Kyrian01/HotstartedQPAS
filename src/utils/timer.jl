@@ -18,6 +18,7 @@ end
 SectionTimer(names) = SectionTimer(collect(Symbol, names), zeros(length(names)), zeros(Int, length(names)))
 
 @inline function _section_index(t::SectionTimer, name::Symbol)
+    # linear scan is fine: timers only have a handful of sections
     @inbounds for k in eachindex(t.names)
         t.names[k] === name && return k
     end
@@ -54,6 +55,7 @@ end
 Evaluate `expr` and add its wall-clock time to section `name` of `timer`.
 """
 macro timed_section(timer, name, expr)
+    # `local` keeps t0/val hygienic; the block evaluates to the value of `expr`
     return quote
         local t0 = time_ns()
         local val = $(esc(expr))

@@ -43,6 +43,8 @@ Event counters of the active-set solver (per solve and cumulative).
 - `expansions`: blocking constraints added to W (thesis §4.4.1)
 - `representative_swaps`: expansions where the blocking index was a representative
 - `reductions`: constraints released from W (thesis §4.4.2)
+- `slack_expansions`, `slack_reductions`: of the expansions/reductions, those of an
+  inequality-row slack (rank-one update/downdate of `H_eff`)
 - `singular_steps`: zero-curvature steps taken because the reduced Hessian would become
   singular (thesis §4.4.5)
 - `factor_updates`: CHOLMOD row additions + deletions
@@ -56,6 +58,8 @@ Base.@kwdef mutable struct QPASCounters
     expansions::Int = 0
     representative_swaps::Int = 0
     reductions::Int = 0
+    slack_expansions::Int = 0
+    slack_reductions::Int = 0
     singular_steps::Int = 0
     factor_updates::Int = 0
     refactorizations::Int = 0

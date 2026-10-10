@@ -86,11 +86,13 @@ end
         @test length(eq) == 3
         @test eq[2].objective ≈ eq[1].objective rtol = 1e-9
         @test eq[3].objective ≈ eq[1].objective rtol = 1e-6
-        @test length(results["tiny_ineq"]) == 2              # qpas skipped: inequality rows
+        ineq = results["tiny_ineq"]
+        @test length(ineq) == 3                              # qpas handles inequality rows
+        @test ineq[3].objective ≈ ineq[1].objective rtol = 1e-6
         for f in ("summary.txt", "lp.csv", "qpas.csv", "instance.jls")
             @test isfile(joinpath(out, "tiny_eq", f))
         end
-        @test countlines(joinpath(out, "summary.csv")) == 1 + 3 + 2
+        @test countlines(joinpath(out, "summary.csv")) == 1 + 3 + 3
         only = run_experiments(path; only = ["tiny_eq"], io = devnull, warmup = false)
         @test collect(keys(only)) == ["tiny_eq"]
     end

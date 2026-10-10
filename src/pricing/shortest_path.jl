@@ -36,6 +36,7 @@ end
 
 "Store the coupling duals `π` for the following pricing calls."
 function set_duals!(pricer::ShortestPathPricer, π::AbstractVector{Float64})
+    # per-edge dual prize (A_taskᵀπ)_e, shared by all pilots in this pricing round
     mul!(pricer.task_dual, transpose(pricer.task_matrix), π)
     return pricer
 end
@@ -54,11 +55,13 @@ function price_block!(pricer::ShortestPathPricer, k::Integer)
     tdual = pricer.task_dual
     fill!(dist, Inf)
     dist[net.source] = 0.0
+    # DAG relaxation in topological (index) order: each node is final when it is scanned
     @inbounds for v in net.source:net.n_nodes
         dv = dist[v]
         isfinite(dv) || continue
         for e in out_edges(net, v)
             h = net.head[e]
+            # reduced cost of edge e for pilot k: c_ek − (A_taskᵀπ)_e
             d = dv + (costs[e, k] - tdual[e])
             if d < dist[h]
                 dist[h] = d
@@ -68,6 +71,7 @@ function price_block!(pricer::ShortestPathPricer, k::Integer)
     end
     isfinite(dist[net.sink]) || error("pricing: sink unreachable for pilot $k")
 
+    # backtrack predecessor edges sink → source, accumulating the true cost cₖᵀx
     path = pricer.path
     empty!(path)
     v = net.sink
@@ -94,6 +98,7 @@ function path_coverage!(pricer::ShortestPathPricer)
     rows = pricer.cover_rows
     vals = pricer.cover_vals
     empty!(rows)
+    # scatter-add the task columns of all path edges: cov = A_task x (records touched rows)
     @inbounds for e in pricer.path
         for t in A.colptr[e]:(A.colptr[e + 1] - 1)
             i = A.rowval[t]
@@ -101,6 +106,7 @@ function path_coverage!(pricer::ShortestPathPricer)
             cov[i] += A.nzval[t]
         end
     end
+    # gather into sorted sparse form and zero the scatter buffer for the next call
     sort!(rows)
     resize!(vals, length(rows))
     @inbounds for (t, i) in enumerate(rows)

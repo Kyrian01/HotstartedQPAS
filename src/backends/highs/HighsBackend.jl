@@ -78,14 +78,17 @@ model_objective(m::HighsModel) = HiGHS.Highs_getObjectiveValue(m.ptr)
 function _load_csc!(m::HighsModel, colptr::AbstractVector{<:Integer},
                     rowval::AbstractVector{<:Integer}, nzval::AbstractVector{<:Real})
     ncol = length(colptr) - 1
+    # `colptr` may start at any offset: shift so the slice starts at 0 (HiGHS `starts`)
     base = colptr[1]
     nnz = colptr[end] - base
+    # keep buffers non-empty so a valid pointer is passed even for empty slices
     resize!(m.starts, max(ncol, 1))
     resize!(m.index, max(nnz, 1))
     resize!(m.values, max(nnz, 1))
     @inbounds for j in 1:ncol
         m.starts[j] = colptr[j] - base
     end
+    # 1-based row indices → 0-based HighsInt
     @inbounds for t in 1:nnz
         m.index[t] = rowval[base + t - 1] - 1
         m.values[t] = nzval[base + t - 1]
@@ -125,6 +128,7 @@ function append_rows!(m::HighsModel, lower::Vector{Float64}, upper::Vector{Float
     n = length(lower)
     length(upper) == n || throw(DimensionMismatch("row bounds"))
     n == 0 && return m
+    # zero nonzeros: coefficients arrive later column-wise via `append_columns!`
     ret = HiGHS.Highs_addRows(m.ptr, n, lower, upper, 0, C_NULL, C_NULL, C_NULL)
     _check(ret, "Highs_addRows")
     return m
@@ -173,6 +177,7 @@ Overwrite the costs of columns `first : first + length(cost) - 1`.
 """
 function change_costs!(m::HighsModel, first::Integer, cost::AbstractVector{Float64})
     isempty(cost) && return m
+    # HiGHS takes an inclusive 0-based range [first-1, first+len-2]
     ret = HiGHS.Highs_changeColsCostByRange(m.ptr, first - 1, first + length(cost) - 2, cost)
     _check(ret, "Highs_changeColsCostByRange")
     return m
@@ -209,6 +214,7 @@ end
 function _int_info(m::HighsModel, name::AbstractString)
     v = Ref{HighsInt}(0)
     HiGHS.Highs_getIntInfoValue(m.ptr, name, v)
+    # clamp negative (unset/invalid) counter values to 0
     return Int(max(v[], 0))
 end
 

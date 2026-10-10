@@ -36,6 +36,7 @@ function Base.delete!(s::IndexSet, j::Integer)
     @inbounds begin
         pos = s.position[j]
         pos == 0 && return s
+        # swap-remove: move the last element into j's slot, then shrink by one (O(1))
         last = s.elements[end]
         s.elements[pos] = last
         s.position[last] = pos
@@ -46,6 +47,7 @@ function Base.delete!(s::IndexSet, j::Integer)
 end
 
 function Base.empty!(s::IndexSet)
+    # clear only the positions of current members: O(|set|), not O(capacity)
     @inbounds for j in s.elements
         s.position[j] = 0
     end

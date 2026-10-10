@@ -45,6 +45,7 @@ names, so typos never pass silently.
 function load_experiments(path::AbstractString)
     isfile(path) || throw(ArgumentError("config file not found: $path"))
     data = TOML.parsefile(path)
+    # only [defaults] and [[experiment]] are allowed at the top level
     for key in keys(data)
         key in ("defaults", "experiment") ||
             error("$path: unknown top-level entry `$key` (allowed: [defaults], [[experiment]])")
@@ -56,6 +57,7 @@ function load_experiments(path::AbstractString)
 
     experiments = Experiment[]
     for (k, entry) in enumerate(entries)
+        # each experiment = defaults overridden by its own entries; errors name the experiment
         name = get(entry, "name", "experiment_$k")
         settings = _deep_merge(defaults, entry)
         try
@@ -75,6 +77,7 @@ function _build_experiment(name::String, s::Dict{String,Any})
         key in _SECTIONS || error("unknown section `$key` (allowed: $(join(_SECTIONS, ", ")))")
     end
 
+    # enabled solvers, validated and kept in the fixed SOLVER_KEYS run order
     solver_table = get(s, "solvers", Dict{String,Any}())
     for key in keys(solver_table)
         key in SOLVER_KEYS || error("unknown solver `$key` in [solvers] (allowed: $(join(SOLVER_KEYS, ", ")))")
@@ -83,6 +86,7 @@ function _build_experiment(name::String, s::Dict{String,Any})
     solvers = [key for key in SOLVER_KEYS if get(solver_table, key, false)]
     isempty(solvers) && error("no solver enabled in [solvers]")
 
+    # instance name comes from the experiment; stabilization is nested into CGOptions
     instance = _build(InstanceConfig, get(s, "instance", Dict{String,Any}()), "instance";
                       exclude = (:name,), extra = (name = name,))
     stabilization = _build(StabilizationOptions, get(s, "stabilization", Dict{String,Any}()),
@@ -92,6 +96,7 @@ function _build_experiment(name::String, s::Dict{String,Any})
     validate(cg)
     qpas = _build(QPASOptions, get(s, "qpas", Dict{String,Any}()), "qpas")
 
+    # [lp] only configures the Big-M penalty of the LP master
     lp = get(s, "lp", Dict{String,Any}())
     for key in keys(lp)
         key == "big_m" || error("unknown key `$key` in [lp] (allowed: big_m)")
@@ -135,6 +140,7 @@ end
 function _deep_merge(a::AbstractDict, b::AbstractDict)
     out = Dict{String,Any}(a)
     for (k, v) in b
+        # recurse into sub-tables present on both sides; otherwise b's value wins
         out[k] = (haskey(out, k) && out[k] isa AbstractDict && v isa AbstractDict) ?
                  _deep_merge(out[k], v) : v
     end

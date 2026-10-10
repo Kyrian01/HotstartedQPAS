@@ -60,6 +60,7 @@ function initialize!(m::HighsExplicitQPMaster, spec::MasterSpec, pool::ColumnPoo
     model = HighsModel(; output = m.output)
     m.model = model
 
+    # rows 1..T: coupling rows AXλ + δw ∈ [row_lower, row_upper]; rows T+1..T+P: Cλ = 1
     append_rows!(model, spec.row_lower, spec.row_upper)
     append_rows!(model, ones(P), ones(P))
 
@@ -89,6 +90,7 @@ function add_columns!(m::HighsExplicitQPMaster, pool::ColumnPool, cols::UnitRang
     empty!(colptr)
     empty!(rowval)
     empty!(nzval)
+    # assemble the new λ columns in CSC form: (AX)_j plus a 1 in its block's convexity row
     push!(colptr, 1)
     for j in cols
         append!(rowval, column_rows(pool, j))
@@ -110,6 +112,7 @@ function _pass_hessian!(m::HighsExplicitQPMaster)
     dim = m.n_rows + m.n_columns
     T = m.n_rows
     resize!(m.hess_colptr, dim + 1)
+    # λ columns have no Hessian entries: their column pointers all equal the end of the w part
     @inbounds for k in (T + 2):(dim + 1)
         m.hess_colptr[k] = T + 1
     end
@@ -119,6 +122,7 @@ end
 
 function set_center!(m::HighsExplicitQPMaster, center::AbstractVector{Float64})
     copyto!(m.center, center)
+    # δ/2‖w + π̂‖² = δ/2‖w‖² + δπ̂ᵀw + const → only the linear cost of w depends on π̂
     m.w_cost .= m.delta .* m.center
     change_costs!(m.model, 1, m.w_cost)
     return m
@@ -133,6 +137,7 @@ function solve!(m::HighsExplicitQPMaster)
     sol.status === :optimal || return sol
     get_solution!(model, m.col_value, m.col_dual, m.row_value, m.row_dual)
     T, P, n = m.n_rows, m.n_blocks, m.n_columns
+    # columns are [w; λ]: λ starts after the T w-columns
     copyto!(sol.weights, 1, m.col_value, T + 1, n)
     @inbounds for i in 1:T
         sol.π[i] = m.center[i] + m.col_value[i]           # π = π̂ + w   (thesis eq. 4.4)

@@ -24,14 +24,17 @@ function FlowNetwork(n_nodes::Integer, tail::Vector{Int}, head::Vector{Int};
             throw(ArgumentError("edge $e = ($(tail[e]) → $(head[e])) violates topological numbering"))
     end
     # CSR adjacency by tail node (counting sort keeps edges of a node in input order)
+    # count out-degrees, shifted by one so the prefix sum below yields start offsets
     out_start = zeros(Int, n_nodes + 1)
     for t in tail
         out_start[t + 1] += 1
     end
+    # prefix sum: out_start[v] = 1 + Σ_{u<v} outdeg(u)
     out_start[1] = 1
     for v in 1:n_nodes
         out_start[v + 1] += out_start[v]
     end
+    # place each edge at the next free slot of its tail node
     fill_pos = copy(out_start)
     out_edges = Vector{Int}(undef, length(tail))
     for e in eachindex(tail)
@@ -55,6 +58,7 @@ Node-edge flow matrix `F` (thesis eq. 5.1b): `F[tail(e), e] = +1`, `F[head(e), e
 """
 function incidence_matrix(net::FlowNetwork)
     E = n_edges(net)
+    # two nonzeros per edge column: +1 at the tail, −1 at the head
     rows = vcat(net.tail, net.head)
     cols = vcat(1:E, 1:E)
     vals = vcat(ones(E), -ones(E))

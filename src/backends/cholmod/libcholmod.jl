@@ -66,6 +66,11 @@ cholmod_l_rowdel(k::Integer, R::Ptr{CholmodSparse}, L::Ptr{CholmodFactor}, commo
     ccall((:cholmod_l_rowdel, libcholmod), Cint,
           (Csize_t, Ptr{CholmodSparse}, Ptr{CholmodFactor}, CommonPtr), k, R, L, common)
 
+# LDLᵀ ← LDLᵀ + CCᵀ (update = TRUE) or LDLᵀ − CCᵀ (update = FALSE), C sparse n × k.
+cholmod_l_updown(update::Cint, C::Ptr{CholmodSparse}, L::Ptr{CholmodFactor}, common::CommonPtr) =
+    ccall((:cholmod_l_updown, libcholmod), Cint,
+          (Cint, Ptr{CholmodSparse}, Ptr{CholmodFactor}, CommonPtr), update, C, L, common)
+
 # ── solve ─────────────────────────────────────────────────────────────────────
 
 # `Bset == C_NULL`: dense solve. Otherwise only B(Bset) is used and X is computed on

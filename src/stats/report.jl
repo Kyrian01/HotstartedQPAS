@@ -30,6 +30,7 @@ function compare_results(results::AnyResult...; reference = nothing, io::IO = st
     println(io, header)
     println(io, "─"^length(header))
     for r in results
+        # signed gap to the reference objective (e.g. exact LP optimum); NaN without reference
         gap = ref === nothing ? NaN : objective_value(r) - ref
         @printf(io, "%-28s %-12s %7d %10.3f %12.3f %12.3f %10d %16.6f %11.2e %9.1e\n",
                 method_name(r), _status(r), _iterations(r), total_time(r), _avg_master_ms(r),
@@ -57,6 +58,7 @@ function print_details(r::CGResult; io::IO = stdout)
     s.duplicate_columns > 0 && @printf(io, "  duplicate columns   : %d\n", s.duplicate_columns)
     if !isempty(s.details)
         println(io, "  solver details:")
+        # align the `name : value` pairs on the longest name
         width = maximum(length ∘ first, s.details)
         for (name, value) in s.details
             println(io, "    ", rpad(name, width), " : ", value)

@@ -31,12 +31,14 @@ function solve_exact(inst::CrewSchedulingInstance; output::Bool = false,
     A = stacked_constraint_matrix(inst.network, inst.task_matrix, P)
     nvar, ncon = size(A, 2), size(A, 1)
     cost = vec(inst.edge_costs)                       # pilot-major, matches the column order
+    # coupling rows keep their task bounds; flow rows are equalities F xₖ = b
     flow_rhs = stacked_flow_rhs(inst.network, P)
     row_lower = vcat(inst.task_lower, flow_rhs)
     row_upper = vcat(inst.task_upper, flow_rhs)
 
     model = HighsModel(; output)
     set_option!(model, "solver", solver)
+    # LP relaxation: box 0 ≤ x ≤ 1 on every pilot's edge flows
     pass_lp!(model, A, cost, zeros(nvar), ones(nvar), row_lower, row_upper)
     setup_time = (time_ns() - t_setup) * 1e-9
 
@@ -56,6 +58,7 @@ function solve_exact(inst::CrewSchedulingInstance; output::Bool = false,
 
     stats = ExactStats("Exact LP (HiGHS $solver)", status, setup_time, solve_time,
                        its.simplex, its.ipm, nvar, ncon, nnz(A))
+    # pilot-major x → E × P flow matrix; the first T row duals are the coupling duals π
     return ExactResult(status, objective, reshape(x, E, P), row_dual[1:T], stats)
 end
 

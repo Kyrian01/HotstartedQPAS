@@ -421,7 +421,11 @@ solve therefore starts with a direction computation on the inherited factor.
 
 ---
 
-## 10. Outlook: inequality coupling rows
+## 10. Inequality coupling rows (implemented)
+
+*This section was the original outlook. The extension is now implemented along a slightly
+different route (effective reduced Hessian, rank-one updates); see
+[`qpas_inequality_extension.md`](qpas_inequality_extension.md).*
 
 For a row $a_i^\top\lambda \ge b_i$ the auxiliary variable cannot be eliminated. With a
 surplus $s_i \ge 0$, $w_i = (b_i + s_i - a_i^\top\lambda)/\delta$, so the eliminated QP gains one

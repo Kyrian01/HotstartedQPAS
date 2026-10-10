@@ -36,6 +36,8 @@ mutable struct LDLtFactor
     E::Base.RefValue{Ptr{CholmodDense}}
     # n × 1 sparse column passed to rowadd
     R::Ptr{CholmodSparse}
+    # n × 1 sparse column passed to updown (row indices sorted, as CHOLMOD requires there)
+    C::Ptr{CholmodSparse}
     # n × 1 pattern of a sparse right-hand side, and the solution pattern returned by solve2
     Bset::Ptr{CholmodSparse}
     Xset::Base.RefValue{Ptr{CholmodSparse}}
@@ -45,6 +47,9 @@ mutable struct LDLtFactor
     R_p::Vector{SuiteSparseLong}
     R_i::Vector{SuiteSparseLong}
     R_x::Vector{Float64}
+    C_p::Vector{SuiteSparseLong}
+    C_i::Vector{SuiteSparseLong}
+    C_x::Vector{Float64}
     Bset_p::Vector{SuiteSparseLong}
     Bset_i::Vector{SuiteSparseLong}
     closed::Bool
@@ -72,7 +77,17 @@ function LDLtFactor(n::Integer)
     R_p[1] = 0
     R_p[2] = 0
 
-    Bset = cholmod_l_allocate_sparse(n, 1, n, CHOLMOD_FALSE, CHOLMOD_TRUE, Cint(0),
+    C = cholmod_l_allocate_sparse(n, 1, n, CHOLMOD_TRUE, CHOLMOD_TRUE, Cint(0),
+                                  CHOLMOD_REAL_DOUBLE, cp)
+    C == C_NULL && throw(CholmodError("cholmod_l_allocate_sparse", status(common)))
+    Ch = unsafe_load(C)
+    C_p = unsafe_wrap(Array, Ch.p, 2; own = false)
+    C_i = unsafe_wrap(Array, Ch.i, n; own = false)
+    C_x = unsafe_wrap(Array, Ch.x, n; own = false)
+    C_p[1] = 0
+    C_p[2] = 0
+
+    Bset =cholmod_l_allocate_sparse(n, 1, n, CHOLMOD_FALSE, CHOLMOD_TRUE, Cint(0),
                                      CHOLMOD_PATTERN, cp)
     Bset == C_NULL && throw(CholmodError("cholmod_l_allocate_sparse", status(common)))
     Bh = unsafe_load(Bset)
@@ -83,8 +98,8 @@ function LDLtFactor(n::Integer)
 
     F = LDLtFactor(Int(n), common, L, B,
                    Ref{Ptr{CholmodDense}}(C_NULL), Ref{Ptr{CholmodDense}}(C_NULL),
-                   Ref{Ptr{CholmodDense}}(C_NULL), R, Bset, Ref{Ptr{CholmodSparse}}(C_NULL),
-                   rhs, Float64[], R_p, R_i, R_x, Bset_p, Bset_i, false)
+                   Ref{Ptr{CholmodDense}}(C_NULL), R, C, Bset, Ref{Ptr{CholmodSparse}}(C_NULL),
+                   rhs, Float64[], R_p, R_i, R_x, C_p, C_i, C_x, Bset_p, Bset_i, false)
     finalizer(close, F)
     return F
 end
@@ -128,6 +143,7 @@ function rowadd!(F::LDLtFactor, k::Integer, rows::AbstractVector{<:Integer},
     _check_open(F)
     1 <= k <= F.n || throw(BoundsError(F, k))
     nnz <= F.n || throw(ArgumentError("rowadd!: nnz = $nnz exceeds dimension $(F.n)"))
+    # copy the new row/column into CHOLMOD's n × 1 sparse buffer R (0-based row indices)
     R_i, R_x = F.R_i, F.R_x
     @inbounds for t in 1:nnz
         R_i[t] = rows[t] - 1
@@ -135,6 +151,7 @@ function rowadd!(F::LDLtFactor, k::Integer, rows::AbstractVector{<:Integer},
     end
     F.R_p[2] = nnz
     cp = common_ptr(F.common)
+    # row k of L: triangular solve with the leading block; trailing block: rank-one downdate
     GC.@preserve F check_call(cholmod_l_rowadd(k - 1, F.R, F.L, cp), F.common, "cholmod_l_rowadd")
     return status(F.common) != CHOLMOD_NOT_POSDEF
 end
@@ -149,9 +166,42 @@ function rowdel!(F::LDLtFactor, k::Integer)
     _check_open(F)
     1 <= k <= F.n || throw(BoundsError(F, k))
     cp = common_ptr(F.common)
+    # trailing block: rank-one update d_k ℓℓᵀ, then row/column k of L and D become e_k / 1
     GC.@preserve F check_call(cholmod_l_rowdel(k - 1, Ptr{CholmodSparse}(C_NULL), F.L, cp),
                               F.common, "cholmod_l_rowdel")
     return nothing
+end
+
+"""
+    updown!(F, update, rows, vals, nnz) -> Bool
+
+Rank-one modification of the factorized matrix: `M ← M + vvᵀ` if `update`, `M ← M - vvᵀ`
+otherwise, where `v` is the sparse vector given by the first `nnz` entries of `rows`
+(1-based, any order, no duplicates) and `vals`. The factor is updated in place.
+
+Returns `false` if CHOLMOD reports that a downdate lost positive definiteness; the factor is
+then unusable and must be rebuilt by the caller.
+"""
+function updown!(F::LDLtFactor, update::Bool, rows::AbstractVector{<:Integer},
+                 vals::AbstractVector{Float64}, nnz::Integer)
+    _check_open(F)
+    nnz <= F.n || throw(ArgumentError("updown!: nnz = $nnz exceeds dimension $(F.n)"))
+    nnz == 0 && return true                          # v = 0: nothing to do
+    # CHOLMOD needs the pattern of C sorted: sort the positions by row index
+    perm = sortperm(view(rows, 1:nnz))
+    C_i, C_x = F.C_i, F.C_x
+    @inbounds for t in 1:nnz
+        C_i[t] = rows[perm[t]] - 1                   # 0-based row index
+        C_x[t] = vals[perm[t]]
+    end
+    F.C_p[2] = nnz
+    cp = common_ptr(F.common)
+    flag = update ? CHOLMOD_TRUE : CHOLMOD_FALSE
+    ret = GC.@preserve F cholmod_l_updown(flag, F.C, F.L, cp)
+    st = status(F.common)
+    # a downdate that destroys positive definiteness is reported as a warning, not a failure
+    ret == CHOLMOD_TRUE || st == CHOLMOD_NOT_POSDEF || throw(CholmodError("cholmod_l_updown", st))
+    return ret == CHOLMOD_TRUE && st != CHOLMOD_NOT_POSDEF
 end
 
 """
@@ -181,6 +231,7 @@ Cost is independent of the dimension `n` (CHOLMOD `solve2` with `Bset`).
 function solve!(F::LDLtFactor, pattern::AbstractVector{<:Integer}, npattern::Integer)
     _check_open(F)
     npattern <= F.n || throw(ArgumentError("pattern longer than the dimension"))
+    # Bset = pattern of the right-hand side; CHOLMOD then solves only on reach_L(Bset)
     Bset_i = F.Bset_i
     @inbounds for t in 1:npattern
         Bset_i[t] = pattern[t] - 1
@@ -226,6 +277,7 @@ function min_scaled_pivot(F::LDLtFactor, indices::AbstractVector{<:Integer},
     f = unsafe_load(F.L)
     m = Inf
     @inbounds for k in indices
+        # D[k] is the first stored entry of column k of the simplicial factor
         d = unsafe_load(f.x, unsafe_load(f.p, k) + 1)
         m = min(m, d / max(scale[k], floatmin(Float64)))
     end
@@ -296,6 +348,7 @@ function Base.close(F::LDLtFactor)
             h[] != C_NULL && cholmod_l_free_dense(h, cp)
         end
         cholmod_l_free_sparse(Ref(F.R), cp)
+        cholmod_l_free_sparse(Ref(F.C), cp)
         cholmod_l_free_sparse(Ref(F.Bset), cp)
         F.Xset[] != C_NULL && cholmod_l_free_sparse(F.Xset, cp)
         finish!(F.common)

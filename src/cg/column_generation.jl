@@ -41,7 +41,8 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     pricer = ShortestPathPricer(inst)
     rng = Xoshiro(options.seed)
 
-    # initial columns: cheapest path of every pilot (pricing at zero duals)
+    # initial columns: cheapest path of every pilot (pricing at zero duals); they make the
+    # restricted master feasible for Cλ = 1 (one column per block)
     set_duals!(pricer, zeros(T))
     for k in 1:P
         _, cost = price_block!(pricer, k)
@@ -52,6 +53,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     spec = MasterSpec(lo, hi, P, options.max_columns, stabilized ? stab.delta : NaN)
     initialize!(master, spec, pool)
 
+    # stability center π̂ of the proximal term δ/2‖π - π̂‖²
     center = stab.initial_center === nothing ? zeros(T) : copy(stab.initial_center)
     length(center) == T || throw(DimensionMismatch("initial_center must have length $T"))
     center_value = -Inf
@@ -63,6 +65,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     end
 
     prev_π = zeros(T)
+    price_π = zeros(T)                          # sign-feasible copy of the master duals
     Ax = zeros(T)
     order = collect(1:P)
     status = :iteration_limit
@@ -84,14 +87,18 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
 
         # ── pricing ──────────────────────────────────────────────────────────────────────
         t1 = time_ns()
-        set_duals!(pricer, sol.π)
+        # inequality rows: clip round-off sign violations (πᵢ ≥ -ε) so θ(π) is a valid bound
+        project_duals!(price_π, sol.π, lo, hi)
+        set_duals!(pricer, price_π)
         randperm!(rng, order)
-        θ = coupling_dual_term(sol.π, lo, hi)
+        # Lagrangian bound θ(π) = min_{lo≤v≤hi} πᵀv + Σₖ (shortest path value of pilot k)
+        θ = coupling_dual_term(price_π, lo, hi)
         priced_all = true
         limit_hit = false
         for (pos, k) in enumerate(order)
             value, cost = price_block!(pricer, k)
             θ += value
+            # reduced cost of the best path of pilot k: (cₖ - A_taskᵀπ)ᵀx - μₖ
             value - sol.μ[k] < -options.reduced_cost_tolerance || continue
             if contains_column(pool, k, pricer.path)
                 stats.duplicate_columns += 1
@@ -107,6 +114,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
             end
         end
         n_new = pool.n - n_master
+        # θ is only a valid Lagrangian bound if every pilot was priced at the same π
         bound = priced_all ? θ : NaN
         t_pricing = (time_ns() - t1) * 1e-9
 
@@ -114,6 +122,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
         converged = false
         center_moved = false
         if n_new == 0 && !limit_hit
+            # no improving column: optimal once π = π̂ (w = 0, the master is feasible)
             if !stabilized || _center_converged(sol.π, center, options.center_tolerance)
                 converged = true
             else
@@ -121,11 +130,13 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
                 center_value = bound
             end
         elseif stabilized
+            # proximal point: always move; bundle: move only on a better Lagrangian bound
             if stab.center_update === :every_iteration || bound > center_value
                 center_moved = true
                 isnan(bound) || (center_value = bound)
             end
         end
+        # hand the changes to the master; nothing is solved until the next iteration
         n_new > 0 && add_columns!(master, pool, (n_master + 1):pool.n)
         if center_moved
             copyto!(center, sol.π)
@@ -133,6 +144,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
         end
 
         # ── statistics ───────────────────────────────────────────────────────────────────
+        # cᵀλ and the coupling violation of λ in the unstabilized master
         op_cost = _weighted_cost(pool, sol.weights, n_master)
         infeas = coupling_violation!(Ax, pool, sol.weights, n_master, lo, hi)
         record_iteration!(stats;
@@ -189,11 +201,37 @@ function coupling_dual_term(π::AbstractVector{Float64}, lo::Vector{Float64}, hi
     @inbounds for i in eachindex(π)
         πi = π[i]
         πi == 0.0 && continue
+        # min over lo ≤ vᵢ ≤ hi of πᵢvᵢ: lower bound if πᵢ > 0, upper bound otherwise
         v = πi > 0 ? lo[i] : hi[i]
         isfinite(v) || return -Inf
         s += πi * v
     end
     return s
+end
+
+"""
+    project_duals!(out, π, lower, upper) -> out
+
+Projection of `π` onto the dual sign conditions of range-constrained coupling rows:
+`πᵢ ≥ 0` for `≥` rows (`upper = +∞`), `πᵢ ≤ 0` for `≤` rows (`lower = -∞`), unrestricted
+otherwise. Master solvers satisfy these conditions only up to their tolerance; without the
+projection a tiny wrong-signed entry would make [`coupling_dual_term`](@ref) `-Inf`. For
+equality rows this is a copy.
+"""
+function project_duals!(out::AbstractVector{Float64}, π::AbstractVector{Float64},
+                        lo::Vector{Float64}, hi::Vector{Float64})
+    @inbounds for i in eachindex(π)
+        πi = π[i]
+        if hi[i] == Inf && lo[i] > -Inf
+            πi = max(πi, 0.0)                   # ≥ row
+        elseif lo[i] == -Inf && hi[i] < Inf
+            πi = min(πi, 0.0)                   # ≤ row
+        elseif lo[i] == -Inf && hi[i] == Inf
+            πi = 0.0                            # free row: no constraint, zero dual
+        end
+        out[i] = πi
+    end
+    return out
 end
 
 """
@@ -243,6 +281,8 @@ function _maxabsdiff(a::AbstractVector{Float64}, b::AbstractVector{Float64})
     return d
 end
 
+# relative test ‖π - π̂‖∞ ≤ tol·max(1, ‖π‖∞); for the eliminated form π - π̂ = (b - Āy)/δ, so
+# this bounds the coupling violation by δ·tol·max(1, ‖π‖∞)
 _center_converged(π, center, tol) =
     _maxabsdiff(π, center) <= tol * max(1.0, maximum(abs, π; init = 0.0))
 

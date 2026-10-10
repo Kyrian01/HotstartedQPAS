@@ -41,6 +41,7 @@ column weights, comparable to [`ExactResult`](@ref)`.flows`.
 function edge_flows(r::CGResult, inst::CrewSchedulingInstance)
     flows = zeros(n_edges(inst), n_pilots(inst))
     pool = r.pool
+    # add λⱼ to every edge of column j's path in its pilot's column of the flow matrix
     for j in 1:pool.n
         λ = r.weights[j]
         λ == 0.0 && continue
@@ -61,6 +62,7 @@ function active_columns(r::CGResult; tol::Real = 1e-9)
     pool = r.pool
     cols = [(index = j, pilot = pool.block[j], weight = r.weights[j], cost = pool.cost[j],
              path = pool.paths[j]) for j in 1:pool.n if r.weights[j] > tol]
+    # group by pilot, heaviest columns first within each pilot
     sort!(cols; by = c -> (c.pilot, -c.weight))
     return cols
 end

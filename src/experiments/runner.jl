@@ -43,6 +43,7 @@ function run_experiment(e::Experiment; io::IO = stdout)
             continue
         end
         master = _make_master(solver, e)
+        # the eliminated HiGHS QP needs equality rows to eliminate w
         if has_inequalities(inst) && !supports_inequalities(master)
             println(io, "  skipping ", solver, ": inequality rows not supported")
             continue

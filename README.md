@@ -165,7 +165,7 @@ solve_column_generation(instance, master; options)
 ```
 
 The master interface (`src/master/interface.jl`) is the only contract between the driver and
-a master solver, so a new master (another QP solver, an inequality-capable QPAS, …) plugs
+a master solver, so a new master (another QP solver, …) plugs
 in without touching the driver.
 
 ### Thesis ↔ code
@@ -241,26 +241,29 @@ added, and center moves. Solver-specific totals are in `stats.details`: for the 
 are iteration, step, expansion, reduction, singular-step, CHOLMOD-update and refactorization
 counts plus a time breakdown. Use `compare_results`, `print_details`, `write_trace_csv`.
 
-## Inequality coupling rows (planned extension)
+## Inequality coupling rows
 
-The data model already supports mixed rows: every coupling row has bounds
-`task_lower ≤ Σₖ A_task xₖ ≤ task_upper`. Equalities have equal bounds; `≥ 1` rows are made with
-`generate_instance(...; inequality_fraction = 0.3)`.
+Every coupling row has bounds `task_lower ≤ Σₖ A_task xₖ ≤ task_upper`. Equalities have equal
+bounds; `≥ 1` rows are made with `generate_instance(...; inequality_fraction = 0.3)`.
 
 | component | inequality rows |
 |-----------|-----------------|
 | exact LP, LP CG, explicit QP CG | supported (row bounds; the duals get their sign automatically) |
-| pricing, Lagrangian bound, infeasibility measure | supported (`coupling_dual_term` handles range rows) |
-| eliminated QP (HiGHS), QPAS | raise `ArgumentError` (`supports_inequalities(master) == false`) |
+| QPAS | `=`, `≥` and `≤` rows (one finite bound); range rows raise `ArgumentError` |
+| pricing, Lagrangian bound, infeasibility measure | supported (duals are projected onto their sign conditions before pricing) |
+| eliminated QP (HiGHS) | raises `ArgumentError` (`supports_inequalities(master) == false`) |
 
-Planned route for the QPAS: for a row `aᵢᵀλ ≥ bᵢ`, `w` cannot be eliminated. With a surplus
-variable `sᵢ ≥ 0`, `wᵢ = (bᵢ + sᵢ − aᵢᵀλ)/δ`, so the eliminated QP gets one extra column per
-inequality row. Its coupling coefficient is `−eᵢ`, its cost is 0, and it belongs to **no
-convexity block**. In the `[S, W, N]` framework such a column has nullspace vector `zⱼ = eⱼ`
-(no representative). It enters/leaves N with a plain `rowadd`/`rowdel` and can never be a
-representative. The extension therefore touches `ColumnOrdering` (a "no block" category),
-`hessian_column!` (`a_rep = 0` for those columns) and the multiplier formula (no `μ` term).
-The pool, factor, driver and statistics stay as they are.
+The QPAS gives every inequality row a slack, `aᵢᵀλ − sᵢ = bᵢ` for `≥` rows and
+`aᵢᵀλ + sᵢ = bᵢ` for `≤` rows (a `≤` row is a `≥` row with both sides negated; flipping the
+slack sign instead keeps the columns unchanged). The slacks belong to no convexity block and
+are split into a working set `W_s` (`sᵢ = 0`, the row acts as an equality) and a free set
+`N_s`. The factorized matrix is the **effective reduced Hessian**
+`H_eff = (A_eff Z)ᵀ(A_eff Z)`, where `A_eff` keeps the equality rows and the inequality rows
+whose slack is in `W_s`, so the factor stays `n_max × n_max`. A slack entering `W_s` is a
+rank-one update `H_eff + vvᵀ`, a slack leaving it a downdate `H_eff − vvᵀ`
+(`cholmod_l_updown`), with `v` the row of `AZ` of that inequality. The multiplier of a slack in
+`W_s` is the dual of its row (signed), so the optimality test also checks the dual sign
+conditions. Theory: [`docs/qpas_inequality_extension.md`](docs/qpas_inequality_extension.md).
 
 ## Reproducing the benchmarks
 

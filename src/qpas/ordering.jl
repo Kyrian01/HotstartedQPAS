@@ -65,6 +65,60 @@ function make_representative!(ord::ColumnOrdering, block::Vector{Int}, j::Intege
     return ord
 end
 
+# ── surpluses of inequality rows (docs/qpas_inequality_extension.md) ──────────────────────
+#
+# Every inequality coupling row i gets one slack variable sσ ≥ 0 so that it becomes an equality
+#
+#     aᵢᵀx + κσ sσ = bᵢ,     κσ = -1 for a "≥" row (surplus),  κσ = +1 for a "≤" row (slack).
+#
+# A "≤" row is the "≥" row -aᵢᵀx ≥ -bᵢ; flipping the sign of the slack instead of the row keeps
+# the column pool untouched, and since κσ² = 1 all factor updates are identical for both kinds.
+# Slacks belong to no block, so they extend the ordering [S, W, N] by two sets:
+#
+#   W_s : slacks fixed at sσ = 0 (in the working set)        → their row acts like an equality
+#   N_s : free slacks (nullspace indices z = e_σ)             → their row drops out of H_eff
+
+"""
+    SurplusSet(rows, signs, n_rows)
+
+Slack variables of the inequality coupling rows and their working-set status. `row[σ]` is the
+coupling row of slack `σ`, `sign[σ] = κσ ∈ {-1, +1}`, `free` is the set `N_s`, and
+`row_free[i]` marks the coupling rows whose slack is free (the rows masked out of `H_eff`).
+Initially every slack is in the working set (`sσ = 0`, `N_s = ∅`).
+"""
+struct SurplusSet
+    row::Vector{Int}
+    sign::Vector{Float64}
+    free::IndexSet
+    row_free::Vector{Bool}
+end
+
+function SurplusSet(rows::Vector{Int}, signs::Vector{Float64}, n_rows::Integer)
+    length(rows) == length(signs) || throw(DimensionMismatch("rows and signs"))
+    all(s -> s == 1.0 || s == -1.0, signs) || throw(ArgumentError("slack signs must be ±1"))
+    allunique(rows) || throw(ArgumentError("at most one slack per coupling row"))
+    return SurplusSet(rows, signs, IndexSet(length(rows)), fill(false, n_rows))
+end
+
+"Number of slack variables `m_I`."
+n_surplus(sp::SurplusSet) = length(sp.row)
+"`true` if slack `σ` is free (`σ ∈ N_s`)."
+@inline is_free(sp::SurplusSet, σ::Integer) = @inbounds sp.row_free[sp.row[σ]]
+"`true` if some row is currently masked out of the effective reduced Hessian."
+@inline any_free(sp::SurplusSet) = !isempty(sp.free)
+
+function free_surplus!(sp::SurplusSet, σ::Integer)
+    push!(sp.free, σ)
+    sp.row_free[sp.row[σ]] = true
+    return sp
+end
+
+function fix_surplus!(sp::SurplusSet, σ::Integer)
+    delete!(sp.free, σ)
+    sp.row_free[sp.row[σ]] = false
+    return sp
+end
+
 """
     check_ordering(ord, pool, n)
 

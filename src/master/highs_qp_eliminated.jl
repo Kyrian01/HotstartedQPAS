@@ -69,6 +69,7 @@ function initialize!(m::HighsEliminatedQPMaster, spec::MasterSpec, pool::ColumnP
     m.center = zeros(T)
     m.solution = MasterSolution(spec)
     m.model = HighsModel(; output = m.output)
+    # w is eliminated, so the only rows are the P convexity rows Cλ = 1
     append_rows!(m.model, ones(P), ones(P))
 
     m.gram_rows = Vector{Int}[]
@@ -91,6 +92,7 @@ function add_columns!(m::HighsEliminatedQPMaster, pool::ColumnPool, cols::UnitRa
     first(cols) == m.n_columns + 1 || throw(ArgumentError("columns must be added in order"))
     for j in cols
         _extend_gram!(m, pool, j)
+        # λ_j only appears in its convexity row; cost c_j is overwritten by c̃_j in `solve!`
         rows = [pool.block[j]]
         append_columns!(m.model, [pool.cost[j]], [0.0], [Inf], [1, 2], rows, [1.0])
         m.n_columns += 1
@@ -103,7 +105,9 @@ end
 # every column's row list sorted).
 function _extend_gram!(m::HighsEliminatedQPMaster, pool::ColumnPool, j::Int)
     buf = m.scatter
+    # scatter a_j into a dense buffer so each a_kᵀa_j is a sparse–dense dot product
     column_axpy!(buf, 1.0, pool, j)
+    # off-diagonal entries G[j, k], stored in column k (lower triangle); exact zeros skipped
     for k in 1:(j - 1)
         v = column_dot(pool, k, buf)
         if v != 0.0
@@ -111,8 +115,10 @@ function _extend_gram!(m::HighsEliminatedQPMaster, pool::ColumnPool, j::Int)
             push!(m.gram_vals[k], v)
         end
     end
+    # new column j starts with its diagonal entry G[j, j] = ‖a_j‖²
     push!(m.gram_rows, [j])
     push!(m.gram_vals, [column_dot(pool, j, buf)])
+    # reset only the touched entries so the scatter buffer is all zeros again
     @inbounds for i in column_rows(pool, j)
         buf[i] = 0.0
     end
@@ -127,6 +133,7 @@ function _pass_hessian!(m::HighsEliminatedQPMaster)
     resize!(colptr, n + 1)
     colptr[1] = 1
     inv_delta = 1.0 / m.delta
+    # flatten the per-column Gram lists into CSC: Hessian Q = G/δ, lower triangle only
     for k in 1:n
         append!(rowval, m.gram_rows[k])
         for v in m.gram_vals[k]
@@ -140,6 +147,7 @@ function _pass_hessian!(m::HighsEliminatedQPMaster)
 end
 
 function set_center!(m::HighsEliminatedQPMaster, center::AbstractVector{Float64})
+    # π̂ only enters through c̃, which is recomputed at the start of every `solve!`
     copyto!(m.center, center)
     return m
 end
@@ -150,7 +158,7 @@ function solve!(m::HighsEliminatedQPMaster)
     n, T, δ = m.n_columns, m.n_rows, m.delta
     m.hessian_stale && _pass_hessian!(m)
 
-    # c̃ = c - (AX)ᵀ(π̂ + b/δ)
+    # c̃ = c - (AX)ᵀ(π̂ + b/δ): one sparse dot product per column with the shifted dual
     @. m.shifted_dual = m.center + m.rhs / δ
     @inbounds for j in 1:n
         m.cost[j] = pool.cost[j] - column_dot(pool, j, m.shifted_dual)
@@ -165,9 +173,11 @@ function solve!(m::HighsEliminatedQPMaster)
 
     λ = view(m.col_value, 1:n)
     copyto!(sol.weights, 1, m.col_value, 1, n)
+    # recover π = π̂ + w with w = (b - AXλ)/δ from the primal λ
     coupling_product!(m.Ax, pool, m.col_value)
     @. sol.π = m.center + (m.rhs - m.Ax) / δ              # thesis eq. 4.4
     copyto!(sol.μ, 1, m.row_dual, 1, m.n_blocks)
+    # HiGHS' objective drops the constants of c̃, so the stabilized objective is rebuilt
     sol.objective = stabilized_objective(dot(view(pool.cost, 1:n), λ), sol.π, m.center, δ)
     return sol
 end

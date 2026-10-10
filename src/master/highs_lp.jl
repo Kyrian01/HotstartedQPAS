@@ -49,15 +49,17 @@ function initialize!(m::HighsLPMaster, spec::MasterSpec, pool::ColumnPool)
     model = HighsModel(; output = m.output)
     m.model = model
 
+    # rows 1..T: coupling rows AXλ ∈ [row_lower, row_upper]; rows T+1..T+P: convexity Cλ = 1
     append_rows!(model, spec.row_lower, spec.row_upper)
     append_rows!(model, ones(P), ones(P))
 
-    # slacks s⁺ (+1) and s⁻ (−1), one per coupling row
+    # slacks s⁺ (+1) and s⁻ (−1), one per coupling row (single nonzero each), cost M
     for sign in (1.0, -1.0)
         append_columns!(model, fill(m.big_m, T), zeros(T), fill(Inf, T),
                         collect(1:(T + 1)), collect(1:T), fill(sign, T))
     end
 
+    # solution buffers sized for [s⁺; s⁻; λ] columns and [coupling; convexity] rows
     nslack = 2T
     resize!(m.col_value, nslack + spec.capacity)
     resize!(m.col_dual, nslack + spec.capacity)
@@ -75,6 +77,7 @@ function add_columns!(m::HighsLPMaster, pool::ColumnPool, cols::UnitRange{Int})
     empty!(colptr)
     empty!(rowval)
     empty!(nzval)
+    # assemble the new columns in CSC form: coupling entries (AX)_j plus a 1 in its convexity row
     push!(colptr, 1)
     for j in cols
         append!(rowval, column_rows(pool, j))
@@ -84,6 +87,7 @@ function add_columns!(m::HighsLPMaster, pool::ColumnPool, cols::UnitRange{Int})
         push!(colptr, length(rowval) + 1)
     end
     n = length(cols)
+    # λ_j ∈ [0, ∞) with cost c_j; Highs_addCols keeps the current basis for the warm start
     append_columns!(m.model, view(pool.cost, cols), zeros(n), fill(Inf, n), colptr, rowval, nzval)
     m.n_columns += n
     return m
@@ -97,10 +101,12 @@ function solve!(m::HighsLPMaster)
     sol.status === :optimal || return sol
     get_solution!(model, m.col_value, m.col_dual, m.row_value, m.row_dual)
     T, P, n = m.n_rows, m.n_blocks, m.n_columns
+    # λ follows the 2T slack columns; π / μ are the duals of coupling / convexity rows
     copyto!(sol.weights, 1, m.col_value, 2T + 1, n)
     copyto!(sol.π, 1, m.row_dual, 1, T)
     copyto!(sol.μ, 1, m.row_dual, T + 1, P)
     sol.objective = model_objective(model)
+    # 1ᵀ(s⁺ + s⁻): nonzero means the restricted master still relies on Big-M slacks
     m.artificial_activity = sum(view(m.col_value, 1:2T))
     return sol
 end
