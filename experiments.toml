@@ -30,7 +30,7 @@ task_window         = 0      # how far (in tasks) an edge's tasks may lie from i
 n_pilots            = 4      # pilots = blocks = convexity rows
 task_fraction       = 1.0    # fraction of the coverable tasks that become coupling rows
 inequality_fraction = 0.0    # fraction of coupling rows turned into "cover ≥ 1" rows
-                             #   (eliminated_qp and qpas skip such instances for now)
+                             #   (eliminated_qp skips such instances; qpas handles them)
 pilot_cost_spread   = 0.1    # pilot k pays c_e · (1 + spread · U(0,1)) on edge e
 seed                = 1      # random seed of the generator
 
