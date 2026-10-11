@@ -36,17 +36,17 @@ of \cref{thm:H-reduce}.
 \begin{prop}[Singular reductions] \label{prop:singular-cases}
 Let $\Heff$ be positive definite before the reduction.
 \begin{enumerate}
-    \item[(iv)] After releasing column $r$, the matrix $\Heff'$ of~\eqref{eq:bordered} is
+    \item After releasing column $r$ (case~(iv) of \cref{thm:H-reduce}), the matrix $\Heff'$ of~\eqref{eq:bordered} is
           singular if and only if $\Aeff z_r\in\spn\{\Aeff z_j : j\in\Nx\}$, which is the case if
           and only if the Schur complement $\sigma_r = \gamma_{rr} - \gamma_r^\top\Heff^{-1}\gamma_r$ vanishes.
-    \item[(v)] After releasing the surplus of row $i$, the matrix $\Heff' = \Heff - v_iv_i^\top$
+    \item After releasing the surplus of row $i$ (case~(v) of \cref{thm:H-reduce}), the matrix $\Heff' = \Heff - v_iv_i^\top$
           is singular if and only if $\omega_i = 1 - v_i^\top\Heff^{-1}v_i$ vanishes.
 \end{enumerate}
 Moreover $\sigma_r\ge0$ and $0\le\omega_i\le1$.
 \end{prop}
 
 \begin{proof}
-(iv) $\Heff'$ is the Gram matrix of the vectors $\Aeff z_j$, $j\in\Nx$, and $\Aeff z_r$. It
+(i) $\Heff'$ is the Gram matrix of the vectors $\Aeff z_j$, $j\in\Nx$, and $\Aeff z_r$. It
 is singular if and only if these vectors are linearly dependent; since the vectors $\Aeff z_j$
 alone are independent, this means $\Aeff z_r\in\spn\{\Aeff z_j\}$. For the bordered matrix
 $\Heff' = \left[\begin{smallmatrix}\Heff & \gamma_r\\ \gamma_r^\top & \gamma_{rr}\end{smallmatrix}\right]$
@@ -54,11 +54,11 @@ of~\eqref{eq:bordered}, block elimination gives
 $\det\Heff' = \det\Heff\cdot(\gamma_{rr} - \gamma_r^\top\Heff^{-1}\gamma_r) = \det\Heff\cdot\sigma_r$,
 so $\Heff'$ is singular if and only if $\sigma_r = 0$.
 
-(v) By the matrix determinant lemma, $\det(\Heff - v_iv_i^\top) = \det\Heff\cdot(1 - v_i^\top\Heff^{-1}v_i)
+(ii) By the matrix determinant lemma, $\det(\Heff - v_iv_i^\top) = \det\Heff\cdot(1 - v_i^\top\Heff^{-1}v_i)
 = \det\Heff\cdot\omega_i$, so $\Heff'$ is singular if and only if $\omega_i = 0$.
 
-In both cases $\Heff'$ is a Gram matrix, of $[\,\Aeff Z_x\;\;\Aeff z_r\,]$ in case~(iv) and of $\Aeff'Z_x$
-($\Aeff$ without row $i$) in case~(v). It is therefore positive semidefinite, so
+In both cases $\Heff'$ is a Gram matrix, of $[\,\Aeff Z_x\;\;\Aeff z_r\,]$ in~(i) and of $\Aeff'Z_x$
+($\Aeff$ without row $i$) in~(ii). It is therefore positive semidefinite, so
 $\det\Heff'\ge0$, and with $\det\Heff>0$ we get $\sigma_r\ge0$ and $\omega_i\ge0$. Finally
 $\omega_i\le1$ because $\Heff^{-1}$ is positive definite, so $v_i^\top\Heff^{-1}v_i\ge0$.
 \end{proof}

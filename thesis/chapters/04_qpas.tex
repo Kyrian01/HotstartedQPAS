@@ -414,7 +414,7 @@ In this example, $K = 7$, $|\Wx| = 523$, $|\Nx| = 186$, $|\Ws| = 34$ and $|\Ns| 
 \centering
 \begin{tikzpicture}
 \begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.2cm},
-    width=0.5\textwidth, height=0.36\textwidth, y dir=reverse,
+    width=0.5\textwidth, height=0.42\textwidth, y dir=reverse,
     xmin=0, xmax=785, ymin=0, ymax=565, enlargelimits=false,
     tick label style={font=\scriptsize}, title style={font=\small},
     xlabel style={font=\small}, ylabel style={font=\small}]
@@ -438,35 +438,12 @@ In this example, $K = 7$, $|\Wx| = 523$, $|\Nx| = 186$, $|\Ws| = 34$ and $|\Ns| 
     \node[font=\tiny, rotate=90] at (axis cs:768,300) {$\Ns$};
 \end{groupplot}
 \end{tikzpicture}
-
-\medskip
-
-\begin{tikzpicture}
-\begin{axis}[width=0.62\textwidth, height=0.32\textwidth, y dir=reverse,
-    xmin=690, xmax=785, ymin=-2, ymax=566, enlargelimits=false,
-    title={reordered matrix, last 95 columns (enlarged)}, title style={font=\small},
-    xlabel={variable}, ylabel={row of $D_\Wset$}, tick label style={font=\scriptsize},
-    xlabel style={font=\small}, ylabel style={font=\small}]
-    \fill[cgrey!20] (axis cs:750.5,-2) rectangle (axis cs:785,566);
-    \pgfplotsinvokeforeach{716.5, 750.5}{
-        \draw[cgrey, densely dashed] (axis cs:#1,-2) -- (axis cs:#1,566);}
-    \draw[cgrey, densely dashed] (axis cs:690,7.5) -- (axis cs:785,7.5);
-    \draw[cgrey, densely dashed] (axis cs:690,530.5) -- (axis cs:785,530.5);
-    \addplot[only marks, mark=*, mark size=0.6pt, cblue]
-        table[x=col, y=row, col sep=comma] {data/spy_DW_perm.csv};
-    \node[font=\scriptsize] at (axis cs:703,270) {$\Nx$};
-    \node[font=\scriptsize] at (axis cs:733,270) {$\Ws$};
-    \node[font=\scriptsize, align=center] at (axis cs:768,270) {$\Ns$\\(empty)};
-    \node[font=\scriptsize, align=center] at (axis cs:733,500) {$I_{|\Ws|}$\\$\downarrow$};
-\end{axis}
-\end{tikzpicture}
 \caption{Sparsity pattern of the constraint matrix $D_\Wset$ at the end of a column
-generation run (instance I2 with 30\% inequality rows). Top left: the original order, with
-the surpluses at the right (shaded). Top right: the order of \cref{thm:reordering}, with the
+generation run (instance I2 with 30\% inequality rows). Left: the original order, with
+the surpluses at the right (shaded). Right: the order of \cref{thm:reordering}, with the
 groups separated by dashed lines. The convexity rows (top) start with the identity of the
 representatives; the working-set columns form the long diagonal; the nullspace columns only
 have entries in the convexity rows; the active surpluses form the identity block in the bottom
-rows; and the columns of the free surpluses (grey) are empty. Bottom: the surplus part of the
-reordered matrix, enlarged.}
+rows; and the columns of the free surpluses (grey) are empty.}
 \label{fig:spy-DW}
 \end{figure}
