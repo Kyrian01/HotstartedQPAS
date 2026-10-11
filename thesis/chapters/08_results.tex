@@ -37,27 +37,28 @@ In the crew scheduling problem, $K$ pilots have to be assigned schedules that to
 operate a set of $m$ flights (\cref{ex:crew}). The schedules of a pilot are the source--sink
 paths in a \textbf{time--space network}: a directed acyclic graph $G = (V,E)$ whose nodes
 represent states of a pilot at given times, and whose edges represent the allowed transitions
-between them. Edge $e$ costs pilot $k$ the amount $c_{e,k}$, and it operates a subset of the
-flights, recorded in the \textbf{task matrix} $A_{\mathrm{task}}\in\{0,1\}^{m\times|E|}$. With
-$x_k\in\{0,1\}^{|E|}$ the edge vector of the path of pilot $k$ and $F$ the node--edge incidence
-matrix of $G$, the linear relaxation reads
+between them. The edge costs of pilot $k$ form the vector $c^{(k)}\in\R^{|E|}$, and every edge
+operates a subset of the flights, recorded in the \textbf{task matrix}
+$A_{\mathrm{task}}\in\{0,1\}^{m\times|E|}$. With $\xi_k\in\{0,1\}^{|E|}$ the edge vector of the
+path of pilot $k$ and $F$ the node--edge incidence matrix of $G$, the linear relaxation reads
 \begin{subequations} \label{eq:crew}
 \begin{align}
-\min_{x_1,\dots,x_K}\quad & \sum_{k=1}^{K} c_k^\top x_k\\
-\text{s.t.}\quad & \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,x_k\Bigr)_i = 1 && (i\in\mathcal{E}),
+\min_{\xi_1,\dots,\xi_K}\quad & \sum_{k=1}^{K} c^{(k)\top} \xi_k\\
+\text{s.t.}\quad & \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,\xi_k\Bigr)_i = 1 && (i\in\mathcal{R}_E),
 \label{eq:crew-eq}\\
-& \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,x_k\Bigr)_i \ge 1 && (i\in\mathcal{I}),
+& \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,\xi_k\Bigr)_i \ge 1 && (i\in\mathcal{R}_I),
 \label{eq:crew-ineq}\\
-& F x_k = d,\quad 0\le x_k\le 1 && (k = 1,\dots,K),
+& F \xi_k = b^{(k)},\quad 0\le \xi_k\le 1 && (k = 1,\dots,K),
 \end{align}
 \end{subequations}
-where $d$ has the entry $-1$ at the source, $+1$ at the sink and $0$ elsewhere. This is a
+where $b^{(k)}$ has the entry $-1$ at the source, $+1$ at the sink and $0$ elsewhere, and
+$\mathcal{R}_E$, $\mathcal{R}_I$ are the sets of equality and inequality coverage rows. This is a
 multi-block linear program (\cref{def:multiblock}) with identical block polytopes. A
-coverage row in $\mathcal{E}$ requires a flight to be operated exactly once; a row in
-$\mathcal{I}$ requires it at least once, which allows a pilot to travel on a flight as a
+coverage row in $\mathcal{R}_E$ requires a flight to be operated exactly once; a row in
+$\mathcal{R}_I$ requires it at least once, which allows a pilot to travel on a flight as a
 passenger. The columns of the master problem are complete schedules, and the pricing
-problem~\eqref{eq:pricing} of pilot $k$ is a shortest path problem with edge weights
-$c_{e,k} - (A_{\mathrm{task}}^\top\pi)_e$. These weights can be negative, but the graph is
+problem~\eqref{eq:pricing} of pilot $k$ is a shortest path problem with the edge weights
+$c^{(k)} - A_{\mathrm{task}}^\top\pi$. These weights can be negative, but the graph is
 acyclic, so one pass of dynamic programming in topological order solves it in
 $O(|V|+|E|)$.
 
@@ -66,10 +67,11 @@ $O(|V|+|E|)$.
 The instances are generated randomly but reproducibly.
 \begin{itemize}
     \item \textbf{Network.} The nodes $1,\dots,|V|$ are ordered in time. A backbone edge
-          $v\to v+1$ connects consecutive nodes, which guarantees a source--sink path. Every
-          skip edge $v\to w$ with $w\ge v+2$ exists independently with a fixed probability. An
-          edge costs $(w-v) + U(0,1)$, multiplied by $1 + 0.1\,U(0,1)$ for each pilot
-          separately.
+          connects every node to the next one, which guarantees a source--sink path. A skip
+          edge from a node to any node at least two steps later exists independently with a
+          fixed probability. An edge that spans $\ell$ steps costs $\ell + U(0,1)$, multiplied
+          by $1 + 0.1\,U(0,1)$ for each pilot separately, where $U(0,1)$ is a uniform random
+          number.
     \item \textbf{Flights.} Each skip edge operates a random set of up to ten flights whose
           position in time is close to that of the edge. A flight is only attached to edges
           that overlap in time, so that a single schedule operates every flight at most once.

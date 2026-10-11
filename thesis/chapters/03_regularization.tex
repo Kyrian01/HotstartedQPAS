@@ -169,16 +169,16 @@ for~\eqref{eq:eliminated} and $w = (b - \Abar y)/\delta$. The objective values a
 \end{theorem}
 
 \begin{proof}
-Write $r = b - \Abar y$, so that $w = r/\delta$. Expanding the squares,
+Expanding the squares,
 \[
-\tfrac{\delta}{2}\lVert r/\delta + \pihat\rVert^2 - \tfrac{\delta}{2}\lVert\pihat\rVert^2
-= \tfrac{1}{2\delta}\lVert r\rVert^2 + \pihat^\top r .
+\tfrac{\delta}{2}\lVert w + \pihat\rVert^2 - \tfrac{\delta}{2}\lVert\pihat\rVert^2
+= \tfrac{\delta}{2}\lVert w\rVert^2 + \delta\,\pihat^\top w .
 \]
-Inserting $r = b - \Abar y$ in both terms,
+Inserting $\delta w = b - \Abar y$ in both terms,
 \[
-\tfrac{1}{2\delta}\lVert r\rVert^2 = \tfrac{1}{2\delta}\lVert\Abar y\rVert^2 - \tfrac{1}{\delta}b^\top\Abar y
+\tfrac{\delta}{2}\lVert w\rVert^2 = \tfrac{1}{2\delta}\lVert\Abar y\rVert^2 - \tfrac{1}{\delta}b^\top\Abar y
   + \tfrac{1}{2\delta}\lVert b\rVert^2,\qquad
-\pihat^\top r = \pihat^\top b - \pihat^\top\Abar y .
+\delta\,\pihat^\top w = \pihat^\top b - \pihat^\top\Abar y .
 \]
 Adding $\cbar^\top y$ and collecting the terms that are linear in $y$ gives
 $\cbar^\top y - (\pihat + b/\delta)^\top\Abar y = \ctil^\top y$, so the objective is

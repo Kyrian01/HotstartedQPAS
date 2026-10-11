@@ -147,13 +147,13 @@ A surplus $i\in\Ws$ is called \textbf{active}; a surplus $i\notin\Ws$ is called
 \textbf{free}.
 \end{definition}
 
-Given a working set and a feasible iterate $y_k$ with $y_\ell = 0$ on $\Wset$, the method
+Given a working set and a feasible iterate $y$ with $y_\ell = 0$ on $\Wset$, the method
 computes a search direction $p$ from the \textbf{equality-constrained subproblem}
 \begin{equation} \label{eq:eqp}
 \min_{p}\;\frac{1}{2\delta}\,p^\top\Abar^\top\Abar\,p + g^\top p
 \qquad\text{s.t.}\qquad \Cbar p = 0,\qquad p_\ell = 0\;\;(\ell\in\Wset).
 \end{equation}
-Its objective is $f(y_k + p) - f(y_k)$, and its constraints keep $\Cbar(y_k + p) = \one$ and
+Its objective is $f(y + p) - f(y)$, and its constraints keep $\Cbar(y + p) = \one$ and
 the working-set variables at zero, so~\eqref{eq:eqp} minimizes $f$ over the face of the
 feasible region defined by the working set (ignoring the bounds of the other variables). To
 write its constraints compactly, let $W_x\in\R^{|\Wx|\times n}$ and
@@ -192,7 +192,7 @@ $p$ as far as the bounds of the free variables allow. \Cref{alg:qpas} summarizes
         \If{$\nu_\ell\ge-\varepsilon$ for all $\ell\in\Wset$}
             \State \textbf{stop}: $y$ is optimal
         \Else
-            \State $r\gets\arg\min_{\ell\in\Wset}\nu_\ell$;\quad $\Wset\gets\Wset\setminus\{r\}$
+            \State $\rho\gets\arg\min_{\ell\in\Wset}\nu_\ell$;\quad $\Wset\gets\Wset\setminus\{\rho\}$
                    \Comment{reduce the working set}
         \EndIf
     \Else
@@ -312,8 +312,8 @@ $D_\Wset = \left[\begin{smallmatrix} C & 0\\ W_x & 0\\ 0 & W_s\end{smallmatrix}\
 \begin{itemize}
     \item The convexity rows $[\,C\;\;0\,]$ become $[\,C_\Sset\;\;C_{\Wx}\;\;C_{\Nx}\;\;0\;\;0\,]$,
           and $C_\Sset = I_K$ as noted after \cref{def:representatives}.
-    \item Row $t$ of $W_x$ is the unit vector of the $t$-th index of $\Wx$. After the
-          permutation this index is in position $K + t$, so the rows $[\,W_x\;\;0\,]$ become
+    \item Row $\ell$ of $W_x$ is the unit vector of the $\ell$-th index of $\Wx$. After the
+          permutation this index is in position $K + \ell$, so the rows $[\,W_x\;\;0\,]$ become
           $[\,0\;\;I_{|\Wx|}\;\;0\;\;0\;\;0\,]$.
     \item In the same way, the rows $[\,0\;\;W_s\,]$ select the surpluses of $\Ws$, which come
           first among the surpluses, and become $[\,0\;\;0\;\;0\;\;I_{|\Ws|}\;\;0\,]$. \qedhere

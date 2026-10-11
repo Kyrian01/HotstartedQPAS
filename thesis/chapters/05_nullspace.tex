@@ -115,20 +115,20 @@ the column weights are involved.
 \centering
 \begin{tikzpicture}[x=0.75cm, y=1cm, font=\small]
     % one block with 5 columns: rep = 2, N = {1,4}, W = {3,5}
-    \foreach \j/\h/\lab/\col in {1/0.25/j_1/cblue, 2/0.5/{\rep}/cgreen, 3/0/w/cgrey, 4/0.25/j_2/cblue, 5/0/w/cgrey} {
+    \foreach \j/\h/\lab/\col in {1/0.25/j_1/cblue, 2/0.5/{\rep}/cgreen, 3/0/j_3/cgrey, 4/0.25/j_2/cblue, 5/0/j_4/cgrey} {
         \fill[\col!45] (\j-0.35,0) rectangle (\j+0.35,{\h*3});
         \draw[\col!80!black] (\j-0.35,0) rectangle (\j+0.35,{\h*3});
     }
     \node[below] at (1,0) {$x_{j_1}$};
     \node[below] at (2,0) {$x_{\rep}$};
-    \node[below] at (3,0) {$x_{w}$};
+    \node[below] at (3,0) {$x_{j_3}$};
     \node[below] at (4,0) {$x_{j_2}$};
-    \node[below] at (5,0) {$x_{w'}$};
+    \node[below] at (5,0) {$x_{j_4}$};
     \draw (0.4,0) -- (5.6,0);
     % arrows for z_{j1}: +1 at j1, -1 at rep
     \draw[-{Stealth[length=2.5mm]}, thick, cred] (1,0.85) -- (1,1.45) node[above] {$+\eta_{j_1}$};
     \draw[-{Stealth[length=2.5mm]}, thick, cred] (2,1.6) -- (2,1.0) node[pos=0, above] {$-\eta_{j_1}$};
-    \node[align=left, right] at (6.2,1.1) {$x + \eta_{j_1} z_{j_1}$:\\ weight moves from the\\ representative to $j_1$;\\ the block sum stays $1$,\\ and $x_w = x_{w'} = 0$ stay.};
+    \node[align=left, right] at (6.2,1.1) {$x + \eta_{j_1} z_{j_1}$:\\ weight moves from the\\ representative to $j_1$;\\ the block sum stays $1$,\\ and $x_{j_3} = x_{j_4} = 0$ stay.};
     % surplus
     \begin{scope}[xshift=11.5cm]
         \fill[corange!45] (-0.35,0) rectangle (0.35,0.9);
@@ -140,7 +140,7 @@ the column weights are involved.
     \end{scope}
 \end{tikzpicture}
 \caption{Interpretation of the nullspace vectors~\eqref{eq:z-explicit} for one block with
-nullspace columns $j_1, j_2$, a representative and two working-set columns $w, w'$. A vector
+nullspace columns $j_1, j_2$, a representative and two working-set columns $j_3, j_4$. A vector
 $z_j = e_j - e_{\rep(j)}$ transfers weight between a nullspace column and the representative
 of its block, which keeps the convexity constraint satisfied and the working-set columns at
 zero. A free surplus belongs to no block and moves independently.}
@@ -389,15 +389,15 @@ $(B_\mathcal{N}\eta_x)_i = (A_Ip_x)_i$. The column part $p_x$ and the vector $A_
 the columns in $\Sset\cup\Nx$.
 
 \begin{prop}[Full step] \label{prop:full-step}
-If the ratio test returns $\alpha = 1$, the new iterate $y_k+p$ is a subspace minimizer, i.e.\
-the reduced gradient $Z^\top\nabla f(y_k+p)$ vanishes.
+If the ratio test returns $\alpha = 1$, the new iterate $y+p$ is a subspace minimizer, i.e.\
+the reduced gradient $Z^\top\nabla f(y+p)$ vanishes.
 \end{prop}
 
 \begin{proof}
-The gradient of $f$ is affine, $\nabla f(y_k + p) = g + \frac{1}{\delta}\Abar^\top\Abar p$. With
+The gradient of $f$ is affine, $\nabla f(y + p) = g + \frac{1}{\delta}\Abar^\top\Abar p$. With
 $p = Z\eta$,
 \[
-Z^\top\nabla f(y_k+p) = Z^\top g + \tfrac{1}{\delta}Z^\top\Abar^\top\Abar Z\,\eta
+Z^\top\nabla f(y+p) = Z^\top g + \tfrac{1}{\delta}Z^\top\Abar^\top\Abar Z\,\eta
 = Z^\top g + \tfrac{1}{\delta}\Hbar\eta = 0
 \]
 by the reduced system~\eqref{eq:reduced-system}.
@@ -432,15 +432,15 @@ the right-hand side of~\eqref{eq:eff-system}. This is what makes the hot start o
 
 \subsection{Implicit evaluation}
 
-Neither $Z$, nor $\Aeff Z_x$, nor the gradient has to be stored. Let $M_\rho\in\R^{m\times m}$
+Neither $Z$, nor $\Aeff Z_x$, nor the gradient has to be stored. Let $\Meff\in\R^{m\times m}$
 be the diagonal \textbf{row mask} with entry $0$ for the rows of free surpluses and $1$
-otherwise, so that $u^\top M_\rho v$ sums only over the rows of $\Aeff$. With
+otherwise, so that $u_j^\top\Meff u_{j'}$ sums only over the rows of $\Aeff$. With
 $u_j = a_j - a_{\rep(j)}$ from~\eqref{eq:AZ-columns}, the entries of the system~\eqref{eq:Heff-Aeff}
-are
+are, for $j, j'\in\Nx$,
 \begin{equation} \label{eq:implicit}
-(\Heff)_{kj} = u_k^\top M_\rho\,u_j,\qquad
-\bigl(Z_x^\top(c - \Aeff^\top\pieff)\bigr)_j = \bigl(c_j - a_j^\top M_\rho\pi\bigr)
-- \bigl(c_{\rep(j)} - a_{\rep(j)}^\top M_\rho\pi\bigr).
+(\Heff)_{jj'} = u_j^\top \Meff\,u_{j'},\qquad
+\bigl(Z_x^\top(c - \Aeff^\top\pieff)\bigr)_j = \bigl(c_j - a_j^\top \Meff\pi\bigr)
+- \bigl(c_{\rep(j)} - a_{\rep(j)}^\top \Meff\pi\bigr).
 \end{equation}
 Both are computed from the sparse columns $a_j$ and the $m$-vector $\pi$. The cost of one entry
 of the right-hand side is proportional to the number of nonzeros of two columns, independent
@@ -542,10 +542,10 @@ average number of nonzeros of a column $a_j$.
 
 \begin{algobox}{One Iteration of the Active-Set Method in Nullspace Form}{alg:nullspace-iteration}
 \State \textbf{Given:} iterate $y = [x;s]$, the extended ordering, $\pi = \pi(y)$, the factor $\Heff = LDL^\top$
-\State Compute $\mu^{\rho}_k = c_{S_k} - a_{S_k}^\top M_\rho\pi$ and the right-hand side
-       $r_j = -\delta\bigl(c_j - a_j^\top M_\rho\pi - \mu^{\rho}_{\psi(j)}\bigr)$, $j\in\Nx$
+\State Compute $\mu^{\mathrm{eff}}_k = c_{S_k} - a_{S_k}^\top \Meff\pi$ and the right-hand side
+       $\zeta_j = -\delta\bigl(c_j - a_j^\top \Meff\pi - \mu^{\mathrm{eff}}_{\psi(j)}\bigr)$, $j\in\Nx$
        \Comment{\eqref{eq:implicit}}
-\State Solve $LDL^\top\eta_x = r$
+\State Solve $LDL^\top\eta_x = \zeta$
 \State Expand $p_x = Z_x\eta_x$ and compute $(p_s)_i = (A_Ip_x)_i - \delta\pi_i$, $i\in\Ns$
        \Comment{\eqref{eq:direction-components}}
 \If{$p\approx0$}

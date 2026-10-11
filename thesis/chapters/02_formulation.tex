@@ -34,7 +34,7 @@ that the inequality rows destroy: the surplus variables belong to no block.
 \label{sec:multiblock}
 
 We consider a linear program whose variables are partitioned into $K$ blocks
-$x_1, \dots, x_K$, with $x_k \in \R^{n_k}$. Each block has its own constraints, and the blocks
+$\xi_1, \dots, \xi_K$, with $\xi_k \in \R^{n_k}$. Each block has its own constraints, and the blocks
 interact only through a set of linking constraints.
 
 \begin{definition}[Multi-block linear program] \label{def:multiblock}
@@ -42,20 +42,20 @@ A \textbf{multi-block linear program with mixed linking constraints} is a proble
 form
 \begin{subequations} \label{eq:compact}
 \begin{align}
-\min_{x_1,\dots,x_K} \quad & \sum_{k=1}^{K} c_k^\top x_k \\
+\min_{\xi_1,\dots,\xi_K} \quad & \sum_{k=1}^{K} c^{(k)\top} \xi_k \\
 \text{s.t.} \quad
-& \sum_{k=1}^{K} A_{E,k}\, x_k = b_E, \label{eq:compact-eq} \\
-& \sum_{k=1}^{K} A_{I,k}\, x_k \ge b_I, \label{eq:compact-ineq} \\
-& x_k \in P_k, \qquad k = 1,\dots,K, \label{eq:compact-block}
+& \sum_{k=1}^{K} A_{E,k}\, \xi_k = b_E, \label{eq:compact-eq} \\
+& \sum_{k=1}^{K} A_{I,k}\, \xi_k \ge b_I, \label{eq:compact-ineq} \\
+& \xi_k \in P_k, \qquad k = 1,\dots,K, \label{eq:compact-block}
 \end{align}
 \end{subequations}
 where $A_{E,k} \in \R^{m_E\times n_k}$ and $A_{I,k}\in\R^{m_I\times n_k}$ are the
 coefficients of block $k$ in the $m_E$ \textbf{equality linking rows} and the $m_I$
 \textbf{inequality linking rows}, and
 \[
-P_k = \{\, x_k \in \R^{n_k} \;:\; F_k x_k = d_k,\; l_k \le x_k \le u_k \,\}
+P_k = \{\, \xi_k \in \R^{n_k} \;:\; F_k \xi_k = b^{(k)},\; \underline{\xi}_k \le \xi_k \le \overline{\xi}_k \,\}
 \]
-is the \textbf{block polytope} of block $k$. We write $m = m_E + m_I$ for the total number of
+is the \textbf{block polytope} of block $k$, with block cost $c^{(k)}\in\R^{n_k}$, block constraint matrix $F_k$, right-hand side $b^{(k)}$ and bounds $\underline{\xi}_k$, $\overline{\xi}_k$. We write $m = m_E + m_I$ for the total number of
 linking rows. Constraints~\eqref{eq:compact-eq}--\eqref{eq:compact-ineq} are the
 \textbf{linking constraints}, and constraints~\eqref{eq:compact-block} are the
 \textbf{block constraints}.
@@ -102,9 +102,9 @@ exactly this observation.
     \draw[decorate, decoration={brace, amplitude=4pt}] (16.3,10) -- (16.3,8.6)
         node[midway, right=5pt] {\small inequality rows, $\ge b_I$};
     \draw[decorate, decoration={brace, amplitude=4pt}] (16.3,8.6) -- (16.3,0.6)
-        node[midway, right=5pt] {\small block constraints, $x_k\in P_k$};
+        node[midway, right=5pt] {\small block constraints, $\xi_k\in P_k$};
     \foreach \k in {0,1,2,3}
-        \node at (4*\k+2, 12.6) {\small $x_{\the\numexpr\k+1\relax}$};
+        \node at (4*\k+2, 12.6) {\small $\xi_{\the\numexpr\k+1\relax}$};
 \end{tikzpicture}
 \caption{Block-angular structure of the multi-block linear program~\eqref{eq:compact} for
 $K = 4$ blocks. The linking rows (top) couple all blocks; the block constraints (bottom) are
@@ -113,8 +113,8 @@ block-diagonal.}
 \end{figure}
 
 \begin{remark}[Inequalities of the other direction] \label{rem:le-rows}
-A linking row $\sum_k a_{i,k}^\top x_k \le b_i$ is the row
-$\sum_k (-a_{i,k})^\top x_k \ge -b_i$, so the form~\eqref{eq:compact-ineq} covers both
+A linking row $\sum_k (A_{I,k})_{i,:}\,\xi_k \le (b_I)_i$ is the row
+$\sum_k (-A_{I,k})_{i,:}\,\xi_k \ge -(b_I)_i$, so the form~\eqref{eq:compact-ineq} covers both
 directions, and the text only treats ``$\ge$'' rows. \Cref{rem:kappa} shows how a ``$\le$''
 row can be kept as it is instead of being negated.
 \end{remark}
@@ -134,14 +134,14 @@ requires it at least once, which allows a pilot to travel on a flight as a passe
 
 Since $P_k$ is a nonempty polytope, it is the convex hull of its finitely many extreme points
 (Minkowski's theorem). Let $\mathcal{J}_k$ be an index set of the extreme points of $P_k$,
-and let $x^{(j)}$, $j\in\mathcal{J}_k$, denote these extreme points. Every $x_k\in P_k$ can be
+and let $\xi^{(j)}$, $j\in\mathcal{J}_k$, denote these extreme points. Every $\xi_k\in P_k$ can be
 written as
 \begin{equation} \label{eq:convex-combination}
-x_k = \sum_{j\in\mathcal{J}_k} \lambda_j\, x^{(j)}, \qquad
+\xi_k = \sum_{j\in\mathcal{J}_k} \lambda_j\, \xi^{(j)}, \qquad
 \sum_{j\in\mathcal{J}_k}\lambda_j = 1, \qquad \lambda_j \ge 0 .
 \end{equation}
 Substituting~\eqref{eq:convex-combination} into~\eqref{eq:compact} replaces the variables
-$x_k$ by the weights $\lambda_j$. Each extreme point turns into one column of a new problem,
+$\xi_k$ by the weights $\lambda_j$. Each extreme point turns into one column of a new problem,
 which motivates the following definitions.
 
 \begin{definition}[Columns] \label{def:columns}
@@ -149,9 +149,9 @@ Let $\mathcal{J} = \mathcal{J}_1\cup\dots\cup\mathcal{J}_K$ (disjoint union). Fo
 $j\in\mathcal{J}_k$ we define
 \begin{itemize}
     \item the \textbf{block} of column $j$: $\psi(j) = k$;
-    \item the \textbf{cost} of column $j$: $c_j = c_k^\top x^{(j)}$;
+    \item the \textbf{cost} of column $j$: $c_j = c^{(k)\top}\xi^{(j)}$;
     \item the \textbf{linking coefficients} of column $j$:
-          $a_j^E = A_{E,k}\,x^{(j)}\in\R^{m_E}$, $a_j^I = A_{I,k}\,x^{(j)}\in\R^{m_I}$, and
+          $a_j^E = A_{E,k}\,\xi^{(j)}\in\R^{m_E}$, $a_j^I = A_{I,k}\,\xi^{(j)}\in\R^{m_I}$, and
           $a_j = \bigl[\,a_j^E;\, a_j^I\,\bigr]\in\R^{m}$.
 \end{itemize}
 We collect them in the cost vector $c = (c_j)_{j\in\mathcal{J}}$ and the matrices
@@ -184,13 +184,13 @@ where the symbols in parentheses denote the dual variables of the constraints.
 
 \begin{theorem}[Dantzig--Wolfe \cite{dantzig1960decomposition}] \label{thm:dw}
 Under \cref{ass:bounded}, problem~\eqref{eq:master} has the optimal value $z^\star$. If
-$\lambda$ is optimal for~\eqref{eq:master}, then $x_k = \sum_{j\in\mathcal{J}_k}\lambda_j\,
-x^{(j)}$, $k=1,\dots,K$, is optimal for~\eqref{eq:compact}.
+$\lambda$ is optimal for~\eqref{eq:master}, then $\xi_k = \sum_{j\in\mathcal{J}_k}\lambda_j\,
+\xi^{(j)}$, $k=1,\dots,K$, is optimal for~\eqref{eq:compact}.
 \end{theorem}
 
 \begin{proof}
-By~\eqref{eq:convex-combination}, $x_k\in P_k$ if and only if $x_k$ is a convex combination
-of the $x^{(j)}$, $j\in\mathcal{J}_k$. Under this substitution the objective and the
+By~\eqref{eq:convex-combination}, $\xi_k\in P_k$ if and only if $\xi_k$ is a convex combination
+of the $\xi^{(j)}$, $j\in\mathcal{J}_k$. Under this substitution the objective and the
 linking rows are linear in $\lambda$, with exactly the coefficients of \cref{def:columns}.
 The feasible points of~\eqref{eq:compact} are therefore the images of the feasible points
 of~\eqref{eq:master}, with equal objective values. 
@@ -270,12 +270,12 @@ problem. Finding the column of most negative reduced cost in block $k$ is the
 \textbf{pricing problem}
 \begin{equation} \label{eq:pricing}
 \min_{j\in\mathcal{J}_k}\bar c_j(\pi,\mu)
-\;=\; \min_{x_k\in P_k}\bigl(c_k - A_k^\top\pi\bigr)^\top x_k \;-\;\mu_k,
+\;=\; \min_{\xi_k\in P_k}\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top \xi_k \;-\;\mu_k,
 \qquad A_k = \begin{bmatrix}A_{E,k}\\ A_{I,k}\end{bmatrix},
 \end{equation}
 where the equality holds because a linear function attains its minimum over a polytope at an
 extreme point. The pricing problem is a problem over a single block. In crew scheduling it
-is a shortest path problem with edge weights $c_{e,k} - (A_k^\top\pi)_e$.
+is a shortest path problem with edge weights given by the vector $c^{(k)} - A_k^\top\pi$.
 
 \begin{prop}[Optimality test] \label{prop:cg-optimality}
 Let $\lambda'$ be optimal for the restricted master problem, with optimal duals
@@ -303,28 +303,28 @@ $z^\star$ at every iteration in which all blocks are priced.
 \begin{prop}[Lagrangian bound] \label{prop:lagrangian-bound}
 For every $\pi = [\pi_E;\pi_I]$ with $\pi_I\ge0$, the \textbf{Lagrangian bound}
 \[
-\theta(\pi) \;=\; b^\top\pi + \sum_{k=1}^{K}\,\min_{x_k\in P_k}\bigl(c_k - A_k^\top\pi\bigr)^\top x_k,
+\theta(\pi) \;=\; b^\top\pi + \sum_{k=1}^{K}\,\min_{\xi_k\in P_k}\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top \xi_k,
 \qquad b = \begin{bmatrix}b_E\\ b_I\end{bmatrix},
 \]
 satisfies $\theta(\pi)\le z^\star$.
 \end{prop}
 
 \begin{proof}
-Let $x^\star$ be optimal for~\eqref{eq:compact}. Because $\sum_k A_{E,k}x^\star_k = b_E$,
-$\sum_k A_{I,k}x^\star_k\ge b_I$ and $\pi_I\ge0$, we have
-$\pi^\top\bigl(b - \sum_k A_k x_k^\star\bigr)\le 0$. Hence
+Let $\xi^\star = (\xi^\star_1,\dots,\xi^\star_K)$ be optimal for~\eqref{eq:compact}. Because $\sum_k A_{E,k}\xi^\star_k = b_E$,
+$\sum_k A_{I,k}\xi^\star_k\ge b_I$ and $\pi_I\ge0$, we have
+$\pi^\top\bigl(b - \sum_k A_k \xi_k^\star\bigr)\le 0$. Hence
 \[
-z^\star = \sum_k c_k^\top x^\star_k
-\;\ge\; \sum_k c_k^\top x^\star_k + \pi^\top\Bigl(b - \sum_k A_k x_k^\star\Bigr)
-= b^\top\pi + \sum_k\bigl(c_k - A_k^\top\pi\bigr)^\top x^\star_k
+z^\star = \sum_k c^{(k)\top} \xi^\star_k
+\;\ge\; \sum_k c^{(k)\top} \xi^\star_k + \pi^\top\Bigl(b - \sum_k A_k \xi_k^\star\Bigr)
+= b^\top\pi + \sum_k\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top \xi^\star_k
 \;\ge\; \theta(\pi),
 \]
-since $x_k^\star\in P_k$. 
+since $\xi_k^\star\in P_k$. 
 \end{proof}
 
 \begin{remark} \label{rem:bound-sign}
 The sign condition $\pi_I\ge0$ in \cref{prop:lagrangian-bound} is essential: for $\pi_i<0$
-in an inequality row, the term $\pi_i\,(b_i - \sum_k a_{i,k}^\top x_k)$ can become arbitrarily
+in an inequality row, the term $\pi_i\,\bigl((b_I)_i - \sum_k (A_{I,k})_{i,:}\,\xi_k\bigr)$ can become arbitrarily
 large. In \cref{sec:center-update} the bound is therefore evaluated at the projection of
 the dual vector onto $\{\pi_I\ge0\}$.
 \end{remark}
@@ -425,8 +425,8 @@ separate group of variables.
 \end{remark}
 
 \begin{remark}[``$\le$'' rows and the slack sign] \label{rem:kappa}
-A row $a_i^\top\lambda\le b_i$ can be written with a \emph{slack} $s_i\ge0$ as
-$a_i^\top\lambda + s_i = b_i$. In general, let $\kappa_i\in\{-1,+1\}$ be the coefficient of
+A row $(A_I)_{i,:}\lambda\le(b_I)_i$ can be written with a \emph{slack} $s_i\ge0$ as
+$(A_I)_{i,:}\lambda + s_i = (b_I)_i$. In general, let $\kappa_i\in\{-1,+1\}$ be the coefficient of
 the slack of inequality row $i$ ($\kappa_i = -1$ for a ``$\ge$'' row, $\kappa_i = +1$ for a
 ``$\le$'' row) and $D_\kappa = \diag(\kappa)$. The unified formulation then uses
 \[
@@ -440,7 +440,7 @@ In the text we write all formulas for ``$\ge$'' rows ($D_\kappa = -I$).
 \end{remark}
 
 \begin{remark}[Range rows] \label{rem:range}
-A row with two different finite bounds $\ell_i\le a_i^\top\lambda\le u_i$ needs a slack with
+A row with two different finite bounds $\underline{b}_i\le A_{i,:}\lambda\le\overline{b}_i$ needs a slack with
 an upper bound. Such rows are not considered in this work.
 \end{remark}
 
@@ -460,6 +460,7 @@ $m_E$, $m_I$, $m$ & number of equality, inequality and all linking rows \\
 $\mathcal{J}$, $\mathcal{J}_k$, $\mathcal{J}'$ & all columns, columns of block $k$, columns of the restricted problem \\
 $n$ & number of columns in the restricted master problem \\
 $\psi(j)$ & block of column $j$ \\
+$\xi_k$, $c^{(k)}$, $P_k$ & variables, cost and polytope of block $k$ in~\eqref{eq:compact} \\
 $c_j$, $a_j = [a_j^E; a_j^I]$ & cost and linking coefficients of column $j$ \\
 $A_E$, $A_I$, $A$ & linking coefficient matrices of the columns \\
 $C$ & convexity matrix \\
@@ -467,7 +468,7 @@ $\lambda$, $s$, $y = [\lambda; s]$ & column weights, surpluses, unified variable
 $\Abar$, $\Cbar$, $\cbar$ & augmented data of the unified formulation \\
 $\pi = [\pi_E;\pi_I]$, $\mu$ & duals of the linking rows and of the convexity rows \\
 $\bar c_j(\pi,\mu)$ & reduced cost of column $j$ \\
-$\theta(\pi)$ & Lagrangian bound \\
+$\theta(\pi)$, $z^\star$ & Lagrangian bound, optimal value of~\eqref{eq:compact} \\
 \bottomrule
 \end{tabular}
 \end{center}
