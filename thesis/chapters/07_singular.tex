@@ -63,7 +63,7 @@ $\det\Heff'\ge0$, and with $\det\Heff>0$ we get $\sigma_r\ge0$ and $\omega_i\ge0
 $\omega_i\le1$ because $\Heff^{-1}$ is positive definite, so $v_i^\top\Heff^{-1}v_i\ge0$.
 \end{proof}
 
-\Cref{prop:singular-cases} also shows that a downdate in case~(v) can never make $\Heff$
+Part~(ii) of \cref{prop:singular-cases} also shows that the downdate of a surplus release can never make $\Heff$
 indefinite: in exact arithmetic, the worst case is a singular matrix.
 
 
@@ -87,8 +87,9 @@ The scale $\lVert u_j\rVert^2$ uses all rows on purpose: a column whose coeffici
 with free surpluses has $(\Heff)_{jj} = 0$, and a scale based on $\Heff$ would hide this
 singularity.
 
-The determinant of $\Heff'$ is the product of its pivots. In case~(iv) the update adds one new
-pivot, and in case~(v) the pivots change by the factor $\omega_i$ in total, since
+The determinant of $\Heff'$ is the product of its pivots. When a column is released (part~(i) of
+\cref{prop:singular-cases}), the update adds one new pivot, and when a surplus is released
+(part~(ii)), the pivots change by the factor $\omega_i$ in total, since
 $\det\Heff' = \det\Heff\cdot\omega_i$. If all pivots satisfied the invariant before the update, a
 vanishing $\sigma_r$ or $\omega_i$ must therefore show up as a pivot that violates it after the
 update. This detection is a numerical heuristic rather than a theorem about floating-point
