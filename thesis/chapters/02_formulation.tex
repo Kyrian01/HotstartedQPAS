@@ -113,12 +113,10 @@ block-diagonal.}
 \end{figure}
 
 \begin{remark}[Inequalities of the other direction] \label{rem:le-rows}
-A linking row of the form $\sum_k a_{i,k}^\top x_k \le b_i$ is the row
+A linking row $\sum_k a_{i,k}^\top x_k \le b_i$ is the row
 $\sum_k (-a_{i,k})^\top x_k \ge -b_i$, so the form~\eqref{eq:compact-ineq} covers both
-directions. For the presentation we therefore only consider ``$\ge$'' rows. In
-\cref{sec:unified} we show that a ``$\le$'' row can equivalently be kept as it is, with a
-surplus variable of the opposite sign. This is how such rows are handled in the
-implementation.
+directions, and the text only treats ``$\ge$'' rows. \Cref{rem:kappa} shows how a ``$\le$''
+row can be kept as it is instead of being negated.
 \end{remark}
 
 \begin{example}[Crew scheduling] \label{ex:crew}
@@ -222,15 +220,10 @@ property~(ii) for every subset of columns. Property~(iii) holds for a subset of 
 and only if every block is represented in it. 
 \end{proof}
 
-\begin{lemma} \label{lem:C-rank}
-If $C\in\R^{K\times n}$ has the column generation property, then $\rank(C) = K$.
-\end{lemma}
-
-\begin{proof}
-By property~(iii), for every row $k$ there is a column $j_k$ with $C_{kj_k} = 1$. By
-property~(ii), this column has no other nonzero entry, i.e.\ it equals the unit vector
-$e_k$. The columns $j_1,\dots,j_K$ therefore form the identity matrix $I_K$. 
-\end{proof}
+The consequence used later is simple: if a set of columns contains one column $j_k$ of every
+block $k$, the columns $j_1,\dots,j_K$ of $C$ are the unit vectors $e_1,\dots,e_K$, i.e.\ they
+form an identity matrix. This identity block is the basis of the reordering theorem in
+\cref{chap:qpas}.
 
 \subsection*{The dual of the master problem}
 
@@ -292,11 +285,14 @@ problem~\eqref{eq:master}.
 \end{prop}
 
 \begin{proof}
-The extended $\lambda'$ is feasible for~\eqref{eq:master}. The pair $(\pi,\mu)$ satisfies
-the sign condition~\eqref{eq:dual-sign} by assumption and every dual
-constraint~\eqref{eq:dual-columns} by the pricing result, so it is dual feasible. Complementary
-slackness holds for the columns in $\mathcal{J}'$ by optimality of the restricted problem,
-and trivially for the zero weights outside $\mathcal{J}'$. 
+The extended $\lambda'$ is feasible for~\eqref{eq:master}. We check the two conditions of the
+dual~\eqref{eq:master-dual}. The sign condition $\pi_I\ge0$ holds by assumption. The column
+constraints $c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0$ hold for all $j\in\mathcal{J}$, because the
+pricing problem of block $k$ minimizes exactly this expression over all $j\in\mathcal{J}_k$
+and has a nonnegative value. So $(\pi,\mu)$ is dual feasible. Complementary slackness
+($\lambda'_j>0\Rightarrow c_j - a_j^\top\pi - \mu_{\psi(j)} = 0$) holds for the columns in
+$\mathcal{J}'$ by optimality of the restricted problem, and trivially for the zero weights
+outside $\mathcal{J}'$. A primal--dual pair that is feasible and complementary is optimal.
 \end{proof}
 
 For a linear restricted master problem the duals satisfy $\pi_I\ge0$ automatically, so the
@@ -400,13 +396,19 @@ of~\eqref{eq:unified} is the dual~\eqref{eq:master-dual} of the master problem.
 \end{lemma}
 
 \begin{proof}
-The first statement follows from $s = A_I\lambda - b_I\ge0$. For the second, the dual
+The first statement holds because $A_I\lambda\ge b_I$ is equivalent to
+$s = A_I\lambda - b_I\ge0$, and the surpluses have zero cost. For the second, the dual
 of~\eqref{eq:unified} has multipliers $\pi$ for $\Abar y = b$ and $\mu$ for $\Cbar y = \one$,
-and one constraint per column of $[\Abar;\Cbar]$. For the columns of $\lambda$ these are the
-constraints~\eqref{eq:dual-columns}. The column of surplus $s_i$ has cost $0$, coefficient
-$-e_i$ in the inequality rows and $0$ in the convexity rows, so its dual constraint reads
-$0 - (-e_i)^\top\pi_I - 0 \ge 0$, i.e.\ $(\pi_I)_i\ge0$. These are exactly the sign
-conditions~\eqref{eq:dual-sign}. 
+and one constraint ``cost $-$ (column of $\Abar$)$^\top\pi$ $-$ (column of $\Cbar$)$^\top\mu\ge0$''
+per variable, with no sign condition on $\pi$, since all rows are equalities.
+\begin{itemize}
+    \item For $\lambda_j$ the column of $\Abar$ is $a_j$ and the column of $\Cbar$ is
+          $e_{\psi(j)}$, so the constraint is $c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0$, as
+          in~\eqref{eq:dual-columns}.
+    \item For $s_i$ the cost is $0$, the column of $\Abar$ is $-e_i$ in the inequality part, and
+          the column of $\Cbar$ is $0$, so the constraint is $0 + (\pi_I)_i - 0\ge0$, i.e.\
+          $(\pi_I)_i\ge0$, as in~\eqref{eq:dual-sign}. \qedhere
+\end{itemize}
 \end{proof}
 
 \Cref{lem:unified} shows that the surplus columns \emph{encode the sign conditions as
@@ -426,15 +428,15 @@ separate group of variables.
 A row $a_i^\top\lambda\le b_i$ can be written with a \emph{slack} $s_i\ge0$ as
 $a_i^\top\lambda + s_i = b_i$. In general, let $\kappa_i\in\{-1,+1\}$ be the coefficient of
 the slack of inequality row $i$ ($\kappa_i = -1$ for a ``$\ge$'' row, $\kappa_i = +1$ for a
-``$\le$'' row) and $K_s = \diag(\kappa)$. The unified formulation then uses
+``$\le$'' row) and $D_\kappa = \diag(\kappa)$. The unified formulation then uses
 \[
-\Abar = \begin{bmatrix} A_E & 0\\ A_I & K_s\end{bmatrix}
+\Abar = \begin{bmatrix} A_E & 0\\ A_I & D_\kappa\end{bmatrix}
 \]
 instead of \cref{def:unified}, and the dual constraint of slack $i$ becomes
 $-\kappa_i(\pi_I)_i\ge0$, i.e.\ $(\pi_I)_i\le0$ for a ``$\le$'' row. Since
 $\kappa_i^2 = 1$, every result of the following chapters holds for both kinds of rows; only a
 few formulas carry a factor $\kappa_i$, and these are collected in \cref{rem:kappa-summary}.
-In the text we write all formulas for ``$\ge$'' rows ($K_s = -I$).
+In the text we write all formulas for ``$\ge$'' rows ($D_\kappa = -I$).
 \end{remark}
 
 \begin{remark}[Range rows] \label{rem:range}
@@ -445,8 +447,9 @@ an upper bound. Such rows are not considered in this work.
 
 \section{Summary of Notation}
 
-\begin{table}[ht]
-\centering
+The symbols introduced in this chapter are used throughout the remaining chapters.
+
+\begin{center}
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{ll}
 \toprule
@@ -467,5 +470,4 @@ $\bar c_j(\pi,\mu)$ & reduced cost of column $j$ \\
 $\theta(\pi)$ & Lagrangian bound \\
 \bottomrule
 \end{tabular}
-\caption{Notation of \cref{chap:formulation}.}
-\end{table}
+\end{center}

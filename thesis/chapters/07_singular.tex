@@ -28,28 +28,38 @@ surpluses with one argument, and keeps every working-set variable exactly at its
 \label{sec:where-singular}
 
 By \cref{cor:dimension}, the reduced Hessian is positive definite if and only if
-$\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$ is, i.e.\ if and only if the columns
+$\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$ is, i.e.\ if and only if the vectors
 $\Aeff z_j$, $j\in\Nx$, are linearly independent. \Cref{prop:expand-pd} shows that expansions
-preserve this property. Singularity can therefore only arise in a reduction.
+preserve this property. Singularity can therefore only arise in one of the two reductions
+of \cref{thm:H-reduce}.
 
 \begin{prop}[Singular reductions] \label{prop:singular-cases}
-Let $\Heff$ be positive definite.
+Let $\Heff$ be positive definite before the reduction.
 \begin{enumerate}
-    \item[(iv)] After releasing column $r$, $\Heff'$ of~\eqref{eq:bordered} is singular if and
-          only if $\Aeff z_r\in\spn\{\Aeff z_k : k\in\Nx\}$, i.e.\ if and only if the
-          Schur complement $\sigma_r = h_{rr} - h^\top\Heff^{-1}h$ vanishes.
-    \item[(v)] After releasing the surplus of row $i$, $\Heff' = \Heff - v_iv_i^\top$ is
-          singular if and only if $\omega_i = 1 - v_i^\top\Heff^{-1}v_i = 0$.
+    \item[(iv)] After releasing column $r$, the matrix $\Heff'$ of~\eqref{eq:bordered} is
+          singular if and only if $\Aeff z_r\in\spn\{\Aeff z_k : k\in\Nx\}$, which is the case if
+          and only if the Schur complement $\sigma_r = h_{rr} - h^\top\Heff^{-1}h$ vanishes.
+    \item[(v)] After releasing the surplus of row $i$, the matrix $\Heff' = \Heff - v_iv_i^\top$
+          is singular if and only if $\omega_i = 1 - v_i^\top\Heff^{-1}v_i$ vanishes.
 \end{enumerate}
 Moreover $\sigma_r\ge0$ and $0\le\omega_i\le1$.
 \end{prop}
 
 \begin{proof}
-(iv) $\Heff'$ is the Gram matrix of the columns of $[\Aeff Z_x\;\;\Aeff z_r]$, and
-$\det\Heff' = \det\Heff\cdot\sigma_r$. (v) By the matrix determinant lemma,
-$\det\Heff' = \det\Heff\cdot\omega_i$. In both cases $\Heff'$ is a Gram matrix, hence positive
-semidefinite, so $\det\Heff'\ge0$ and therefore $\sigma_r\ge0$ and $\omega_i\ge0$. Finally
-$\omega_i\le1$ because $v_i^\top\Heff^{-1}v_i\ge0$. 
+(iv) $\Heff'$ is the Gram matrix of the vectors $\Aeff z_k$, $k\in\Nx$, and $u = \Aeff z_r$. It
+is singular if and only if these vectors are linearly dependent; since the vectors $\Aeff z_k$
+alone are independent, this means $u\in\spn\{\Aeff z_k\}$. For the bordered matrix
+$\Heff' = \left[\begin{smallmatrix}\Heff & h\\ h^\top & h_{rr}\end{smallmatrix}\right]$, block
+elimination gives $\det\Heff' = \det\Heff\cdot(h_{rr} - h^\top\Heff^{-1}h) = \det\Heff\cdot\sigma_r$,
+so $\Heff'$ is singular if and only if $\sigma_r = 0$.
+
+(v) By the matrix determinant lemma, $\det(\Heff - v_iv_i^\top) = \det\Heff\cdot(1 - v_i^\top\Heff^{-1}v_i)
+= \det\Heff\cdot\omega_i$, so $\Heff'$ is singular if and only if $\omega_i = 0$.
+
+In both cases $\Heff'$ is a Gram matrix, of $[\,\Aeff Z_x\;\;u\,]$ in case~(iv) and of $\Aeff'Z_x$
+($\Aeff$ without row $i$) in case~(v). It is therefore positive semidefinite, so
+$\det\Heff'\ge0$, and with $\det\Heff>0$ we get $\sigma_r\ge0$ and $\omega_i\ge0$. Finally
+$\omega_i\le1$ because $\Heff^{-1}$ is positive definite, so $v_i^\top\Heff^{-1}v_i\ge0$.
 \end{proof}
 
 \Cref{prop:singular-cases} also shows that a downdate in case~(v) can never make $\Heff$
@@ -60,8 +70,8 @@ indefinite: in exact arithmetic, the worst case is a singular matrix.
 \label{sec:detection}
 
 Testing $\sigma_r$ or $\omega_i$ before the update would cost an additional solve for every
-reduction. Instead, the update is performed, and the pivots of the factorization are
-inspected afterwards.
+reduction. Instead, the update is performed, and the pivots $D_{kk}$ of the factorization
+$\Heff^{\mathrm{emb}} = LDL^\top$ are inspected afterwards.
 
 \begin{definition}[Pivot invariant] \label{def:pivot-invariant}
 For $k\in\Nx$, let $\gamma_k = \lVert a_k - a_{\rep(k)}\rVert^2$ be the \textbf{pivot scale} of
@@ -74,14 +84,17 @@ D_{kk}\;>\;\varepsilon_{\mathrm{piv}}\,\gamma_k\qquad\text{for all }k\in\Nx .
 
 The scale $\gamma_k$ uses all rows on purpose: a column whose coefficients lie entirely in rows
 with free surpluses has $(\Heff)_{kk} = 0$, and a scale based on $\Heff$ would hide this
-singularity. The determinant of $\Heff'$ is the product of the pivots. If all pivots satisfied
-the invariant before the update, a vanishing $\sigma_r$ or $\omega_i$ must show up as a pivot
-that violates it after the update. This detection is a numerical heuristic rather than a
-theorem about floating-point arithmetic, but it follows directly from the determinant
-identities of \cref{prop:singular-cases}. When it fires, the update is undone by a
-refactorization with the previous working set (\cref{def:refactorization}), which also
-removes any large entries created by dividing by a tiny pivot. We use
-$\varepsilon_{\mathrm{piv}} = 10^{-10}$.
+singularity.
+
+The determinant of $\Heff'$ is the product of its pivots. In case~(iv) the update adds one new
+pivot, and in case~(v) the pivots change by the factor $\omega_i$ in total, since
+$\det\Heff' = \det\Heff\cdot\omega_i$. If all pivots satisfied the invariant before the update, a
+vanishing $\sigma_r$ or $\omega_i$ must therefore show up as a pivot that violates it after the
+update. This detection is a numerical heuristic rather than a theorem about floating-point
+arithmetic, but it follows directly from the determinant identities of
+\cref{prop:singular-cases}. When it fires, the update is undone by a refactorization with the
+previous working set (\cref{def:refactorization}), which also removes any large entries
+created by dividing by a tiny pivot. We use $\varepsilon_{\mathrm{piv}} = 10^{-10}$.
 
 
 \section{Zero-Curvature Directions}
@@ -89,19 +102,28 @@ $\varepsilon_{\mathrm{piv}} = 10^{-10}$.
 
 Assume now that the iterate $y$ is a subspace minimizer for the working set $\Wset$, that the
 index to be released has a negative multiplier, and that its release would make the reduced
-Hessian singular. We construct a direction along which the objective decreases linearly.
+Hessian singular. We construct a direction along which the objective decreases linearly and
+the working set (apart from the released index) is respected. Recall from
+\cref{cor:multipliers-minimizer} what is known at a subspace minimizer:
+\begin{equation} \label{eq:minimizer-facts}
+\begin{aligned}
+g^\top z_k &= g_k - g_{\rep(k)} = 0 \;\;(k\in\Nx), &\qquad \pi_\ell &= 0 \;\;(\ell\in\Ns),\\
+g_r - g_{\rep(r)} &= (\nu_x)_r \;\;(r\in\Wx), & \pi_i &= (\nu_s)_i \;\;(i\in\Ws).
+\end{aligned}
+\end{equation}
+In this section $z_k = e_k - e_{\rep(k)}$ denotes the column part in $\R^n$.
 
 \subsection{Released column}
 
 \begin{theorem}[Zero-curvature direction, column] \label{thm:zc-column}
-Let $r\in\Wx$ have the multiplier $(\nu_x)_r<0$, and suppose
-$\Aeff z_r = \sum_{k\in\Nx}t_k\,\Aeff z_k$, i.e.\ $t = \Heff^{-1}h$ with $h$
-from~\eqref{eq:bordered}. Define $d = [d_x; d_s]$ by
+Let $r\in\Wx$ have the multiplier $(\nu_x)_r<0$, and suppose that the release of $r$ is
+singular, i.e.\ $\Aeff z_r = \sum_{k\in\Nx}t_k\,\Aeff z_k$ for some coefficients $t$ (these are
+$t = \Heff^{-1}h$ with $h$ from~\eqref{eq:bordered}). Define $d = [d_x; d_s]$ by
 \begin{equation} \label{eq:zc-column}
 d_x = z_r - \sum_{k\in\Nx}t_k\,z_k,\qquad
-(d_s)_\ell = (A_Id_x)_\ell\;\;(\ell\in\Ns),\qquad (d_s)_\ell = 0\;\;(\ell\in\Ws),
+(d_s)_\ell = (A_Id_x)_\ell\;\;(\ell\in\Ns),\qquad (d_s)_\ell = 0\;\;(\ell\in\Ws).
 \end{equation}
-where $z_k$ denotes the column part $e_k - e_{\rep(k)}\in\R^n$. Then
+Then
 \begin{enumerate}
     \item $Cd_x = 0$, and $d_\ell = 0$ for every $\ell\in\Wset\setminus\{r\}$;
     \item $\Abar d = 0$;
@@ -110,51 +132,60 @@ where $z_k$ denotes the column part $e_k - e_{\rep(k)}\in\R^n$. Then
 \end{theorem}
 
 \begin{proof}
-(i) Every $z_k$ has block sums zero and is supported on $\{k,\rep(k)\}$, so $Cd_x = 0$, and
-$d_x$ vanishes on $\Wx\setminus\{r\}$. The surplus part vanishes on $\Ws$ by definition.
+(i) Every $z_k = e_k - e_{\rep(k)}$ has one entry $+1$ and one entry $-1$ in the same block, so
+$Cz_k = 0$ and therefore $Cd_x = 0$. The vector $d_x$ is supported on $\{r\}\cup\Nx\cup\Sset$, so it
+vanishes on $\Wx\setminus\{r\}$, and $d_s$ vanishes on $\Ws$ by definition.
 
-(ii) Consider the rows of $\Abar d = [A_Ed_x;\; A_Id_x - d_s]$. On the rows of $\Aeff$ (the
-equality rows and the inequality rows with active surplus), $(\Abar d)_\ell = (\Aeff d_x)_\ell$,
-and $\Aeff d_x = \Aeff z_r - \sum_kt_k\Aeff z_k = 0$ by assumption. On an inequality row
-$\ell\in\Ns$, $(\Abar d)_\ell = (A_Id_x)_\ell - (d_s)_\ell = 0$ by construction.
+(ii) The rows of $\Abar d$ are $A_Ed_x$ (equality rows) and $A_Id_x - d_s$ (inequality rows). On
+the rows of $\Aeff$, i.e.\ the equality rows and the inequality rows in $\Ws$ (where $d_s = 0$),
+$\Abar d$ equals $\Aeff d_x = \Aeff z_r - \sum_kt_k\Aeff z_k$, which is zero by the assumption on
+$t$. On an inequality row $\ell\in\Ns$, $(\Abar d)_\ell = (A_Id_x)_\ell - (d_s)_\ell = 0$ by the
+definition of $d_s$.
 
-(iii) At a subspace minimizer the reduced gradient vanishes, so $g^\top z_k = 0$ for $k\in\Nx$
-and $\pi_\ell = 0$ for $\ell\in\Ns$ (\cref{cor:multipliers-minimizer}). Hence
+(iii) Splitting $g^\top d = g_x^\top d_x + \sum_\ell\pi_\ell(d_s)_\ell$ (recall $g_s = \pi_I$) and
+using~\eqref{eq:minimizer-facts},
 \[
-g^\top d = g_x^\top z_r - \sum_kt_k\,g_x^\top z_k + \sum_{\ell\in\Ns}\pi_\ell(d_s)_\ell
-= g_r - g_{\rep(r)} = (\nu_x)_r,
+g^\top d = \bigl(g_r - g_{\rep(r)}\bigr) - \sum_{k\in\Nx}t_k\underbrace{\bigl(g_k - g_{\rep(k)}\bigr)}_{=0}
++ \sum_{\ell\in\Ns}\underbrace{\pi_\ell}_{=0}(d_s)_\ell = (\nu_x)_r . \qedhere
 \]
-where the last equality is \cref{cor:multipliers-minimizer}. 
 \end{proof}
 
 \subsection{Released surplus}
 
 \begin{theorem}[Zero-curvature direction, surplus] \label{thm:zc-surplus}
-Let the surplus of row $i\in\Ws$ have the multiplier $(\nu_s)_i = \pi_i < 0$, and suppose
-$\omega_i = 0$. Let $t = \Heff^{-1}v_i$, so that $v_i^\top t = 1$. Define $d = [d_x;d_s]$ by
+Let the surplus of row $i\in\Ws$ have the multiplier $(\nu_s)_i = \pi_i < 0$, and suppose that
+its release is singular, $\omega_i = 1 - v_i^\top\Heff^{-1}v_i = 0$. Let $t = \Heff^{-1}v_i$, so
+that $v_i^\top t = 1$. Define $d = [d_x;d_s]$ by
 \begin{equation} \label{eq:zc-surplus}
 d_x = \sum_{k\in\Nx}t_k\,z_k,\qquad
 (d_s)_\ell = (A_Id_x)_\ell\;\;(\ell\in\Ns\cup\{i\}),\qquad (d_s)_\ell = 0\;\;\text{otherwise}.
 \end{equation}
 Then
 \begin{enumerate}
-    \item $Cd_x = 0$, $d_x$ vanishes on $\Wx$, and $(d_s)_i = 1$;
+    \item $Cd_x = 0$, $d_x$ vanishes on $\Wx$, $d_s$ vanishes on $\Ws\setminus\{i\}$, and $(d_s)_i = 1$;
     \item $\Abar d = 0$;
     \item $\nabla f(y)^\top d = \pi_i < 0$.
 \end{enumerate}
 \end{theorem}
 
 \begin{proof}
-(i) The first two claims are as in \cref{thm:zc-column}. Further,
-$(A_Id_x)_i = (A_I)_{i,:}Z_x t = v_i^\top t = 1$.
+(i) As in \cref{thm:zc-column}, $Cd_x = 0$ and $d_x$ vanishes on $\Wx$. Further, $d_x = Z_xt$,
+so $(d_s)_i = (A_IZ_xt)_i = (A_I)_{i,:}Z_x\,t = v_i^\top t = 1$, using
+$v_i = Z_x^\top(A_I)_{i,:}^\top$ from~\eqref{eq:rank-one-up}.
 
-(ii) Let $\Aeff'$ be $\Aeff$ without row $i$. Then
-$(\Aeff'Z_x)^\top(\Aeff'Z_x)\,t = (\Heff - v_iv_i^\top)\,t = v_i - v_i(v_i^\top t) = 0$, so
-$\Aeff'Z_xt = \Aeff'd_x = 0$. This covers all rows of $\Abar d$ except the inequality rows in
-$\Ns\cup\{i\}$, on which $(\Abar d)_\ell = (A_Id_x)_\ell - (d_s)_\ell = 0$ by construction.
+(ii) Let $\Aeff'$ be $\Aeff$ without row $i$; its rows are the equality rows and the inequality
+rows in $\Ws\setminus\{i\}$. By \cref{thm:H-reduce}, $(\Aeff'Z_x)^\top(\Aeff'Z_x) = \Heff - v_iv_i^\top$,
+hence
+\[
+\lVert\Aeff'd_x\rVert^2 = t^\top(\Heff - v_iv_i^\top)\,t = t^\top v_i - (v_i^\top t)^2 = 1 - 1 = 0,
+\]
+using $\Heff t = v_i$ and $v_i^\top t = 1$. So $\Aeff'd_x = 0$, which means that $\Abar d$ vanishes
+on the rows of $\Aeff'$ (where $d_s = 0$). On the remaining inequality rows
+$\ell\in\Ns\cup\{i\}$, $(\Abar d)_\ell = (A_Id_x)_\ell - (d_s)_\ell = 0$ by construction.
 
-(iii) As before, $g^\top z_k = 0$ for $k\in\Nx$ and $\pi_\ell = 0$ for $\ell\in\Ns$, so
-$g^\top d = \pi_i\,(d_s)_i = \pi_i$. 
+(iii) Using~\eqref{eq:minimizer-facts}, $g_x^\top d_x = \sum_kt_k(g_k - g_{\rep(k)}) = 0$ and
+$\pi_\ell = 0$ for $\ell\in\Ns$, so only the component of surplus $i$ remains:
+$g^\top d = \pi_i\,(d_s)_i = \pi_i$.
 \end{proof}
 
 \begin{remark} \label{rem:zc-kappa}
@@ -173,13 +204,15 @@ f(y + \alpha d) = f(y) + \alpha\,\nabla f(y)^\top d,\qquad \pi(y+\alpha d) = \pi
 \end{cor}
 
 \begin{proof}
-The quadratic term of $f(y+\alpha d)$ is $\frac{\alpha^2}{2\delta}\lVert\Abar d\rVert^2 = 0$, and
-$\pi$ depends on $y$ only through $\Abar y$. 
+Expanding the quadratic $f$, $f(y+\alpha d) = f(y) + \alpha\nabla f(y)^\top d +
+\frac{\alpha^2}{2\delta}\lVert\Abar d\rVert^2$, and $\Abar d = 0$. The dual estimate
+$\pi(y) = \pihat + \frac{1}{\delta}(b - \Abar y)$ depends on $y$ only through $\Abar y$, which does
+not change.
 \end{proof}
 
 \begin{remark}[Fully masked columns] \label{rem:masked-column}
 If all nonzero coefficients of $u = a_r - a_{\rep(r)}$ lie in rows with free surpluses, then
-$\Aeff z_r = 0$ and $h = 0$, $h_{rr} = 0$. \Cref{thm:zc-column} then applies with $t = 0$:
+$\Aeff z_r = 0$, so $h = 0$ and $h_{rr} = 0$. \Cref{thm:zc-column} then applies with $t = 0$:
 the direction is $z_r$ together with the surplus components that absorb $A_Iz_r$.
 \end{remark}
 
@@ -187,7 +220,9 @@ the direction is $z_r$ together with the surplus components that absorb $A_Iz_r$
 \section{The Zero-Curvature Step Removes the Singularity}
 \label{sec:zc-step}
 
-Along $d$ the objective decreases linearly, so the method moves as far as feasibility allows.
+Along $d$ the objective decreases linearly (\cref{cor:linear-decrease}), so the method moves
+as far as the bounds allow. In this section $\rho$ denotes the released index: the column $r$ of
+\cref{thm:zc-column} or the surplus $i$ of \cref{thm:zc-surplus}.
 
 \begin{lemma}[Finite step] \label{lem:finite-step}
 The directions of \cref{thm:zc-column,thm:zc-surplus} have at least one negative component.
@@ -200,11 +235,13 @@ $\Sset\cup\Nx\cup\Ns$.
 \end{lemma}
 
 \begin{proof}
-Suppose $d\ge0$. Every block sum of $d_x$ is zero (\cref{thm:zc-column,thm:zc-surplus}~(i)),
-so $d_x\ge0$ forces $d_x = 0$. Then $\Abar d = [0;\,-d_s] = 0$ forces $d_s = 0$, and $d = 0$
-contradicts $g^\top d<0$. The blocking index cannot lie in $\Wset\setminus\{r\}$ since $d$
-vanishes there, and it is not the released index, whose component is positive ($d_r = 1$ or
-$(d_s)_i = 1$). 
+Suppose $d\ge0$. By part~(i) of the theorems, every block sum of $d_x$ is zero ($Cd_x = 0$).
+A nonnegative vector whose block sums are zero is zero, so $d_x = 0$. Then
+$\Abar d = [\,A_Ed_x;\; A_Id_x - d_s\,] = [\,0;\;-d_s\,]$, and $\Abar d = 0$ (part~(ii)) forces
+$d_s = 0$. But $d = 0$ contradicts $\nabla f(y)^\top d < 0$ (part~(iii)). So some component of
+$d$ is negative, and the minimum is taken over a nonempty set. The blocking index cannot lie in
+$\Wset\setminus\{\rho\}$, where $d$ vanishes, and it is not the released index $\rho$, whose
+component of $d$ is positive ($d_r = 1$ or $(d_s)_i = 1$). Hence $q\in\Sset\cup\Nx\cup\Ns$.
 \end{proof}
 
 After the step, the blocking index $q$ is added to the working set by an expansion
@@ -212,33 +249,54 @@ After the step, the blocking index $q$ is added to the working set by an expansi
 this attempt cannot fail for the same reason.
 
 \begin{theorem}[Removal of the dependency] \label{thm:removal}
-Let $V = \Null(D_{\Wset\setminus\{\rho\}})$, where $\rho$ is the released index ($r$ or the
-surplus $i$), and let $V' = V\cap\{y_q = 0\}$. Then the reduced Hessian of the working set
-$(\Wset\setminus\{\rho\})\cup\{q\}$ is positive definite. In other words, the retried release
-succeeds.
+Let $\rho$ be the released index and $q$ the blocking index of
+\cref{lem:finite-step}. Then the reduced Hessian of the working set
+$\Wset' = (\Wset\setminus\{\rho\})\cup\{q\}$ is positive definite. In other words, after the
+zero-curvature step and the expansion by $q$, the retried release of $\rho$ succeeds.
 \end{theorem}
 
 \begin{proof}
-The reduced Hessian of a working set is positive definite if and only if $\Abar$ is injective
-on the corresponding nullspace (\cref{cor:dimension}). Before the release, $\Abar$ was
-injective on $\Null(D_\Wset)$, and $V$ has exactly one more dimension than $\Null(D_\Wset)$.
-Hence $\ker\Abar\cap V$ has dimension at most one, and it contains $d\ne0$ by
-\cref{thm:zc-column,thm:zc-surplus}~(ii), so $\ker\Abar\cap V = \spn\{d\}$. Since
-$d_q\ne0$, $d\notin V'$, and therefore $\ker\Abar\cap V'\subseteq\spn\{d\}\cap V' = \{0\}$.
+For any working set with nullspace basis $Z$, the reduced Hessian $Z^\top\Abar^\top\Abar Z$ is
+positive definite if and only if $\Abar Z\eta\ne0$ for all $\eta\ne0$, i.e.\ if and only if
+$\Abar$ is injective on the nullspace $\Null(D)$ of the working set. We use this for three
+spaces:
+\begin{align*}
+N_0 &= \Null(D_\Wset) && \text{(before the release)},\\
+V &= \Null(D_{\Wset\setminus\{\rho\}}) && \text{(after the release)},\\
+V' &= V\cap\{y : y_q = 0\} = \Null(D_{\Wset'}) && \text{(after the release and the expansion by $q$)}.
+\end{align*}
+\emph{Step 1: $\ker\Abar\cap V = \spn\{d\}$.} Before the release the reduced Hessian was positive
+definite, so $\ker\Abar\cap N_0 = \{0\}$. Removing one constraint from the working set adds one
+dimension, $N_0\subset V$ with $\dim V = \dim N_0 + 1$. If $\ker\Abar\cap V$ contained two
+linearly independent vectors, some nonzero combination of them would satisfy the one extra
+constraint ($y_\rho = 0$) and therefore lie in $N_0\cap\ker\Abar = \{0\}$, a contradiction. So
+$\dim(\ker\Abar\cap V)\le1$. The direction $d$ lies in $V$ (part~(i) of
+\cref{thm:zc-column,thm:zc-surplus}) and in $\ker\Abar$ (part~(ii)), and $d\ne0$, so
+$\ker\Abar\cap V = \spn\{d\}$.
 
+\emph{Step 2: $\ker\Abar\cap V' = \{0\}$.} Every vector of $\ker\Abar\cap V'$ is a multiple
+$\beta d$ of $d$ by Step~1, and it has a zero component $q$. Since $d_q<0$, this forces
+$\beta = 0$. Hence $\Abar$ is injective on $V' = \Null(D_{\Wset'})$, and the reduced Hessian of
+$\Wset'$ is positive definite.
 \end{proof}
+
+The retried release starts from the same kind of state as the first attempt: a subspace
+minimizer with a negative multiplier for $\rho$.
 
 \begin{prop}[The iterate stays a subspace minimizer] \label{prop:stays-minimizer}
 After the zero-curvature step and the expansion by $q$, the iterate is a subspace minimizer
-of the new working set, and the multiplier of the released index is unchanged.
+of the new working set $(\Wset\setminus\{\rho\})\cup\{q\}$ with $\rho$ still fixed, and the
+multiplier of $\rho$ is unchanged.
 \end{prop}
 
 \begin{proof}
-By \cref{cor:linear-decrease}, $\pi$ and hence the gradient do not change. Expanding the
-working set removes a nullspace vector or changes the representative of a block; in the
-latter case the new reduced gradient entries are differences
-$g_j - g_{r'} = (g_j - g_q) - (g_{r'} - g_q) = 0$ of entries that were zero. The multiplier of
-$\rho$ is computed from the gradient, which has not changed. 
+By \cref{cor:linear-decrease}, $\pi$ and hence the gradient $g = \cbar - \Abar^\top\pi$ do not change
+along the step. The expansion by $q$ changes the nullspace basis as in \cref{thm:Z-update}: it
+removes a vector, or, if $q$ is a representative, replaces vectors $z_j$ by
+$z_j - z_{r'}$ for the replacement $r'$. In all cases the new basis vectors are combinations of
+old ones, whose reduced gradient entries $g^\top z$ were zero; so the new reduced gradient is zero
+as well. The multiplier of $\rho$ is computed from the unchanged gradient by
+\cref{cor:multipliers-minimizer}.
 \end{proof}
 
 \begin{remark}[The representative of the released column blocks] \label{rem:rep-blocks}

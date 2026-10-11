@@ -137,7 +137,7 @@ its updates.
 All column generation runs use the same settings: the initial columns are the cheapest path
 of every pilot, pricing visits the pilots in random order and adds the first improving
 column, the proximal point rule moves the center after every iteration, and $\delta = 1$,
-$\tau = 10^{-6}$, $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The active-set method uses the
+$\varepsilon_{\mathrm{c}} = 10^{-6}$, $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The active-set method uses the
 column capacity $\nmax = 20\,000$ and the refactorization interval $150$ unless stated
 otherwise. The HiGHS QP masters are stopped after 600 seconds and the LP master after 900
 seconds. All experiments ran single-threaded on an AMD Ryzen~7 7700 processor with 32\,GB of
@@ -158,7 +158,7 @@ times, they report three accuracy measures relative to the reference optimum $z^
           rows (for inequality rows only the violated part).
 \end{itemize}
 
-\begin{table}[p]
+\begin{table}[!htbp]
 \centering
 \scriptsize
 \renewcommand{\arraystretch}{1.15}
@@ -175,9 +175,13 @@ times, they report three accuracy measures relative to the reference optimum $z^
 \caption{Equality variant: all methods. ``time'' denotes a method stopped by its time limit.
 Master times are averages per column generation iteration.}
 \label{tab:comparison-eq}
+\end{table}
 
-\bigskip\bigskip
-
+\begin{table}[!htbp]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcrrrrccc}
 \toprule
@@ -200,16 +204,16 @@ rows: the bound would be $-\infty$ if the projected duals violated them
 (\cref{rem:bound-sign}).
 
 \paragraph{The accuracy of the stabilized methods.} The stabilized methods stop when
-$\lVert\pi-\pihat\rVert_\infty\le\tau\max(1,\lVert\pi\rVert_\infty)$, which by
-\cref{prop:stop-accuracy} allows an infeasibility of up to $\delta\tau\max(1,\lVert\pi\rVert_\infty)$
+$\lVert\pi-\pihat\rVert_\infty\le\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$, which by
+\cref{prop:stop-accuracy} allows an infeasibility of up to $\delta\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$
 in the linking rows. The infeasibility column shows exactly this order of magnitude, about
 $10^{-5}$ for the larger instances, where the duals are of order $10$ to $100$. The cost
 $c^\top\lambda$ of such a slightly infeasible solution can be off by more than the
 infeasibility itself: on I2 it is $2\cdot10^{-5}$ below $z^\star$. The Lagrangian bound, which
 certifies the optimal value, is unaffected and agrees with $z^\star$ to about $10^{-7}$. A
-tighter $\tau$ removes the cost error at the price of a few more center-only iterations. In a
+tighter $\varepsilon_{\mathrm{c}}$ removes the cost error at the price of a few more center-only iterations. In a
 test on a smaller instance with $\delta = 5$, the cost error dropped from $10^{-6}$ for
-$\tau = 10^{-6}$ to $10^{-15}$ for $\tau = 10^{-9}$, with one additional iteration.
+$\varepsilon_{\mathrm{c}} = 10^{-6}$ to $10^{-15}$ for $\varepsilon_{\mathrm{c}} = 10^{-9}$, with one additional iteration.
 
 \paragraph{The active-set method and HiGHS solve the same problem.} On instance I1, where
 all stabilized methods finish, the explicit and eliminated HiGHS QPs and the active-set method

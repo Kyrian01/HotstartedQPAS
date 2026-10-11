@@ -8,7 +8,7 @@
 % ════════════════════════════════════════════════════════════════════════════════════════
 
 % Document properties
-\documentclass[11pt]{book}
+\documentclass[11pt, openany]{book}
 \usepackage[a4paper, margin=2.6cm]{geometry}
 \usepackage[english]{babel}
 \usepackage[T1]{fontenc}
@@ -128,7 +128,11 @@
 % expandable input for generated table rows (LaTeX's \input breaks \bottomrule in a tabular)
 \makeatletter
 \newcommand{\tabinput}[1]{\@@input #1 }
+\setlength{\@fptop}{0pt}          % float pages start at the top, not vertically centred
+\setlength{\@fpsep}{24pt plus 4pt}
+\setlength{\@fpbot}{0pt plus 1fil}
 \makeatother
+\pgfplotsset{legend cell align=left}
 
 
 % ── notation ──────────────────────────────────────────────────────────────────────────────
