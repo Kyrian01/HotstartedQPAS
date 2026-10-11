@@ -41,8 +41,8 @@ columns $\mathcal{J}'$ and all $m_I$ surpluses. By \cref{lem:unified}, its dual 
 \qquad\text{s.t.}\qquad
 c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0 \;\;(j\in\mathcal{J}'),\qquad \pi_I\ge0 .
 \end{equation}
-Its optimal dual solutions are extreme points of the feasible region, which causes the
-instability described in \cref{rem:instability}. Proximal stabilization adds a penalty on the
+The dual solutions returned by a simplex solver are vertices of this feasible region, which
+causes the instability described in \cref{rem:instability}. Proximal stabilization adds a penalty on the
 distance to a given point $\pihat\in\R^m$.
 
 \begin{definition}[Stabilized dual problem] \label{def:stabilized-dual}
@@ -120,9 +120,14 @@ subject to $\cbar - \Abar^\top\pi - \Cbar^\top\mu\ge0$. As in the proof of \cref
 entry of this vector for $\lambda_j$ is $c_j - a_j^\top\pi - \mu_{\psi(j)}$, and the entry for
 $s_i$ is $(\pi_I)_i$. This is exactly~\eqref{eq:stabilized-dual}.
 
-Problem~\eqref{eq:explicit} is a convex quadratic program with linear constraints, and it is
-feasible because $w$ is free. Strong duality therefore holds, and at the optimum the
-minimizing $w$ above is the optimal one, which is~\eqref{eq:pi-w}.
+Problem~\eqref{eq:explicit} is a convex quadratic program with linear constraints. It is
+feasible, since $\mathcal{J}'$ contains a column of every block and $w$ is free, and its
+objective is bounded below, since $\cbar^\top y = c^\top\lambda$ with $0\le\lambda\le1$ and
+$\frac{\delta}{2}\lVert w+\pihat\rVert^2\ge0$. A convex quadratic program that is feasible and
+bounded below attains its minimum (Frank--Wolfe theorem), and with linear constraints the KKT
+conditions hold there. This gives strong duality. At an optimal pair, $(y,w)$ minimizes
+$\mathcal{L}$ for the optimal multipliers, and the minimizer in $w$ is unique, so
+$w = \pi - \pihat$, which is~\eqref{eq:pi-w}.
 \end{proof}
 
 \begin{remark} \label{rem:sign-in-dual}
@@ -164,8 +169,9 @@ More precisely, $(y, w)$ is optimal for~\eqref{eq:explicit} if and only if $y$ i
 for~\eqref{eq:eliminated} and $w = (b - \Abar y)/\delta$. The objective values are related by
 \begin{equation} \label{eq:objective-relation}
 \Phi(y) := \cbar^\top y + \frac{\delta}{2}\lVert w+\pihat\rVert^2 - \frac{\delta}{2}\lVert\pihat\rVert^2
-= f(y) + \frac{1}{2\delta}\lVert b\rVert^2 + \pihat^\top b .
+= f(y) + \frac{1}{2\delta}\lVert b\rVert^2 + \pihat^\top b,
 \end{equation}
+where $w = (b - \Abar y)/\delta$; this defines the master objective $\Phi$ for every $y$.
 \end{theorem}
 
 \begin{proof}
@@ -306,7 +312,8 @@ Two rules for the center update are common.
           iteration is a step of the proximal point method on the current restricted dual
           problem.
     \item \textbf{Bundle rule:} $\pihat\gets\pi$ only if the Lagrangian bound improves,
-          $\theta(\pi) > \theta(\pihat)$ (a \emph{serious step}). Otherwise the center stays
+          $\theta(\pi^+) > \theta(\pihat^+)$ with the projection $\pi^+$ of
+          \cref{sec:bound-ineq} (a \emph{serious step}). Otherwise the center stays
           (a \emph{null step}). This requires the Lagrangian bound at every iteration, i.e.\
           all blocks must be priced every iteration.
 \end{itemize}
@@ -322,7 +329,8 @@ $\pi\ne\pihat$.
 \begin{theorem}[Exact termination] \label{thm:exact-termination}
 Let $y = [\lambda; s]$ be optimal for the eliminated regularized master
 problem~\eqref{eq:eliminated} over the columns $\mathcal{J}'$, with dual estimate
-$\pi = \pi(y)$ and convexity duals $\mu$. If
+$\pi = \pi(y)$, and let $\mu$ be the Lagrange multipliers of the convexity
+constraints~\eqref{eq:eliminated-conv}. If
 \begin{enumerate}
     \item $\pi = \pihat$, and
     \item the pricing problem~\eqref{eq:pricing} has a nonnegative optimal value for every
@@ -338,7 +346,7 @@ $A_E\lambda = b_E$ and $A_I\lambda - s = b_I$. Since $s\ge0$, $A_I\lambda\ge b_I
 is feasible for~\eqref{eq:master}.
 
 \emph{Dual feasibility.} The optimality conditions of~\eqref{eq:eliminated}, derived in
-\cref{thm:kkt-master} below, state that
+\cref{thm:kkt-master} of \cref{chap:qpas} (whose proof does not use this theorem), state that
 \begin{itemize}
     \item $c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0$ for every $j\in\mathcal{J}'$, with equality if
           $\lambda_j>0$;
@@ -369,35 +377,42 @@ In practice condition~(i) of \cref{thm:exact-termination} is tested as
 \begin{equation} \label{eq:center-test}
 \lVert\pi - \pihat\rVert_\infty \;\le\; \varepsilon_{\mathrm{c}}\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr)
 \end{equation}
-with a tolerance $\varepsilon_{\mathrm{c}}>0$. When this test holds, the violation of the
-linking rows by $\lambda$ is bounded by
+with a tolerance $\varepsilon_{\mathrm{c}}>0$. When this test holds, the residual of the
+unified linking rows, and with it the violation of the linking rows by $\lambda$, is bounded by
 \[
-\lVert b - \Abar y\rVert_\infty \;\le\; \delta\,\varepsilon_{\mathrm{c}}\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr).
+\max\Bigl(\lVert b_E - A_E\lambda\rVert_\infty,\;\lVert\max(b_I - A_I\lambda, 0)\rVert_\infty\Bigr)
+\;\le\;\lVert b - \Abar y\rVert_\infty \;\le\; \delta\,\varepsilon_{\mathrm{c}}\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr).
 \]
 \end{prop}
 
 \begin{proof}
 By \cref{prop:residual}, $\lVert b - \Abar y\rVert_\infty = \delta\lVert\pi - \pihat\rVert_\infty$;
-insert~\eqref{eq:center-test}.
+insert~\eqref{eq:center-test}. For the first inequality, $b - \Abar y = [\,b_E - A_E\lambda;\;
+b_I - A_I\lambda + s\,]$, and since $s\ge0$, $\max(b_I - A_I\lambda, 0)\le|b_I - A_I\lambda + s|$
+componentwise.
 \end{proof}
 
 The accuracy of the final solution is thus relative to the size of the duals, and it scales
-with $\delta$. \Cref{sec:results-correctness} shows that the master objective $\Phi$ and the
-Lagrangian bound are much less affected by this residual than the cost $c^\top\lambda$ of a
+with $\delta$. \Cref{sec:results-correctness,fig:optimality} show that the Lagrangian bound and the master
+objective $\Phi$ are much less affected by this residual than the cost $c^\top\lambda$ of a
 slightly infeasible $\lambda$.
 
 \subsection{The Lagrangian bound with inequality rows}
+\label{sec:bound-ineq}
 
 The Lagrangian bound of \cref{prop:lagrangian-bound} requires $\pi_I\ge0$. The duals of the
 regularized master problem satisfy this condition only up to the tolerance of the master
-solver, and a tiny negative entry would make the bound useless (\cref{rem:bound-sign}). The
+solver, and a tiny negative entry would void the guarantee $\theta(\pi)\le z^\star$
+(\cref{rem:bound-sign}). The
 bound is therefore evaluated at the projection
 \[
 \pi^+ = \bigl[\,\pi_E;\;\max(\pi_I, 0)\,\bigr],
 \]
 which always satisfies the sign condition, so that $\theta(\pi^+)\le z^\star$ holds by
 \cref{prop:lagrangian-bound}. The same projected vector is passed to the pricing problem.
-For problems with equality rows only, $\pi^+ = \pi$.
+For problems with equality rows only, $\pi^+ = \pi$. At an exact optimum of the master problem
+$\pi_I\ge0$ (\cref{thm:kkt-master}~(ii)), so $\pi^+ = \pi$ and the pricing test of
+\cref{alg:rcg} is condition~(ii) of \cref{thm:exact-termination}.
 
 \subsection{The algorithm}
 
@@ -420,10 +435,10 @@ of the regularized master problem, is the subject of the remaining chapters.
         \EndIf
         \State $\pihat\gets\pi$ \Comment{center-only iteration}
     \Else
-        \State $\pihat\gets\pi$ \Comment{proximal point rule (bundle rule: only if $\theta$ improves)}
+        \State $\pihat\gets\pi$ \Comment{proximal point rule}
     \EndIf
 \Until{stopped}
 \end{algobox}
 
-In the experiments of \cref{chap:results} we use the proximal point rule,
-$\delta = 1$, $\varepsilon_{\mathrm{c}} = 10^{-6}$ and $\varepsilon_{\mathrm{rc}} = 10^{-6}$.
+The bundle rule would need the Lagrangian bound in every iteration and hence full pricing; the
+experiments of \cref{chap:results} use the proximal point rule.

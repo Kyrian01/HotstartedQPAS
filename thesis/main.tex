@@ -82,7 +82,7 @@
 \newaliascnt{note}{theorem}\newtheorem{note}[note]{Note}\aliascntresetthe{note}
 \newaliascnt{assumption}{theorem}\newtheorem{assumption}[assumption]{Assumption}\aliascntresetthe{assumption}
 \crefname{theorem}{Theorem}{Theorems}
-\crefname{cor}{Corollary}{Corollarys}
+\crefname{cor}{Corollary}{Corollaries}
 \crefname{prop}{Proposition}{Propositions}
 %\crefname{lemma}{Lemma}{Lemmas}
 %\crefname{example}{Example}{Examples}
@@ -123,6 +123,7 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{3pt}
 \usepackage{microtype}
+\usepackage{needspace}
 \usepackage[section]{placeins}   % keep floats inside their section
 \raggedbottom
 % expandable input for generated table rows (LaTeX's \input breaks \bottomrule in a tabular)
@@ -168,6 +169,7 @@
 
 
 \begin{document}
+\let\cleardoublepage\clearpage   % no blank pages before chapters (one-sided reading)
 
 \frontmatter
 
@@ -232,7 +234,7 @@ the structural zeros that accumulate in the factor.
 \medskip
 
 On generated airline crew scheduling instances the method reproduces the optimum of the
-full linear program, and it solves the regularized master problems two to three orders of
+full linear program, and it solves the regularized master problems about two to three orders of
 magnitude faster than a general-purpose quadratic programming solver. The complete column
 generation run is also much faster than classical column generation with a linear master
 problem, and on the larger instances faster than solving the full linear program directly.

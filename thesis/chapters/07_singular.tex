@@ -17,7 +17,8 @@ pivots of the factorization, and how they are resolved. The resolution is a
 objective decreases linearly, and the step is taken until a variable reaches its bound. We
 prove that adding this variable to the working set removes the singularity, so that the
 interrupted reduction can be completed. The treatment covers released columns and released
-surpluses with one argument, and keeps every working-set variable exactly at its bound.
+surpluses with one argument, and keeps every working-set variable other than the released
+one exactly at its bound.
 
 \vspace*{\fill}
 
@@ -83,14 +84,16 @@ D_{jj}\;>\;\varepsilon_{\mathrm{piv}}\,\lVert u_j\rVert^2\qquad\text{for all }j\
 \]
 \end{definition}
 
-The scale $\lVert u_j\rVert^2$ uses all rows on purpose: a column whose coefficients lie entirely in rows
-with free surpluses has $(\Heff)_{jj} = 0$, and a scale based on $\Heff$ would hide this
+The scale $\lVert u_j\rVert^2$ uses all rows on purpose: a column $j$ whose difference $u_j$ has all
+its nonzeros in rows with free surpluses has $(\Heff)_{jj} = 0$, and a scale based on $\Heff$ would hide this
 singularity.
 
 The determinant of $\Heff'$ is the product of its pivots. When a column is released (part~(i) of
-\cref{prop:singular-cases}), the update adds one new pivot, and when a surplus is released
-(part~(ii)), the pivots change by the factor $\omega_i$ in total, since
-$\det\Heff' = \det\Heff\cdot\omega_i$. If all pivots satisfied the invariant before the update, a
+\cref{prop:singular-cases}), the row addition creates the pivot of $r$ and downdates the pivots
+of the later active indices, and their product changes by the factor $\sigma_r$
+(\cref{prop:rowadd}). When a surplus is released (part~(ii)), the pivots change by the factor
+$\omega_i$ in total, since $\det\Heff' = \det\Heff\cdot\omega_i$. All pivots are therefore checked,
+not only the new one. If all pivots satisfied the invariant before the update, a
 vanishing $\sigma_r$ or $\omega_i$ must therefore show up as a pivot that violates it after the
 update. This detection is a numerical heuristic rather than a theorem about floating-point
 arithmetic, but it follows directly from the determinant identities of
@@ -196,7 +199,9 @@ $g^\top d = \pi_i\,(d_s)_i = \pi_i$.
 For a ``$\le$'' row with slack coefficient $\kappa_i = +1$ (\cref{rem:kappa-summary}), the
 column part is scaled by $-\kappa_i$, $d_x = -\kappa_i\sum_j\beta_jz_j$, and the surplus part is
 $(d_s)_{i'} = -\kappa_{i'}(A_Id_x)_{i'}$. Then again $(d_s)_i = 1$ and
-$g^\top d = -\kappa_i\pi_i = (\nu_s)_i < 0$.
+$g^\top d = -\kappa_i\pi_i = (\nu_s)_i < 0$. The same surplus rule
+$(d_s)_{i'} = -\kappa_{i'}(A_Id_x)_{i'}$ replaces $(d_s)_{i'} = (A_Id_x)_{i'}$
+in~\eqref{eq:zc-column}.
 \end{remark}
 
 \begin{cor}[Linear decrease] \label{cor:linear-decrease}
@@ -284,13 +289,14 @@ $\Abar$ is injective on $Y_2 = \Null(D_{\Wset'})$, and the reduced Hessian of $\
 positive definite.
 \end{proof}
 
-The retried release starts from the same kind of state as the first attempt: a subspace
-minimizer with a negative multiplier for $\rho$.
+The retried release starts from the same kind of state as the first attempt: a vanishing
+reduced gradient and a negative multiplier for $\rho$.
 
-\begin{prop}[The iterate stays a subspace minimizer] \label{prop:stays-minimizer}
-After the zero-curvature step and the expansion by $q$, the iterate is a subspace minimizer
-of the new working set $(\Wset\setminus\{\rho\})\cup\{q\}$ with $\rho$ still fixed, and the
-multiplier of $\rho$ is unchanged.
+\begin{prop}[The reduced gradient stays zero] \label{prop:stays-minimizer}
+After the zero-curvature step and the expansion by $q$, the reduced gradient for the working
+set $\Wset\cup\{q\}$ (with $\rho$ still in it) vanishes, and the multiplier of $\rho$ is
+unchanged. The only index of $\Wset\cup\{q\}$ whose variable is not at zero is $\rho$ itself
+($y_\rho = \alpha^\star$), which is released next.
 \end{prop}
 
 \begin{proof}
@@ -300,19 +306,23 @@ removes a vector, or, if $q$ is a representative $S_k$, replaces vectors $z_j$ b
 $z_j - z_{S_k'}$ for the replacement $S_k'$. In all cases the new basis vectors are combinations of
 old ones, whose reduced gradient entries $g^\top z$ were zero; so the new reduced gradient is zero
 as well. The multiplier of $\rho$ is computed from the unchanged gradient by
-\cref{cor:multipliers-minimizer}.
+\cref{cor:multipliers-minimizer}; a new representative $S_k'$ does not change $\mu_k$, because
+$g_{S_k'} - g_{S_k} = g^\top z_{S_k'} = 0$. Finally, $d_\rho = 1$ and $d$ vanishes on
+$\Wset\setminus\{\rho\}$, so $y_\rho = \alpha^\star$ and all other working-set variables stay zero.
 \end{proof}
 
 \begin{remark}[The representative of the released column blocks] \label{rem:rep-blocks}
-In \cref{thm:zc-column}, the blocking index may be the representative $\rep(r)$ of the block
-of $r$. Then $r$, which now has the positive weight $\alpha^\star$, can simply take over as
-the new representative (case~(ii) of \cref{lem:expand-ordering} with replacement $S_k' = r$). This
-completes the release at once.
+In \cref{thm:zc-column}, the blocking index may be the representative $q = \rep(r)$ of the
+block $k$ of $r$, for example when $\mathcal{N}_x^{(k)}$ is empty. Then $r$, which now has the weight
+$\alpha^\star\ge0$, takes over as the new representative: $r$ leaves $\Wx$, $q$ enters $\Wx$, and
+for $j\in\mathcal{N}_x^{(k)}$ the vectors become $e_j - e_r = z_j - z_r$, as in case~(ii) of
+\cref{lem:expand-ordering} but without removing a row of $\Nx$. The resulting working set is
+$\Wset'$ of \cref{thm:removal}, so $\Heff$ stays positive definite, and the release is complete.
 \end{remark}
 
-\Cref{alg:singular} summarizes the procedure. Each pass either completes the release or adds
-one more index to the working set. The number of passes is therefore bounded by the number of
-free variables.
+\Cref{alg:singular} summarizes the procedure. By \cref{thm:removal}, the second pass completes
+the release in exact arithmetic. With rounding, each further pass adds one index to the working
+set, so the number of passes is bounded by the number of free variables.
 
 \begin{algobox}{Release with Singularity Resolution}{alg:singular}
 \State \textbf{Input:} subspace minimizer $y$, index $\rho$ (column $r$ or surplus $i$) with
@@ -327,7 +337,7 @@ free variables.
     \State Form $d$ by~\eqref{eq:zc-column} or~\eqref{eq:zc-surplus}
     \State Ratio test along $d$; $y\gets y+\alpha^\star d$ \Comment{$\pi$ is unchanged}
     \If{$\rho = r$ and $q = \rep(r)$}
-        \State Make $r$ the representative, put $q$ into $\Wx$; \textbf{return}
+        \State $r$ becomes the representative, $q$ enters $\Wx$; \textbf{return}
                \Comment{\cref{rem:rep-blocks}}
     \EndIf
     \State Expand the working set by $q$ \Comment{\cref{thm:removal}: the next pass succeeds}
@@ -340,7 +350,8 @@ the linear dependence into the working set and retries. This also removes the de
 it ignores the value of $x_j$. If $x_j>0$, the working-set constraint $x_j = 0$ is violated by
 the iterate, and its multiplier no longer certifies optimality: the method can stop with
 $x_j>0$ and a positive multiplier. The zero-curvature step avoids this. The iterate stays
-feasible, every working-set variable is exactly at its bound, the objective decreases
-strictly, and the index added to the working set is the one selected by a ratio test rather
+feasible, every working-set variable other than the released one is exactly at its bound, the
+objective does not increase (and decreases strictly unless $\alpha^\star = 0$), and the index
+added to the working set is the one selected by a ratio test rather
 than by a heuristic. The same argument covers released columns and released surpluses.
 \end{remark}

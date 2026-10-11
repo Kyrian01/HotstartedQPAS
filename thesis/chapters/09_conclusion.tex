@@ -23,7 +23,8 @@ inequality rows.
 For the active-set method (\cref{chap:qpas}), the constraint matrix of a working set admits a
 \textbf{reordering into five sets}: representatives, working-set columns, nullspace columns,
 active surpluses and free surpluses. The surpluses violate the column generation property of
-the convexity matrix, but this only adds two groups of columns with identity structure. The
+the convexity matrix, but this only adds a group with identity structure (active surpluses)
+and a group of empty columns (free surpluses). The
 reordering yields an explicit nullspace basis of vectors $e_j - e_{\rep(j)}$ and unit vectors,
 which is never stored (\cref{chap:nullspace}). The reduced KKT system \textbf{decouples}: the
 surplus part of the direction is explicit, and only the \textbf{effective reduced Hessian}
@@ -40,7 +41,7 @@ of a fixed-size $LDL^\top$ factorization (\cref{chap:updates}). A new column or 
 stability center leaves the factorization unchanged, which gives a hot start of every master
 problem. Structural zeros left by the updates are controlled by periodic refactorization in
 increasing index order. Singular reduced Hessians are resolved by an exact zero-curvature
-step, which removes the dependency and keeps every working-set variable at its bound, for
+step, which removes the dependency and keeps every working-set variable except the released one at its bound, for
 released columns and released surpluses alike (\cref{chap:singular}).
 
 \medskip
@@ -48,16 +49,17 @@ released columns and released surpluses alike (\cref{chap:singular}).
 On generated crew scheduling instances (\cref{chap:results}), the method reproduces the optimum
 of the full linear program and certifies it by the Lagrangian bound. Its master problems cost
 between $0.01$ and $7$\,ms on average. That is two to three orders of magnitude less than a
-general-purpose QP solver, and fast enough to make regularized column generation much faster
+general-purpose QP solver on all instances but the smallest, and fast enough to make regularized column generation much faster
 than classical column generation with a warm-started LP master: 7.7\,s instead of 650\,s on
-the largest instance on which both were run. From medium-sized instances on, the complete
-column generation run is even faster than solving the full linear program directly.
-Inequality rows are handled at no extra cost and lead to shorter runs.
+the largest instance on which both were run. The complete column generation run is even
+faster than solving the full linear program directly, from I4 on with equality rows and on all
+instances with inequality rows. Inequality rows need no new kind of
+linear algebra, keep the time per master problem of the same order, and lead to shorter runs.
 
 
 \section{Outlook}
 
-The experiments point to three directions for further work.
+The experiments point to four directions for further work.
 \begin{itemize}
     \item \textbf{Dense factorization for large nullspaces.} The factor of $\Heff$ turned out
           to be dense. For large $|\Nx|$, a dense $LDL^\top$ (or $QR$) factorization with
@@ -67,9 +69,9 @@ The experiments point to three directions for further work.
           iterations is a property of the proximal point method with a fixed $\delta$
           (\cref{prop:center-only}). Since $\delta$ does not enter the factorization, it can be
           decreased in this phase at no cost to the linear algebra.
-    \item \textbf{Range rows and inexact master solves.} Linking rows with two finite bounds
-          need surpluses with upper bounds, which fit into the same framework as an additional
-          working-set state. Moreover, since the multipliers are the reduced costs, pricing
+    \item \textbf{Range rows.} Linking rows with two finite bounds need surpluses with upper
+          bounds, which fit into the same framework as an additional working-set state.
+    \item \textbf{Inexact master solves.} Since the multipliers are the reduced costs, pricing
           could be called at any subspace minimizer instead of only at the optimum of the
           master problem. This would turn column generation into a single active-set method
           over all columns.

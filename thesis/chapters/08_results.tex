@@ -18,7 +18,7 @@ broken down by solver, by iteration and by operation inside the active-set metho
 
 \medskip
 
-The last two sections look inside the method. We follow the sizes of the nullspace sets
+The two sections before the discussion look inside the method. We follow the sizes of the nullspace sets
 over a run with inequality rows, and we measure the \textbf{contents of the factorization}:
 how many of the stored entries are actually nonzero, how fast structural zeros accumulate,
 and how much periodic refactorization is worth.
@@ -105,7 +105,7 @@ $m_I$ the number of ``$\ge$'' rows in the inequality variant.}
 \section{Implementation and Setup}
 \label{sec:setup}
 
-All methods are implemented in Julia~1.12 \cite{bezanson2017julia} in one framework: the
+All methods are implemented in Julia~1.13 \cite{bezanson2017julia} in one framework: the
 column generation driver, the pricing algorithm, the column pool and the statistics are
 shared, and only the solver of the restricted master problem differs. We compare five
 methods:
@@ -127,11 +127,12 @@ Hot-started QPAS CG & eliminated regularized master problem, \cref{alg:hot-qpas}
 }
 \end{center}
 
-HiGHS \cite{huangfu2018parallelizing} (version 1.15) is used through a persistent model,
-to which new columns are added incrementally, so that its LP solves are warm-started. The
-eliminated QP is only defined for equality rows in HiGHS form, since it requires the
-elimination of $w$ without surplus variables; it is therefore run on the equality variant
-only. The active-set method uses CHOLMOD 5.3 \cite{chen2008cholmod} for the factorization and
+HiGHS \cite{huangfu2018parallelizing} (version 1.15, with its simplex method for the LPs and
+its active-set QP solver for the QPs) is used through a persistent model, to which new columns
+are added incrementally, so that its LP solves are warm-started. The LP master starts with
+artificial columns of cost $M = 10^4$ on both sides of every linking row (\cref{sec:column-generation}),
+which keep it feasible until enough columns are generated. Our HiGHS implementation of the
+eliminated QP has no surplus variables, so it is run on the equality variant only. The active-set method uses CHOLMOD 5.3 \cite{chen2008cholmod} for the factorization and
 its updates.
 
 \medskip
@@ -143,7 +144,8 @@ $\varepsilon_{\mathrm{c}} = 10^{-6}$, $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The
 column capacity $\nmax = 20\,000$ and the refactorization interval $150$ unless stated
 otherwise. The HiGHS QP masters are stopped after 600 seconds and the LP master after 900
 seconds. All experiments ran single-threaded on an AMD Ryzen~7 7700 processor with 32\,GB of
-memory under Windows~11. Times of the active-set method are the faster of two runs.
+memory under Windows~11. Times of the active-set method are the faster of two runs, all other
+times are from a single run.
 
 
 \section{Correctness}
@@ -219,8 +221,8 @@ $\varepsilon_{\mathrm{c}} = 10^{-6}$ to $10^{-15}$ for $\varepsilon_{\mathrm{c}}
 
 \paragraph{The active-set method and HiGHS solve the same problem.} On instance I1, where
 all stabilized methods finish, the explicit and eliminated HiGHS QPs and the active-set method
-perform almost the same number of column generation iterations and generate the same number
-of columns: they follow the same sequence of master problems, as they should. The small
+perform almost the same number of column generation iterations and generate almost the same
+number of columns: they follow the same sequence of master problems, as they should. The small
 differences come from the accuracy of the master solves, which affects the duals passed to
 pricing and hence the order in which columns are found.
 
@@ -259,7 +261,8 @@ stop at their time limit after about 6\,000 iterations.}
 \end{figure}
 
 \paragraph{Stabilization.} The duals of the linear master problem jump by up to $2\cdot10^4$
-in the first iterations, when the artificial Big-M variables are still active, and by about
+in the first iterations, when the artificial columns of cost $M = 10^4$ are still active, and
+by about
 $2$ in a typical iteration of the second half of the run. The regularized duals change by
 about $10^{-4}$ in a typical iteration of the second half. The linear master problem, however,
 reaches the optimum in fewer iterations on this instance. Its jumps explore the dual space
@@ -271,8 +274,8 @@ method costs $0.2$\,ms on average, against $30$\,ms for the warm-started LP mast
 (\cref{tab:comparison-eq}).
 
 \paragraph{The QP masters follow the same path.} The curves of the explicit QP, the
-eliminated QP and the active-set method are almost indistinguishable over the first 6\,000
-iterations, after which the HiGHS QP masters run out of time.
+eliminated QP and the active-set method are almost indistinguishable over the first
+iterations, up to about 6\,000, after which the HiGHS QP masters run out of time.
 
 \medskip
 
@@ -311,7 +314,8 @@ that add a column; the remaining iterations are center-only iterations.}
 iteration adds a column. It is followed by a \textbf{proximal phase}, in which most
 iterations are center-only iterations that move the center towards the restricted dual
 optimum, interrupted by occasional iterations that find a new column because the duals have
-moved. The phases are not strictly separated: columns keep appearing until close to the end.
+moved. The phases are not strictly separated: columns keep appearing far into the proximal
+phase.
 \Cref{tab:phases} quantifies this for all instances.
 
 \begin{table}[ht]
@@ -340,8 +344,8 @@ adapts to it. A center-only iteration needs at most two on average: as shown in
 \cref{prop:center-only}, once the working set has settled, the direction is zero, and the
 master problem is solved by a single multiplier test. The length of the proximal phase
 varies a lot between instances. On I2 and I3 (equality variant) center-only iterations are
-the large majority, on I4 they are a minority. In all cases their share of the master time
-is much smaller than their share of the iterations.
+the large majority, on I4 they are a minority. On all instances except the tiny I1 their share
+of the master time is much smaller than their share of the iterations.
 
 \Cref{fig:optimality} shows how the optimality measures evolve over the two phases for the
 active-set method on I2. In the column phase, the cost error, the error of the master
@@ -379,10 +383,10 @@ iterations that find no column.}
 
 \paragraph{Master time per iteration.} \Cref{fig:master-time} shows the time of the master
 solve per column generation iteration on I2. The time of the LP master and of the two HiGHS QP
-masters grows with the number of columns. The HiGHS QP solvers take 100--170\,ms per
+masters grows with the number of columns. The HiGHS QP solvers take 90--170\,ms per
 iteration in the second half of the run, since they rebuild their internal factorization for
 every master problem. The active-set method stays between $0.01$ and $2$\,ms per iteration
-over the whole run, with a median of $0.08$\,ms in the second half. That is about three orders
+over the whole run, with a median below $0.1$\,ms in the second half. That is about three orders
 of magnitude below the HiGHS QP masters and more than two orders of magnitude below the
 warm-started LP master.
 
@@ -410,7 +414,7 @@ method into its operations. The largest share, 37--60\%, is the direction comput
 right-hand side and the sparse solve with the factor). On the larger instances it is followed
 by the updates of the factorization and the periodic refactorization, together 35--50\%. The
 multiplier test, the only operation whose cost grows with the number of columns, takes
-10--17\%. Pricing takes only 1--8\%, except on the tiny instance I1.
+10--17\% on I2--I4. Pricing takes less than 8\%, except on the tiny instance I1.
 
 \begin{figure}[ht]
 \centering
@@ -469,9 +473,9 @@ the direct LP solve as the instances grow, up to an instance with 960 coverage r
 (instances S5 and S6 with $|V| = 300$ and $400$, $K = 16$ and $20$, generated in the same
 way). Over the whole range, both grow roughly with the third power of $m$. For the active-set
 method this is expected: $|\Nx|$ grows proportionally to $m$, the factor of $\Heff$ is dense
-(\cref{sec:results-fill}), and the number of iterations grows as well. From I4 on, the
-complete column generation run with the active-set method is faster than the direct solution
-of the full LP. On S6 the direct LP solve did not finish within 20 minutes, while the
+(\cref{sec:results-fill}), and the number of iterations grows as well. The complete column
+generation run with the active-set method is faster than the direct solution of the full LP
+from I4 on in the equality variant, and on all instances in the inequality variant. On S6 the direct LP solve did not finish within 20 minutes, while the
 active-set method solved both variants in 4--7 minutes. The inequality variant is
 consistently faster than the equality variant, since it needs fewer iterations
 (\cref{sec:results-ineq}).
@@ -500,8 +504,8 @@ exact LP of S6 did not finish within 20 minutes.}
 \section{Inequality Rows}
 \label{sec:results-ineq}
 
-With 30\% inequality rows, column generation needs considerably fewer iterations on all
-instances (\cref{tab:comparison-eq,tab:comparison-ineq}): over-covering a flight is allowed,
+With 30\% inequality rows, column generation needs fewer iterations on all instances,
+considerably fewer on I1--I3 (\cref{tab:comparison-eq,tab:comparison-ineq}): over-covering a flight is allowed,
 so the optimal schedules are found with fewer columns, and the proximal phase is shorter.
 
 \medskip
@@ -510,7 +514,7 @@ so the optimal schedules are found with fewer columns, and the proximal phase is
 Within the first iterations, about 35 surpluses are released: the initial schedules
 over-cover their rows, so the duals of these rows become negative. These rows drop out of
 $\Aeff$, and by \cref{cor:dimension} they also reduce the room for nullspace columns,
-$|\Nx|\le m - |\Ns|$. Over the rest of the run $|\Ns|$ only changes slowly, reaching 48, while
+$|\Nx|\le m - |\Ns|$. Over the rest of the run $|\Ns|$ only changes slowly, ending at 48, while
 individual surpluses are released and fixed again many times (\cref{tab:counters}). The number
 of nullspace columns grows during the column phase and ends at $|\Nx| = 306$, just below its
 bound $m - |\Ns| = 308$: at the end of the run, the effective reduced Hessian is almost as
@@ -539,9 +543,9 @@ every 20 iterations.}
 
 Surplus operations are frequent (\cref{tab:counters}): with inequality rows, 13--19\% of all
 expansions and reductions of the working set on I2--I4 are expansions and reductions of
-surpluses, each of which is a rank-one update or downdate of the factorization. They do not
-make the method slower: the average time per master problem of the inequality variant is of
-the same order as that of the equality variant (\cref{tab:comparison-eq,tab:comparison-ineq}).
+surpluses, each of which is a rank-one update or downdate of the factorization. The average
+time per master problem of the inequality variant is of the same order as that of the equality
+variant (\cref{tab:comparison-eq,tab:comparison-ineq}).
 The remaining differences come from the mix of iterations. On I2, for instance, the inequality
 variant has relatively few of the cheap center-only iterations (\cref{tab:phases}), which raises
 its average. Singular
@@ -589,11 +593,11 @@ confirms \cref{rem:natural-ordering}: a fill-reducing ordering cannot help, and 
 a solve grows quadratically with $|\Nx|$.
 
 \paragraph{Structural zeros accumulate.} Without the periodic refactorization, the stored
-pattern only grows. On I3 it reaches almost a million entries in the column phase, more than
-fifteen times the size of the actual factor, and almost all of them are structural zeros.
+pattern only grows. On I3 it reaches almost a million entries in the column phase, about
+thirty times the size of the actual factor, and almost all of them are structural zeros.
 Every solve and every update pays for them, and they connect active indices with inactive
-ones, which enlarges the reach of the sparse solves. The drop around iteration 1\,400 is a
-refactorization triggered by a degraded pivot (\cref{sec:detection}). It resets the
+ones, which enlarges the reach of the sparse solves. The drops around iterations 1\,400 and
+1\,550 are refactorizations triggered by degraded pivots (\cref{sec:detection}). They reset the
 pattern, after which it grows again and stays at about twice the size of the factor. With
 refactorization every 150 updates, the stored pattern stays within a small margin of the
 effective one throughout.
@@ -621,7 +625,8 @@ is within 4\% of the best on both instances.
 }
 \caption{Effect of the refactorization interval (equality variants). ``reach$/|\Nx|$'' is the
 average number of rows touched by a sparse solve per nullspace column. ``never'' still
-refactorizes when a pivot degrades.}
+refactorizes when a pivot degrades. These runs form a separate series (times are the faster
+of two runs), so the times for $\tau = 150$ differ slightly from \cref{tab:comparison-eq}.}
 \label{tab:refactor}
 \end{table}
 
@@ -653,12 +658,14 @@ The experiments support the main claims of this work.
           program, and certifies it by the Lagrangian bound, for equality and inequality rows.
     \item \textbf{Speed.} A master problem of the active-set method costs between $0.01$ and
           $7$\,ms on average on our instances. That is two to three orders of magnitude less than a
-          HiGHS QP master and two orders of magnitude less than a warm-started LP master. This
+          HiGHS QP master on all instances but the smallest, and one to two orders of magnitude less
+          than a warm-started LP master. This
           makes regularized column generation much faster than classical column generation,
           although it often needs more iterations: on I3, 7.7\,s against 650\,s.
-    \item \textbf{Inequality rows} cost nothing extra: the surplus operations are rank-one
-          updates of the same factorization, the factorized matrix only shrinks when
-          surpluses become free, and the runs are shorter.
+    \item \textbf{Inequality rows} add no new kind of linear algebra: the surplus operations
+          are rank-one modifications of the same factorization, free surpluses lower the bound
+          $m - |\Ns|$ on the size of $\Heff$, the time per master problem stays of the same
+          order, and the runs are shorter.
     \item \textbf{Refactorization} is essential for long runs, and a fixed interval of a
           few hundred updates works well.
 \end{itemize}

@@ -133,7 +133,7 @@ requires it at least once, which allows a pilot to travel on a flight as a passe
 \label{sec:dantzig-wolfe}
 
 Since $P_k$ is a nonempty polytope, it is the convex hull of its finitely many extreme points
-(Minkowski's theorem). Let $\mathcal{J}_k$ be an index set of the extreme points of $P_k$,
+(Minkowski's theorem, see~\cite{schrijver1986theory}). Let $\mathcal{J}_k$ be an index set of the extreme points of $P_k$,
 and let $\xi^{(j)}$, $j\in\mathcal{J}_k$, denote these extreme points. Every $\xi_k\in P_k$ can be
 written as
 \begin{equation} \label{eq:convex-combination}
@@ -257,6 +257,11 @@ $j\notin\mathcal{J}'$). We write $n = |\mathcal{J}'|$ for the number of columns 
 restricted master problem.
 \end{definition}
 
+For a small $\mathcal{J}'$ the restricted master problem may be infeasible: one column per block
+can in general not satisfy $A_E\lambda = b_E$. Classical column generation therefore adds
+artificial variables with a large cost to the linking rows (a \emph{Big-M} start), which keeps
+every restricted master problem feasible; we assume them included where needed.
+
 \begin{definition}[Reduced cost] \label{def:reduced-cost}
 For dual values $(\pi,\mu)$ the \textbf{reduced cost} of a column $j\in\mathcal{J}$ is
 \[
@@ -292,12 +297,16 @@ pricing problem of block $k$ minimizes exactly this expression over all $j\in\ma
 and has a nonnegative value. So $(\pi,\mu)$ is dual feasible. Complementary slackness
 ($\lambda'_j>0\Rightarrow c_j - a_j^\top\pi - \mu_{\psi(j)} = 0$) holds for the columns in
 $\mathcal{J}'$ by optimality of the restricted problem, and trivially for the zero weights
-outside $\mathcal{J}'$. A primal--dual pair that is feasible and complementary is optimal.
+outside $\mathcal{J}'$. Complementary slackness of the inequality rows,
+$(\pi_I)_i>0\Rightarrow(A_I\lambda')_i = (b_I)_i$, also holds by optimality of the restricted
+problem, since the zero weights outside $\mathcal{J}'$ do not change $A_I\lambda'$. A
+primal--dual pair that is feasible and complementary is optimal.
 \end{proof}
 
 For a linear restricted master problem the duals satisfy $\pi_I\ge0$ automatically, so the
 pricing test alone decides optimality. With the regularized master problems of the next
-chapter this will no longer be the case. Column generation also provides a lower bound on
+chapter this is no longer the case: their solution satisfies the linking rows only when the
+duals have converged to the stability center (\cref{thm:exact-termination}). Column generation also provides a lower bound on
 $z^\star$ at every iteration in which all blocks are priced.
 
 \begin{prop}[Lagrangian bound] \label{prop:lagrangian-bound}
@@ -324,8 +333,8 @@ since $\xi_k^\star\in P_k$.
 
 \begin{remark} \label{rem:bound-sign}
 The sign condition $\pi_I\ge0$ in \cref{prop:lagrangian-bound} is essential: for $\pi_i<0$
-in an inequality row, the term $\pi_i\,\bigl((b_I)_i - \sum_k (A_{I,k})_{i,:}\,\xi_k\bigr)$ can become arbitrarily
-large. In \cref{sec:center-update} the bound is therefore evaluated at the projection of
+in an over-satisfied inequality row, the term $\pi_i\,\bigl((b_I)_i - \sum_k (A_{I,k})_{i,:}\,\xi^\star_k\bigr)$
+in the proof is positive, so its first inequality fails and $\theta(\pi)$ may exceed $z^\star$. In \cref{sec:center-update} the bound is therefore evaluated at the projection of
 the dual vector onto $\{\pi_I\ge0\}$.
 \end{remark}
 
@@ -349,8 +358,9 @@ column per block.
 \end{algobox}
 
 \begin{remark}[Instability] \label{rem:instability}
-The duals of a linear restricted master problem are extreme points of its dual feasible
-region. When a column is added, the dual solution can jump to a very different extreme point,
+A simplex solver returns basic dual solutions of the linear restricted master problem,
+i.e.\ vertices of its dual feasible region. When a column is added, the dual solution can jump
+to a very different vertex,
 even if the primal solution hardly changes. As a result, the duals oscillate strongly from
 one iteration to the next, the pricing problem generates many columns that are never used,
 and the method converges slowly in its final phase (the \emph{tailing-off effect}). In the
@@ -370,7 +380,8 @@ $s_i\ge0$ with
 \[
 (A_I\lambda)_i - s_i = (b_I)_i, \qquad\text{i.e.}\qquad A_I\lambda - s = b_I .
 \]
-The surplus measures how much the row is over-satisfied.
+The surplus measures how much the row is over-satisfied. For an inequality row $i$ we write
+$\pi_i := (\pi_I)_i$ for its dual.
 
 \begin{definition}[Unified formulation] \label{def:unified}
 Let $s\in\R^{m_I}$ be the vector of surplus variables. The \textbf{unified variable} and the
@@ -425,7 +436,8 @@ separate group of variables.
 \end{remark}
 
 \begin{remark}[``$\le$'' rows and the slack sign] \label{rem:kappa}
-A row $(A_I)_{i,:}\lambda\le(b_I)_i$ can be written with a \emph{slack} $s_i\ge0$ as
+In this remark only, $A_I$ and $b_I$ collect the inequality rows of both directions. A row
+$(A_I)_{i,:}\lambda\le(b_I)_i$ can be written with a \emph{slack} $s_i\ge0$ as
 $(A_I)_{i,:}\lambda + s_i = (b_I)_i$. In general, let $\kappa_i\in\{-1,+1\}$ be the coefficient of
 the slack of inequality row $i$ ($\kappa_i = -1$ for a ``$\ge$'' row, $\kappa_i = +1$ for a
 ``$\le$'' row) and $D_\kappa = \diag(\kappa)$. The unified formulation then uses
@@ -445,6 +457,7 @@ an upper bound. Such rows are not considered in this work.
 \end{remark}
 
 
+\needspace{0.5\textheight}
 \section{Summary of Notation}
 
 The symbols introduced in this chapter are used throughout the remaining chapters.

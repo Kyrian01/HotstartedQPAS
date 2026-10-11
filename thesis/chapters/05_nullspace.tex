@@ -23,8 +23,8 @@ surplus part of the direction is given by an explicit formula, and only an
 $|\Nx|\times|\Nx|$ system has to be solved. Its matrix is the \textbf{effective reduced
 Hessian} $\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$, the reduced Hessian of the equality rows
 together with the inequality rows whose surplus is active. Finally, the multipliers turn out
-to be the reduced costs of the columns and the duals of the inequality rows, available at
-almost no cost.
+to be the reduced costs of the columns and the duals of the inequality rows, computed from
+the single vector $\pi$ without any linear solve.
 
 \vspace*{\fill}
 
@@ -58,7 +58,7 @@ Z = \begin{bmatrix} Z_x & 0\\ 0 & Z_s\end{bmatrix},
 \qquad Z_x\in\R^{n\times|\Nx|},\quad Z_s\in\R^{m_I\times|\Ns|},
 \end{equation}
 where $Z_x$ acts on the column weights and $Z_s$ is the selection matrix of the free surpluses
-(its columns are the unit vectors $e_i\in\R^{m_I}$, $i\in\Ns$).
+(its columns are the unit vectors of $\R^{m_I}$ belonging to the rows $i\in\Ns$).
 \end{theorem}
 
 \begin{proof}
@@ -66,7 +66,7 @@ Since $QQ^\top = I$, a matrix $Z$ satisfies $D_\Wset Z = 0$ if and only if $\til
 satisfies $(D_\Wset Q)\tilde Z = 0$. We split $\tilde Z$ into the five row blocks of the extended
 ordering,
 \[
-\tilde Z = \bigl[\,Z_\Sset;\; Z_{\Wx};\; Z_{\Nx};\; Z_{\Ws};\; Z_{\Ns}\,\bigr].
+\tilde Z = \bigl[\,\tilde Z_\Sset;\; \tilde Z_{\Wx};\; \tilde Z_{\Nx};\; \tilde Z_{\Ws};\; \tilde Z_{\Ns}\,\bigr].
 \]
 With the reordered matrix of \cref{thm:reordering},
 \[
@@ -76,33 +76,36 @@ I_K & C_{\Wx} & C_{\Nx} & 0 & 0\\
 0 & I & 0 & 0 & 0\\
 0 & 0 & 0 & I & 0
 \end{bmatrix}
-\begin{bmatrix} Z_\Sset\\ Z_{\Wx}\\ Z_{\Nx}\\ Z_{\Ws}\\ Z_{\Ns}\end{bmatrix}
+\begin{bmatrix} \tilde Z_\Sset\\ \tilde Z_{\Wx}\\ \tilde Z_{\Nx}\\ \tilde Z_{\Ws}\\ \tilde Z_{\Ns}\end{bmatrix}
 =
-\begin{bmatrix} Z_\Sset + C_{\Wx}Z_{\Wx} + C_{\Nx}Z_{\Nx}\\ Z_{\Wx}\\ Z_{\Ws}\end{bmatrix}.
+\begin{bmatrix} \tilde Z_\Sset + C_{\Wx}\tilde Z_{\Wx} + C_{\Nx}\tilde Z_{\Nx}\\ \tilde Z_{\Wx}\\ \tilde Z_{\Ws}\end{bmatrix}.
 \]
-This vanishes if and only if $Z_{\Wx} = 0$, $Z_{\Ws} = 0$ and $Z_\Sset = -C_{\Nx}Z_{\Nx}$. The
-blocks $Z_{\Nx}$ and $Z_{\Ns}$ can be chosen freely. With $|\Nx| + |\Ns|$ columns, the choice
-$Z_{\Nx} = [\,I\;\;0\,]$, $Z_{\Ns} = [\,0\;\;I\,]$ gives~\eqref{eq:Z-reordered}. Its columns are
+This vanishes if and only if $\tilde Z_{\Wx} = 0$, $\tilde Z_{\Ws} = 0$ and
+$\tilde Z_\Sset = -C_{\Nx}\tilde Z_{\Nx}$. The blocks $\tilde Z_{\Nx}$ and $\tilde Z_{\Ns}$ can be
+chosen freely. With $|\Nx| + |\Ns|$ columns, the choice $\tilde Z_{\Nx} = [\,I\;\;0\,]$,
+$\tilde Z_{\Ns} = [\,0\;\;I\,]$ gives~\eqref{eq:Z-reordered}. Its columns are
 linearly independent, since each has a $1$ in a position where all others have a $0$, and their
-number equals $\dim\Null(D_\Wset)$, so they form a basis. Finally, the first group of columns has
-nonzeros only in the column weights ($\Sset$ and $\Nx$), and the second group only in the
-surpluses ($\Ns$), which gives the block-diagonal form~\eqref{eq:Z-blocks}.
+number equals $\dim\Null(D_\Wset)$, so they form a basis. Finally, $Q = \diag(Q_x, Q_s)$ does not mix column weights and surpluses (proof of
+\cref{thm:reordering}); the first group of columns has nonzeros only in the column weights
+($\Sset$ and $\Nx$), and the second group only in the surpluses ($\Ns$), which gives the
+block-diagonal form~\eqref{eq:Z-blocks}.
 \end{proof}
 
 \begin{cor}[Explicit nullspace vectors] \label{cor:z-explicit}
 The columns of $Z$ are
 \begin{equation} \label{eq:z-explicit}
-z_j = e_j - e_{\rep(j)}\quad (j\in\Nx),\qquad\qquad z_i = e_{n+i}\quad (i\in\Ns),
+z_j = e_j - e_{\rep(j)}\quad (j\in\Nx),\qquad\qquad z_{n+i} = e_{n+i}\quad (i\in\Ns),
 \end{equation}
 where $e_\ell$ denotes the $\ell$-th unit vector in $\R^{n+m_I}$.
 \end{cor}
 
 \begin{proof}
-Column $j\in\Nx$ of $\tilde Z$ has a $1$ in the position of $j$ (from $Z_{\Nx} = I$) and the
-vector $-C_{\Nx}e_j$ in the block of the representatives. Since column $j$ of $C$ is
-$e_{\psi(j)}$, this vector is $-e_{\psi(j)}$: a single $-1$ in position $\psi(j)$ of the list
-$\Sset$, which is the representative $S_{\psi(j)} = \rep(j)$. So $z_j = e_j - e_{\rep(j)}$.
-Column $i\in\Ns$ has a single $1$ in the position of surplus $i$, i.e.\ $z_i = e_{n+i}$.
+Column $j\in\Nx$ of $\tilde Z$ has a $1$ in the position of $j$ (from $\tilde Z_{\Nx} = I$)
+and, in the block of the representatives, minus column $j$ of $C$. Column $j$ of $C$ is the
+$\psi(j)$-th unit vector of $\R^K$, so this block has a single $-1$ in position $\psi(j)$ of the
+list $\Sset$, which is the representative $S_{\psi(j)} = \rep(j)$. So $z_j = e_j - e_{\rep(j)}$.
+The column of $\tilde Z$ belonging to $i\in\Ns$ has a single $1$ in the position of surplus $i$,
+i.e.\ it is $z_{n+i} = e_{n+i}$. We index it by $n+i$, the position of surplus $i$ in $y$.
 \end{proof}
 
 \begin{note}
@@ -135,8 +138,8 @@ the column weights are involved.
         \draw[corange!80!black] (-0.35,0) rectangle (0.35,0.9);
         \node[below] at (0,0) {$s_i$};
         \draw (-0.6,0) -- (0.6,0);
-        \draw[-{Stealth[length=2.5mm]}, thick, cred] (0,1.0) -- (0,1.6) node[above] {$+\eta_i$};
-        \node[align=left, right] at (0.8,0.8) {$z_i = e_{n+i}$:\\ a free surplus\\ moves on its own};
+        \draw[-{Stealth[length=2.5mm]}, thick, cred] (0,1.0) -- (0,1.6) node[above] {$+(\eta_s)_i$};
+        \node[align=left, right] at (0.8,0.8) {$z_{n+i} = e_{n+i}$:\\ a free surplus\\ moves on its own};
     \end{scope}
 \end{tikzpicture}
 \caption{Interpretation of the nullspace vectors~\eqref{eq:z-explicit} for one block with
@@ -147,14 +150,15 @@ zero. A free surplus belongs to no block and moves independently.}
 \label{fig:nullspace-vectors}
 \end{figure}
 
-\Cref{cor:z-explicit} shows that $Z$ is completely determined by the extended ordering: by
+\Cref{fig:nullspace-vectors} illustrates these vectors. \Cref{cor:z-explicit} shows that $Z$ is
+completely determined by the extended ordering: by
 the sets $\Nx$, $\Ns$ and the representative mapping. It therefore never has to be formed.
 The same holds for the products of the linking matrix with the nullspace vectors, which
 appear in the reduced Hessian below. Since column $j$ of $\Abar$ is $a_j$ and column $n+i$ is
 $-e_i^{(I)}$, the unit vector of inequality row $i$ in $\R^m$,
 \begin{equation} \label{eq:AZ-columns}
 \Abar z_j = a_j - a_{\rep(j)} =: u_j\quad(j\in\Nx),\qquad
-\Abar z_i = -e_i^{(I)}\quad(i\in\Ns).
+\Abar z_{n+i} = -e_i^{(I)}\quad(i\in\Ns).
 \end{equation}
 
 
@@ -169,10 +173,12 @@ objective of~\eqref{eq:eqp} gives
 \[
 \phi(\eta) = \tfrac{1}{2\delta}\,\eta^\top Z^\top\Abar^\top\Abar Z\,\eta + (Z^\top g)^\top\eta,
 \]
-an unconstrained quadratic in $\eta$. Its minimizer solves the \textbf{reduced KKT system}
+an unconstrained quadratic in $\eta$. Its stationary points are the solutions of the
+\textbf{reduced KKT system}
 \begin{equation} \label{eq:reduced-system}
-\frac{1}{\delta}\,Z^\top\Abar^\top\Abar Z\,\eta = -Z^\top g .
+\frac{1}{\delta}\,Z^\top\Abar^\top\Abar Z\,\eta = -Z^\top g ;
 \end{equation}
+under \cref{ass:nullspace}~(ii) the solution is unique and is the minimizer of $\phi$.
 (Equivalently, it is the first block row of the KKT system~\eqref{eq:kkt-system} multiplied by
 $Z^\top$, which removes the multiplier term because $Z^\top D_\Wset^\top = (D_\Wset Z)^\top = 0$.)
 We call $\Hbar = Z^\top\Abar^\top\Abar Z$ the (unscaled) \textbf{reduced Hessian}, and
@@ -188,24 +194,26 @@ B_E := A_E Z_x\in\R^{m_E\times|\Nx|},\qquad B_I := A_I Z_x\in\R^{m_I\times|\Nx|}
 \]
 and split the rows of $B_I$ and of $\pi_I$ according to the status of the surplus of each row:
 \[
-B_\Wset := W_s B_I,\quad \pi_\Wset := W_s\pi_I \qquad\text{(rows with an active surplus)},
+B_{\Ws} := W_s B_I,\quad \pi_{\Ws} := W_s\pi_I \qquad\text{(rows with an active surplus)},
 \]
 \[
-B_\mathcal{N} := Z_s^\top B_I,\quad \pi_\mathcal{N} := Z_s^\top\pi_I \qquad\text{(rows with a free surplus)}.
+B_{\Ns} := Z_s^\top B_I,\quad \pi_{\Ns} := Z_s^\top\pi_I \qquad\text{(rows with a free surplus)}.
 \]
+The entries of vectors indexed by the free surpluses, such as $\pi_{\Ns}$ and $\eta_s$, are
+labelled by the rows $i\in\Ns$, and those indexed by the active surpluses by $i\in\Ws$.
 Since every inequality row belongs to exactly one of the two groups, the two selections
 together give the identity, $W_s^\top W_s + Z_sZ_s^\top = I$, and therefore
 \begin{equation} \label{eq:BI-split}
 B_I^\top B_I = B_I^\top\bigl(W_s^\top W_s + Z_sZ_s^\top\bigr)B_I
-= B_\Wset^\top B_\Wset + B_\mathcal{N}^\top B_\mathcal{N} .
+= B_{\Ws}^\top B_{\Ws} + B_{\Ns}^\top B_{\Ns} .
 \end{equation}
 
 \begin{lemma}[Blocks of the reduced system] \label{lem:reduced-blocks}
 With the block-diagonal basis~\eqref{eq:Z-blocks},
 \[
 \Abar Z = \begin{bmatrix} B_E & 0\\ B_I & -Z_s\end{bmatrix},\qquad
-\Hbar = \begin{bmatrix} H & -B_\mathcal{N}^\top\\ -B_\mathcal{N} & I\end{bmatrix},\qquad
-Z^\top g = \begin{bmatrix} Z_x^\top g_x\\ \pi_\mathcal{N}\end{bmatrix},
+\Hbar = \begin{bmatrix} H & -B_{\Ns}^\top\\ -B_{\Ns} & I\end{bmatrix},\qquad
+Z^\top g = \begin{bmatrix} Z_x^\top g_x\\ \pi_{\Ns}\end{bmatrix},
 \]
 where $H = B_E^\top B_E + B_I^\top B_I = (AZ_x)^\top(AZ_x)$ is the reduced Hessian of the column
 weights with all linking rows.
@@ -219,9 +227,9 @@ Multiplying the blocks,
 = \begin{bmatrix} B_E & 0\\ B_I & -Z_s\end{bmatrix}.
 \]
 Then $\Hbar = (\Abar Z)^\top(\Abar Z)$ has the diagonal blocks $B_E^\top B_E + B_I^\top B_I = H$
-and $Z_s^\top Z_s = I$, and the off-diagonal block $-B_I^\top Z_s = -(Z_s^\top B_I)^\top = -B_\mathcal{N}^\top$.
+and $Z_s^\top Z_s = I$, and the off-diagonal block $-B_I^\top Z_s = -(Z_s^\top B_I)^\top = -B_{\Ns}^\top$.
 Finally, with $g = [g_x; g_s]$ and $g_s = \pi_I$ by~\eqref{eq:gradient-split},
-$Z^\top g = [\,Z_x^\top g_x;\; Z_s^\top\pi_I\,] = [\,Z_x^\top g_x;\; \pi_\mathcal{N}\,]$.
+$Z^\top g = [\,Z_x^\top g_x;\; Z_s^\top\pi_I\,] = [\,Z_x^\top g_x;\; \pi_{\Ns}\,]$.
 \end{proof}
 
 \subsection{Decoupling and the effective reduced Hessian}
@@ -232,14 +240,14 @@ part of the direction.
 \begin{theorem}[Decoupling of the reduced system] \label{thm:decoupling}
 The reduced system~\eqref{eq:reduced-system} is equivalent to
 \begin{align}
-\Heff\,\eta_x &= -\delta\,Z_x^\top\bigl(c - A_E^\top\pi_E - A_I^\top W_s^\top\pi_\Wset\bigr),
+\Heff\,\eta_x &= -\delta\,Z_x^\top\bigl(c - A_E^\top\pi_E - A_I^\top W_s^\top\pi_{\Ws}\bigr),
 \label{eq:eff-system}\\[3pt]
-\eta_s &= B_\mathcal{N}\,\eta_x - \delta\,\pi_\mathcal{N},
+\eta_s &= B_{\Ns}\,\eta_x - \delta\,\pi_{\Ns},
 \label{eq:surplus-direction}
 \end{align}
 with the \textbf{effective reduced Hessian}
 \begin{equation} \label{eq:Heff}
-\Heff := H - B_\mathcal{N}^\top B_\mathcal{N} = B_E^\top B_E + B_\Wset^\top B_\Wset .
+\Heff := H - B_{\Ns}^\top B_{\Ns} = B_E^\top B_E + B_{\Ws}^\top B_{\Ws} .
 \end{equation}
 \end{theorem}
 
@@ -247,27 +255,27 @@ with the \textbf{effective reduced Hessian}
 Multiplied by $\delta$, the reduced system is $\Hbar\eta = -\delta Z^\top g$. With the blocks
 of \cref{lem:reduced-blocks} it consists of the two equations
 \[
-H\eta_x - B_\mathcal{N}^\top\eta_s = -\delta Z_x^\top g_x,\qquad
--B_\mathcal{N}\eta_x + \eta_s = -\delta\pi_\mathcal{N}.
+H\eta_x - B_{\Ns}^\top\eta_s = -\delta Z_x^\top g_x,\qquad
+-B_{\Ns}\eta_x + \eta_s = -\delta\pi_{\Ns}.
 \]
 The second equation, solved for $\eta_s$, is~\eqref{eq:surplus-direction}. Substituting it into
 the first equation gives
 \[
-H\eta_x - B_\mathcal{N}^\top\bigl(B_\mathcal{N}\eta_x - \delta\pi_\mathcal{N}\bigr) = -\delta Z_x^\top g_x
+H\eta_x - B_{\Ns}^\top\bigl(B_{\Ns}\eta_x - \delta\pi_{\Ns}\bigr) = -\delta Z_x^\top g_x
 \quad\Longleftrightarrow\quad
-\bigl(H - B_\mathcal{N}^\top B_\mathcal{N}\bigr)\eta_x = -\delta\bigl(Z_x^\top g_x + B_\mathcal{N}^\top\pi_\mathcal{N}\bigr).
+\bigl(H - B_{\Ns}^\top B_{\Ns}\bigr)\eta_x = -\delta\bigl(Z_x^\top g_x + B_{\Ns}^\top\pi_{\Ns}\bigr).
 \]
 The matrix on the left is $\Heff$; its second expression in~\eqref{eq:Heff} follows from
 $H = B_E^\top B_E + B_I^\top B_I$ and~\eqref{eq:BI-split}. For the right-hand side, insert
 $g_x = c - A_E^\top\pi_E - A_I^\top\pi_I$ from~\eqref{eq:gradient-split}. Its last term
 contributes $Z_x^\top A_I^\top\pi_I = B_I^\top\pi_I$, which splits like~\eqref{eq:BI-split} as
-$B_I^\top\pi_I = B_\Wset^\top\pi_\Wset + B_\mathcal{N}^\top\pi_\mathcal{N}$. Hence
+$B_I^\top\pi_I = B_{\Ws}^\top\pi_{\Ws} + B_{\Ns}^\top\pi_{\Ns}$. Hence
 \[
-Z_x^\top g_x + B_\mathcal{N}^\top\pi_\mathcal{N}
-= Z_x^\top c - B_E^\top\pi_E - B_\Wset^\top\pi_\Wset - B_\mathcal{N}^\top\pi_\mathcal{N} + B_\mathcal{N}^\top\pi_\mathcal{N}
-= Z_x^\top\bigl(c - A_E^\top\pi_E - A_I^\top W_s^\top\pi_\Wset\bigr),
+Z_x^\top g_x + B_{\Ns}^\top\pi_{\Ns}
+= Z_x^\top c - B_E^\top\pi_E - B_{\Ws}^\top\pi_{\Ws} - B_{\Ns}^\top\pi_{\Ns} + B_{\Ns}^\top\pi_{\Ns}
+= Z_x^\top\bigl(c - A_E^\top\pi_E - A_I^\top W_s^\top\pi_{\Ws}\bigr),
 \]
-using $B_E^\top = Z_x^\top A_E^\top$ and $B_\Wset^\top = Z_x^\top A_I^\top W_s^\top$. This
+using $B_E^\top = Z_x^\top A_E^\top$ and $B_{\Ws}^\top = Z_x^\top A_I^\top W_s^\top$. This
 is~\eqref{eq:eff-system}. The steps can be reversed, so the systems are equivalent.
 \end{proof}
 
@@ -283,8 +291,8 @@ is~\eqref{eq:eff-system}. The steps can be reversed, so the systems are equivale
     \draw (6,0) -- (6,9); \draw (0,3) -- (9,3);
     \draw[cgreen!60!black, very thick] (6,3) -- (9,0);
     \node at (3,6) {$H$};
-    \node at (7.5,6) {$-B_\mathcal{N}^\top$};
-    \node at (3,1.5) {$-B_\mathcal{N}$};
+    \node at (7.5,6) {$-B_{\Ns}^\top$};
+    \node at (3,1.5) {$-B_{\Ns}$};
     \node at (8.1,2.1) {$I$};
     \node at (4.5,10) {$\Hbar$};
     \node[left] at (0,6) {$\Nx$}; \node[left] at (0,1.5) {$\Ns$};
@@ -295,7 +303,7 @@ is~\eqref{eq:eff-system}. The steps can be reversed, so the systems are equivale
     \begin{scope}[xshift=7.5cm]
     \fill[cblue!25] (0,1.5) rectangle (6,7.5);
     \draw[thick] (0,1.5) rectangle (6,7.5);
-    \node[align=center] at (3,4.5) {$\Heff =$\\ $H - B_\mathcal{N}^\top B_\mathcal{N}$};
+    \node[align=center] at (3,4.5) {$\Heff =$\\ $H - B_{\Ns}^\top B_{\Ns}$};
     \node at (3,8.5) {$|\Nx|\times|\Nx|$};
     \end{scope}
 \end{tikzpicture}
@@ -314,7 +322,7 @@ corollary gives the interpretation that the rest of this work builds on.
 Define the \textbf{effective linking matrix} and the corresponding duals
 \[
 \Aeff = \begin{bmatrix} A_E\\ W_sA_I\end{bmatrix},\qquad
-\pieff = \begin{bmatrix}\pi_E\\ \pi_\Wset\end{bmatrix},
+\pieff = \begin{bmatrix}\pi_E\\ \pi_{\Ws}\end{bmatrix},
 \]
 i.e.\ the equality rows together with the inequality rows whose surplus is active. Then
 \begin{equation} \label{eq:Heff-Aeff}
@@ -322,16 +330,22 @@ i.e.\ the equality rows together with the inequality rows whose surplus is activ
 \Heff\,\eta_x = -\delta\,Z_x^\top\bigl(c - \Aeff^\top\pieff\bigr).
 \end{equation}
 This is the reduced system of a master problem with equality linking rows only, whose
-linking rows are the rows of $\Aeff$.
+linking rows are the rows of $\Aeff$, with the same convexity rows, column working set and
+representatives.
 \end{cor}
 
 \begin{proof}
-Stacking the rows, $\Aeff Z_x = [\,A_EZ_x;\; W_sA_IZ_x\,] = [\,B_E;\; B_\Wset\,]$, so
-$(\Aeff Z_x)^\top(\Aeff Z_x) = B_E^\top B_E + B_\Wset^\top B_\Wset = \Heff$ by~\eqref{eq:Heff}.
-Similarly $\Aeff^\top\pieff = A_E^\top\pi_E + A_I^\top W_s^\top\pi_\Wset$, so the right-hand side
+Stacking the rows, $\Aeff Z_x = [\,A_EZ_x;\; W_sA_IZ_x\,] = [\,B_E;\; B_{\Ws}\,]$, so
+$(\Aeff Z_x)^\top(\Aeff Z_x) = B_E^\top B_E + B_{\Ws}^\top B_{\Ws} = \Heff$ by~\eqref{eq:Heff}.
+Similarly $\Aeff^\top\pieff = A_E^\top\pi_E + A_I^\top W_s^\top\pi_{\Ws}$, so the right-hand side
 of~\eqref{eq:Heff-Aeff} is that of~\eqref{eq:eff-system}. For a problem without inequality rows,
 \cref{thm:decoupling} gives $\Heff = B_E^\top B_E$ and the right-hand side
 $-\delta Z_x^\top(c - A_E^\top\pi_E)$; replacing $A_E$ by $\Aeff$ gives~\eqref{eq:Heff-Aeff}.
+The duals match as well: since $s_i = 0$ for $i\in\Ws$, \eqref{eq:pi-of-y} gives
+$\pieff = \pihat_{\mathrm{eff}} + \frac{1}{\delta}(b_{\mathrm{eff}} - \Aeff x)$ with
+$b_{\mathrm{eff}} = [b_E; W_sb_I]$ and $\pihat_{\mathrm{eff}} = [\pihat_E; W_s\pihat_I]$, which is the
+dual estimate of the equality-only problem with data $(\Aeff, b_{\mathrm{eff}}, \pihat_{\mathrm{eff}})$.
+Its nullspace basis for the same $\Wx$ and $\Sset$ is the same $Z_x$.
 \end{proof}
 
 \begin{remark}[Interpretation] \label{rem:Aeff-interpretation}
@@ -356,12 +370,12 @@ full column rank. In this case
 Completing the square with the blocks of \cref{lem:reduced-blocks} gives, for every
 $\eta = [\eta_x;\eta_s]$,
 \[
-\eta^\top\Hbar\eta = \eta_x^\top H\eta_x - 2\eta_s^\top B_\mathcal{N}\eta_x + \eta_s^\top\eta_s
-= \eta_x^\top\Heff\eta_x + \lVert\eta_s - B_\mathcal{N}\eta_x\rVert^2 .
+\eta^\top\Hbar\eta = \eta_x^\top H\eta_x - 2\eta_s^\top B_{\Ns}\eta_x + \eta_s^\top\eta_s
+= \eta_x^\top\Heff\eta_x + \lVert\eta_s - B_{\Ns}\eta_x\rVert^2 .
 \]
 If $\Heff$ is positive definite, the right-hand side is positive unless $\eta_x = 0$ and then
-$\eta_s = B_\mathcal{N}\eta_x = 0$, so $\Hbar$ is positive definite. Conversely, choosing
-$\eta_s = B_\mathcal{N}\eta_x$ shows $\eta_x^\top\Heff\eta_x = \eta^\top\Hbar\eta$, so $\Heff$ is
+$\eta_s = B_{\Ns}\eta_x = 0$, so $\Hbar$ is positive definite. Conversely, choosing
+$\eta_s = B_{\Ns}\eta_x$ shows $\eta_x^\top\Heff\eta_x = \eta^\top\Hbar\eta$, so $\Heff$ is
 positive definite if $\Hbar$ is. By \cref{cor:Aeff}, $\Heff$ is a Gram matrix,
 $\eta_x^\top\Heff\eta_x = \lVert\Aeff Z_x\eta_x\rVert^2$, which is positive for all
 $\eta_x\ne0$ if and only if $\Aeff Z_x$ has full column rank. Full column rank requires
@@ -369,23 +383,24 @@ $|\Nx|\le\rank(\Aeff Z_x)\le\rank(\Aeff)$, and $\Aeff$ has $m_E+|\Ws|$ rows. Add
 $|\Ns| = m_I - |\Ws|$ to both sides gives $|\Nx| + |\Ns|\le m_E + m_I = m$.
 \end{proof}
 
-\Cref{cor:dimension} is the reason the method scales: the system that has to be factorized
-never exceeds the number of linking rows, \emph{however many columns are generated}.
+\Cref{cor:dimension} is the reason the method scales: as long as the reduced Hessian is
+positive definite, the matrix $\Heff$ that has to be factorized never has more rows than there
+are linking rows, \emph{however many columns are generated}.
 
 \subsection{The search direction}
 
 With $\eta$ from \cref{thm:decoupling}, the direction $p = Z\eta = \sum_{j\in\Nx}\eta_jz_j +
-\sum_{i\in\Ns}\eta_iz_i$ is obtained by inserting the explicit vectors~\eqref{eq:z-explicit}.
+\sum_{i\in\Ns}(\eta_s)_iz_{n+i}$ is obtained by inserting the explicit vectors~\eqref{eq:z-explicit}.
 Every $z_j = e_j - e_{\rep(j)}$ adds $\eta_j$ to column $j$ and subtracts it from the
-representative of its block, and every $z_i$ moves surplus $i$. Hence
+representative of its block, and every $z_{n+i}$ moves surplus $i$. Hence
 \begin{equation} \label{eq:direction-components}
 p_j = \eta_j\;(j\in\Nx),\qquad
 p_{S_k} = -\!\!\sum_{j\in\Nx,\,\psi(j) = k}\!\!\eta_j\;(k = 1,\dots,K),\qquad
 (p_s)_i = (A_Ip_x)_i - \delta\,\pi_i\;(i\in\Ns),
 \end{equation}
 and $p$ is zero on $\Wx$ and $\Ws$. For the surplus component we used~\eqref{eq:surplus-direction}
-together with $B_\mathcal{N}\eta_x = Z_s^\top A_I Z_x\eta_x = Z_s^\top A_I p_x$, i.e.\
-$(B_\mathcal{N}\eta_x)_i = (A_Ip_x)_i$. The column part $p_x$ and the vector $A_Ip_x$ only involve
+together with $B_{\Ns}\eta_x = Z_s^\top A_I Z_x\eta_x = Z_s^\top A_I p_x$, i.e.\
+$(B_{\Ns}\eta_x)_i = (A_Ip_x)_i$. The column part $p_x$ and the vector $A_Ip_x$ only involve
 the columns in $\Sset\cup\Nx$.
 
 \begin{prop}[Full step] \label{prop:full-step}
@@ -400,7 +415,10 @@ $p = Z\eta$,
 Z^\top\nabla f(y+p) = Z^\top g + \tfrac{1}{\delta}Z^\top\Abar^\top\Abar Z\,\eta
 = Z^\top g + \tfrac{1}{\delta}\Hbar\eta = 0
 \]
-by the reduced system~\eqref{eq:reduced-system}.
+by the reduced system~\eqref{eq:reduced-system}. A full step adds no index to the working set,
+and since $D_\Wset$ has full row rank, $Z^\top\nabla f(y+p) = 0$ means
+$\nabla f(y+p)\in\operatorname{range}(D_\Wset^\top)$, i.e.\ $p = 0$ solves~\eqref{eq:kkt-system}
+at $y + p$.
 \end{proof}
 
 After a full step the method can therefore skip the next direction computation and test the
@@ -424,7 +442,8 @@ reduced gradient vanishes, and its component for $i\in\Ns$ is $\pi_i$ (\cref{lem
 \end{proof}
 
 \begin{remark}[Independence of $\delta$ and $\pihat$] \label{rem:factor-independent}
-$\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$ depends only on the columns and the working set, not on
+$\Heff = (\Aeff Z_x)^\top(\Aeff Z_x)$ depends only on the columns and the extended ordering
+(working set and representatives), not on
 $\delta$, $\pihat$ or the iterate. A change of the stability center or of $\delta$ only changes
 the right-hand side of~\eqref{eq:eff-system}. This is what makes the hot start of
 \cref{sec:hot-start} possible.
@@ -460,9 +479,10 @@ Once $p$ is known, $h$ is known, and~\eqref{eq:multiplier-system} is an overdete
 consistent linear system for the multipliers. The reordering makes its solution explicit.
 
 \begin{theorem}[Lagrange multipliers] \label{thm:multipliers}
-With the extended ordering of \cref{thm:reordering} and $h$ split into the blocks
-$h = [h_\Sset; h_{\Wx}; h_{\Nx}; h_{\Ws}; h_{\Ns}]$, the solution of~\eqref{eq:multiplier-system}
-is
+Let $p = Z\eta$ with $\eta$ the solution of~\eqref{eq:reduced-system}. With the extended ordering
+of \cref{thm:reordering} and $Q^\top h$ split into the blocks
+$Q^\top h = [h_\Sset; h_{\Wx}; h_{\Nx}; h_{\Ws}; h_{\Ns}]$, the solution
+of~\eqref{eq:multiplier-system} is
 \begin{equation} \label{eq:multipliers}
 \mu = h_\Sset,\qquad \nu_x = h_{\Wx} - C_{\Wx}^\top\mu,\qquad \nu_s = h_{\Ws},
 \end{equation}
@@ -486,8 +506,11 @@ C_{\Nx}^\top & 0 & 0\\
 \]
 Read row group by row group: the first gives $\mu = h_\Sset$, the second
 $C_{\Wx}^\top\mu + \nu_x = h_{\Wx}$, the fourth $\nu_s = h_{\Ws}$, which is~\eqref{eq:multipliers}.
-The third and fifth groups contain no unknown other than $\mu$ and give the remaining
-identities.
+The third and fifth groups do not involve $\nu$; they hold because $p$ solves the reduced
+system. Indeed, by~\eqref{eq:Z-reordered} the two blocks of $\tilde Z^\top Q^\top h = Z^\top h$ are
+$h_{\Nx} - C_{\Nx}^\top h_\Sset$ and $h_{\Ns}$, and
+$Z^\top h = \frac{1}{\delta}\Hbar\eta + Z^\top g = 0$ by~\eqref{eq:reduced-system}. With
+$\mu = h_\Sset$ this gives $h_{\Nx} = C_{\Nx}^\top\mu$ and $h_{\Ns} = 0$.
 \end{proof}
 
 The multipliers are only needed at a subspace minimizer, where $p = 0$ and therefore $h = g$.
@@ -520,16 +543,23 @@ $O(\nnz(A))$; it is the only operation of the method whose cost grows with the n
 generated columns.
 
 \begin{remark}[``$\le$'' rows] \label{rem:kappa-summary}
-For a ``$\le$'' row with slack coefficient $\kappa_i = +1$ (\cref{rem:kappa}), the formulas
-above change as follows; everything else, in particular $\Heff$ and $\Aeff$, is unchanged
-because $\kappa_i^2 = 1$:
+For a ``$\le$'' row with slack coefficient $\kappa_i = +1$ (\cref{rem:kappa}), the column of
+$\Abar$ belonging to surplus $i$ is $\kappa_ie_i^{(I)}$ instead of $-e_i^{(I)}$, and the surplus
+part of the formulas changes as follows:
 \[
 \pi_I = \pihat_I + \tfrac{1}{\delta}\bigl(b_I - A_Ix - D_\kappa s\bigr),\qquad
 g_{n+i} = -\kappa_i\pi_i,\qquad
+\Abar z_{n+i} = \kappa_ie_i^{(I)},
+\]
+\[
 (\nu_s)_i = -\kappa_i\pi_i,\qquad
+(\eta_s)_i = \kappa_i\bigl(\delta\pi_i - (B_{\Ns}\eta_x)_i\bigr),\qquad
 (p_s)_i = \kappa_i\bigl(\delta\pi_i - (A_Ip_x)_i\bigr).
 \]
-For $\kappa_i = -1$ these are the formulas of the text.
+In \cref{lem:reduced-blocks} the block $-Z_s$ of $\Abar Z$ becomes $D_\kappa Z_s$, so the
+off-diagonal blocks of $\Hbar$ change sign on these rows. Because $\kappa_i^2 = 1$, the identity
+block, $\Heff$, $\Aeff$, the right-hand side of~\eqref{eq:eff-system} and
+\cref{prop:free-duals} are unchanged. For $\kappa_i = -1$ these are the formulas of the text.
 \end{remark}
 
 
@@ -541,17 +571,19 @@ method in nullspace form, and \cref{tab:costs} lists their costs. Here $\bar\ell
 average number of nonzeros of a column $a_j$.
 
 \begin{algobox}{One Iteration of the Active-Set Method in Nullspace Form}{alg:nullspace-iteration}
-\State \textbf{Given:} iterate $y = [x;s]$, the extended ordering, $\pi = \pi(y)$, the factor $\Heff = LDL^\top$
+\State \textbf{Given:} iterate $y = [x;s]$, the extended ordering, $\pi = \pi(y)$, the factor
+       $\Heff^{\mathrm{emb}} = LDL^\top$ (\cref{sec:fixed-length})
 \State Compute $\mu^{\mathrm{eff}}_k = c_{S_k} - a_{S_k}^\top \Meff\pi$ and the right-hand side
        $\zeta_j = -\delta\bigl(c_j - a_j^\top \Meff\pi - \mu^{\mathrm{eff}}_{\psi(j)}\bigr)$, $j\in\Nx$
        \Comment{\eqref{eq:implicit}}
-\State Solve $LDL^\top\eta_x = \zeta$
+\State Solve $LDL^\top\eta = \zeta$ ($\zeta$ zero outside $\Nx$) and set $\eta_x = \eta_{\Nx}$
+       \Comment{\cref{lem:embedding}}
 \State Expand $p_x = Z_x\eta_x$ and compute $(p_s)_i = (A_Ip_x)_i - \delta\pi_i$, $i\in\Ns$
        \Comment{\eqref{eq:direction-components}}
 \If{$p\approx0$}
     \State $\mu_k = c_{S_k} - a_{S_k}^\top\pi$; \;$\nu_x = $ reduced costs on $\Wx$; \;$\nu_s = \pi$ on $\Ws$
-    \State Stop if all multipliers are $\ge-\varepsilon$; otherwise reduce the working set
-           (\cref{sec:reducing})
+    \State Stop if $\nu_x\ge-\varepsilon$ and $\nu_s\ge-\varepsilon$; otherwise release the index
+           with the most negative of them (\cref{sec:reducing})
 \Else
     \State Ratio test over $\Sset\cup\Nx\cup\Ns$; \;$y\gets y+\alpha p$; \;$\pi\gets\pi - \frac{\alpha}{\delta}\Abar p$
     \State If blocked, expand the working set (\cref{sec:expanding})
@@ -566,13 +598,13 @@ average number of nonzeros of a column $a_j$.
 operation & cost & grows with $n$? \\
 \midrule
 right-hand side of~\eqref{eq:eff-system} & $O\bigl((|\Nx|+K)\,\bar\ell\bigr)$ & no \\
-solve with the factor of $\Heff$ & $O(\nnz(L))$, at most $O(|\Nx|^2)$ & no \\
+solve restricted to $\Nx$ (\cref{lem:embedding}) & at most $O(|\Nx|^2)$ & no \\
 surplus direction~\eqref{eq:surplus-direction} & $O\bigl((|\Nx|+K)\,\bar\ell + m_I\bigr)$ & no \\
 ratio test, step and update of $\pi$ & $O\bigl((|\Nx|+K)\,\bar\ell + m\bigr)$ & no \\
 multipliers (\cref{cor:multipliers-minimizer}) & $O(\nnz(A) + m_I)$ & yes \\
 \bottomrule
 \end{tabular}
-\caption{Cost of the operations of one iteration. Only the multiplier test touches all
-columns.}
+\caption{Cost of the operations of one iteration, for a factor without structural zeros
+(\cref{sec:refactorization}). Only the multiplier test touches all columns.}
 \label{tab:costs}
 \end{table}

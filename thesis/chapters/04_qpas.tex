@@ -120,9 +120,11 @@ this is exactly the optimality certificate of \cref{thm:exact-termination}.
 \begin{remark}[Matching tolerances] \label{rem:tolerances}
 In practice the active-set method accepts a multiplier as nonnegative if
 $\nu_\ell\ge-\varepsilon$, and pricing accepts a column only if $\bar c_j<-\varepsilon_{\mathrm{rc}}$.
-Since both test the same quantity, choosing $\varepsilon\ll\varepsilon_{\mathrm{rc}}$ guarantees
-that pricing never returns a column that is already in the restricted master problem. We use
-$\varepsilon = 10^{-10}\max(1,\max_j|c_j|)$ and $\varepsilon_{\mathrm{rc}} = 10^{-6}$.
+Since both test the same quantity, choosing $\varepsilon\ll\varepsilon_{\mathrm{rc}}$ makes it
+practically impossible that pricing returns a column that is already in the restricted master
+problem; a strict guarantee would also have to account for the projection $\pi^+$ of
+\cref{sec:bound-ineq}. We use $\varepsilon = 10^{-10}\max(1,\max_j|c_j|)$ and
+$\varepsilon_{\mathrm{rc}} = 10^{-6}$.
 \end{remark}
 
 
@@ -177,7 +179,8 @@ The KKT conditions of~\eqref{eq:eqp} form the linear \textbf{KKT system}
 \end{equation}
 where $\mu\in\R^K$, $\nu_x\in\R^{|\Wx|}$ and $\nu_s\in\R^{|\Ws|}$ are the Lagrange
 multipliers of the convexity constraints and of the working-set constraints of the columns
-and of the surpluses. If $p = 0$ solves~\eqref{eq:kkt-system}, the iterate already minimizes
+and of the surpluses. They are the entries $\nu_\ell$, $\ell\in\Wset$, of the multiplier $\nu$ of
+\cref{thm:kkt-master}, whose other entries are zero. If $p = 0$ solves~\eqref{eq:kkt-system}, the iterate already minimizes
 $f$ over its face, and we call it a \textbf{subspace minimizer}. At a subspace minimizer, the
 multipliers decide what to do next: if all of them are nonnegative, the KKT conditions of
 \cref{thm:kkt-master} hold and the iterate is optimal; otherwise the index with the most
@@ -209,11 +212,13 @@ $p$ as far as the bounds of the free variables allow. \Cref{alg:qpas} summarizes
 
 Under the usual nondegeneracy assumptions, every iteration either decreases $f$ strictly or
 changes the working set in a way that cannot cycle, so the method terminates after finitely
-many iterations \cite{nocedal2006numerical, fletcher1971quadratic}. Its cost is dominated by
+many iterations \cite{nocedal2006numerical, fletcher1971quadratic, gill1981practical}. Its cost is dominated by
 the solution of the KKT system~\eqref{eq:kkt-system}, which has dimension
 $n + m_I + K + |\Wset|$ and grows with every generated column. The rest of this work shows
 how to avoid ever forming it.
 
+
+\needspace{12\baselineskip}
 The \textbf{nullspace method} of \cref{chap:nullspace} solves~\eqref{eq:kkt-system} through
 a basis $Z$ of $\Null(D_\Wset)$. It relies on two properties of the current working set:
 
@@ -290,9 +295,10 @@ We write $[\,\Sset,\Wx,\Nx\mid\Ws,\Ns\,]$ for this ordering.
 \end{definition}
 
 \begin{theorem}[Reordering theorem] \label{thm:reordering}
-Let $\Wset = \Wx\cup\Ws$ be a working set such that every block has a free column, and let
-$[\,\Sset,\Wx,\Nx\mid\Ws,\Ns\,]$ be an extended ordering. Let $Q$ be the permutation matrix
-that orders the variables in this way. Then
+Let $\Wset = \Wx\cup\{\,n+i : i\in\Ws\,\}$ be a working set such that every block has a free
+column, and let $[\,\Sset,\Wx,\Nx\mid\Ws,\Ns\,]$ be an extended ordering, in which the indices of
+$\Wx$ and $\Ws$ appear in the same order as the rows of $W_x$ and $W_s$. Let $Q$ be the
+permutation matrix that orders the variables in this way. Then (\cref{fig:reordered})
 \begin{equation} \label{eq:reordered}
 D_\Wset\,Q =
 \begin{bmatrix}
