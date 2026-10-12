@@ -109,7 +109,7 @@ function compute_direction!(st::QPASState)
         F = st.kkt.factor
         # duals of A_eff and the convexity duals derived from them
         πe, μe = masked_duals!(st)
-        rhs = Cholmod.rhs_buffer(F)
+        rhs = LDLt.rhs_buffer(F)
         neg_delta = -st.delta
         # reduced gradient (Zᵀg̃)ₖ = gₖ - g_rep(k) with g = c - A_effᵀπ_eff
         @inbounds for k in Nset
@@ -142,12 +142,13 @@ end
 
 # Solve with the factor for a right-hand side supported on N; the result is valid on N.
 @inline function _reduced_solve!(st::QPASState)
-    F = st.kkt.factor
+    kkt = st.kkt
+    F = kkt.factor
     if st.options.sparse_solves
-        Nset = items(st.kkt.ordering.N)
-        return Cholmod.solve!(F, Nset, length(Nset))
+        Nset = items(kkt.ordering.N)
+        return @timed_section kkt.timer :solve LDLt.solve!(F, Nset, length(Nset))
     end
-    return Cholmod.solve!(F)
+    return @timed_section kkt.timer :solve LDLt.solve!(F)
 end
 
 # `st.Ap = A p_x` over the support of the column direction (`N ∪ S`, plus column `extra`).
@@ -427,7 +428,7 @@ end
 # Solve H_eff t = v for a sparse right-hand side given by (rows, vals)[1:nnz]; returns t (valid
 # on N) and leaves the factor's right-hand-side buffer zero again.
 function _solve_on_N!(st::QPASState, rows::Vector{Int}, vals::Vector{Float64}, nnz::Int)
-    rhs = Cholmod.rhs_buffer(st.kkt.factor)
+    rhs = LDLt.rhs_buffer(st.kkt.factor)
     @inbounds for s in 1:nnz
         rhs[rows[s]] = vals[s]
     end
@@ -593,13 +594,14 @@ end
 
 # ── factor maintenance ───────────────────────────────────────────────────────────────────
 
-# After an expansion: rebuild the factor when the refactorization interval is reached
-# (removes structural zeros left by rowdel/updown) or when a pivot has degraded. Keeps the
-# invariant that every pivot in N is above `singular_tolerance`.
+# After an expansion: rebuild the factor when the refactorization interval of the backend is
+# reached (CHOLMOD: removes structural zeros left by rowdel/updown) or when a pivot has
+# degraded. Keeps the invariant that every pivot in N is above `singular_tolerance`.
 function _check_factor!(st::QPASState)
     opts = st.options
     kkt = st.kkt
-    due = opts.refactor_interval > 0 && kkt.updates_since_refactor >= opts.refactor_interval
+    interval = refactor_interval(opts)
+    due = interval > 0 && kkt.updates_since_refactor >= interval
     if due || (opts.check_pivots && min_pivot_ratio(kkt) < opts.singular_tolerance)
         _refactor!(st)
     end
@@ -608,7 +610,7 @@ end
 
 # After a reduction (whose pivots were just checked): only the refactorization interval.
 function _check_refactor_interval!(st::QPASState)
-    interval = st.options.refactor_interval
+    interval = refactor_interval(st.options)
     interval > 0 && st.kkt.updates_since_refactor >= interval && _refactor!(st)
     return nothing
 end

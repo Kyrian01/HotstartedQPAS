@@ -16,6 +16,7 @@ test_instance(size::Symbol; kwargs...) =
 
 @testset "HotstartedQPAS" begin
     include("test_cholmod.jl")
+    include("test_dense_ldlt.jl")
     include("test_problem.jl")
     include("test_qpas.jl")
     include("test_solvers.jl")

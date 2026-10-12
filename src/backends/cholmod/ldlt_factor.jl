@@ -25,7 +25,7 @@ Main operations:
 
 The object owns its CHOLMOD memory and frees it in a finalizer or in `close`.
 """
-mutable struct LDLtFactor
+mutable struct LDLtFactor <: UpdatableLDLt
     n::Int
     common::CholmodCommon
     L::Ptr{CholmodFactor}
@@ -120,6 +120,13 @@ end
 
 "Dimension of the factorized matrix."
 dimension(F::LDLtFactor) = F.n
+
+backend_name(::LDLtFactor) = "cholmod"
+
+# rowdel / updown zero entries numerically but keep them in the pattern of L
+needs_periodic_refactor(::LDLtFactor) = true
+
+backend_stats(::LDLtFactor) = NamedTuple()
 
 """
     rhs_buffer(F) -> Vector{Float64}

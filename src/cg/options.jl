@@ -39,6 +39,8 @@ Settings of [`solve_column_generation`](@ref).
 | `log_every`           | 100                |                                                                 |
 | `diagnostics_every`   | 0                  | record memory use and solver internals (factor nnz, set sizes)  |
 |                       |                    | every k iterations and at the end; 0 = off                      |
+| `diagnostics_residual`| false              | the diagnostics also rebuild `H_eff` and record the factor      |
+|                       |                    | residual `‖LDLᵀ - H_eff‖` (QPAS; `O(m|N|² + |N|³)` per sample)  |
 
 Termination is exact: column generation stops when a complete pricing round over all pilots
 finds no column with negative reduced cost (and, for stabilized masters, the stability
@@ -57,6 +59,7 @@ Base.@kwdef struct CGOptions
     verbose::Bool = false
     log_every::Int = 100
     diagnostics_every::Int = 0
+    diagnostics_residual::Bool = false
 end
 
 function validate(opts::CGOptions)

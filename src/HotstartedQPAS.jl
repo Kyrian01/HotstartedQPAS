@@ -3,8 +3,9 @@
 
 Column generation for the multi-block crew scheduling LP, with quadratic proximal
 stabilization and a hot-started nullspace active-set QP solver (QPAS) whose reduced-Hessian
-LDLᵀ factor is maintained with CHOLMOD row updates (master's thesis of K. Bäumer,
-"Hot-Started Active-Set Method for Regularized Column Generation").
+LDLᵀ factor is maintained by row updates: with CHOLMOD (sparse, fixed size `n_max`) or as a
+dense factor of the active block (`QPASOptions(factorization = :dense)`). Master's thesis of
+K. Bäumer, "Hot-Started Active-Set Method for Regularized Column Generation".
 
 Solvers:
 
@@ -29,10 +30,19 @@ using Serialization
 import TOML
 
 # ── low-level backends: the only code that calls into C libraries ───────────────────────
+# the LDLᵀ factor interface and its two implementations (sparse CHOLMOD, dense)
+include("backends/ldlt_interface.jl")
 include("backends/cholmod/Cholmod.jl")
+include("backends/dense/DenseLDLt.jl")
 include("backends/highs/HighsBackend.jl")
+import .LDLtInterface
 import .Cholmod
+import .DenseLDLt
+using .LDLtInterface: UpdatableLDLt
 using .HighsBackend
+# factor operations are called qualified (`LDLt.solve!`), since `solve!` also names the
+# master-problem solve
+const LDLt = LDLtInterface
 
 # ── utilities ────────────────────────────────────────────────────────────────────────────
 include("utils/index_set.jl")

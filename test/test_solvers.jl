@@ -24,7 +24,7 @@ end
         ref = exact.objective
 
         masters = [HighsLPMaster(), HighsExplicitQPMaster(), HighsEliminatedQPMaster(),
-                   QPASMaster()]
+                   QPASMaster(), QPASMaster(factorization = :dense)]
         for master in masters
             r = solve_column_generation(inst, master; options = opts)
             @test r.status === :optimal
@@ -42,10 +42,29 @@ end
         end
     end
 
-    @testset "QPAS debug mode through a full CG run" begin
+    @testset "QPAS debug mode through a full CG run ($f)" for f in HQ.FACTORIZATIONS
         inst = test_instance(:tiny; seed = 4)
-        r = solve_column_generation(inst, QPASMaster(debug = true); options = opts)
+        r = solve_column_generation(inst, QPASMaster(debug = true, factorization = f);
+                                    options = opts)
         @test r.objective ≈ solve_exact(inst).objective rtol = 1e-6
+    end
+
+    # The two backends factor the same matrices; the runs agree up to rounding (iteration
+    # paths may differ slightly in degenerate ties) and both reach the exact optimum.
+    @testset "CHOLMOD and dense backends agree (seed $seed, ineq $frac)" for (seed, frac) in
+            [(1, 0.0), (2, 0.0), (3, 0.0), (1, 0.4), (2, 1.0)]
+        inst = test_instance(:small; seed, inequality_fraction = frac)
+        ref = solve_exact(inst).objective
+        rc = solve_column_generation(inst, QPASMaster(factorization = :cholmod); options = opts)
+        rd = solve_column_generation(inst, QPASMaster(factorization = :dense); options = opts)
+        @test rc.status === rd.status === :optimal
+        @test rd.objective ≈ ref rtol = 1e-6
+        @test rd.objective ≈ rc.objective rtol = 1e-7
+        @test rd.lower_bound <= ref + 1e-6
+        @test rd.infeasibility <= 1e-5
+        @test abs(rd.stats.iterations - rc.stats.iterations) <= 0.1 * rc.stats.iterations
+        _check_flows(inst, edge_flows(rd, inst); tol = 1e-5)
+        @test method_name(rd) == "Hot-start QPAS CG (dense)"
     end
 
     @testset "pricing and stabilization variants" begin
@@ -58,7 +77,8 @@ end
                       stabilization = StabilizationOptions(delta = 5.0, center_update = :best_bound)),
             CGOptions(max_columns = 2_000, stabilization = StabilizationOptions(delta = 0.1)),
         ]
-        for o in variants, master in (QPASMaster(), HighsExplicitQPMaster())
+        for o in variants,
+            master in (QPASMaster(), QPASMaster(factorization = :dense), HighsExplicitQPMaster())
             r = solve_column_generation(inst, master; options = o)
             @test r.status === :optimal
             @test r.objective ≈ ref rtol = 1e-6
@@ -71,7 +91,8 @@ end
         @test has_inequalities(inst)
         exact = solve_exact(inst)
         @test exact.status === :optimal
-        for master in (HighsLPMaster(), HighsExplicitQPMaster(), QPASMaster())
+        for master in (HighsLPMaster(), HighsExplicitQPMaster(), QPASMaster(),
+                       QPASMaster(factorization = :dense))
             r = solve_column_generation(inst, master; options = opts)
             @test r.status === :optimal
             @test r.objective ≈ exact.objective rtol = 1e-6
@@ -94,7 +115,9 @@ end
                                          lo, hi, "le_rows")
         exact = solve_exact(inst)
         @test exact.status === :optimal
-        for master in (HighsLPMaster(), QPASMaster(), QPASMaster(debug = true))
+        for master in (HighsLPMaster(), QPASMaster(), QPASMaster(debug = true),
+                       QPASMaster(factorization = :dense),
+                       QPASMaster(factorization = :dense, debug = true))
             r = solve_column_generation(inst, master; options = opts)
             @test r.status === :optimal
             @test r.objective ≈ exact.objective rtol = 1e-6
@@ -119,26 +142,34 @@ end
                       stabilization = StabilizationOptions(delta = 5.0, center_update = :best_bound)),
             CGOptions(max_columns = 2_000, stabilization = StabilizationOptions(delta = 0.1)),
         ]
-        for o in variants
-            r = solve_column_generation(inst, QPASMaster(); options = o)
+        for o in variants, f in HQ.FACTORIZATIONS
+            r = solve_column_generation(inst, QPASMaster(factorization = f); options = o)
             @test r.status === :optimal
             @test r.objective ≈ ref rtol = 1e-6
             @test r.lower_bound <= ref + 1e-6
         end
-        r = solve_column_generation(inst, QPASMaster(debug = true); options = opts)
-        @test r.objective ≈ ref rtol = 1e-6
+        for f in HQ.FACTORIZATIONS
+            r = solve_column_generation(inst, QPASMaster(debug = true, factorization = f);
+                                        options = opts)
+            @test r.objective ≈ ref rtol = 1e-6
+        end
     end
 
-    @testset "diagnostics traces" begin
+    @testset "diagnostics traces ($f)" for f in HQ.FACTORIZATIONS
         inst = test_instance(:small; seed = 1, inequality_fraction = 0.3)
-        o = CGOptions(max_columns = 2_000, diagnostics_every = 25)
-        r = solve_column_generation(inst, QPASMaster(); options = o)
+        o = CGOptions(max_columns = 2_000, diagnostics_every = 25, diagnostics_residual = true)
+        r = solve_column_generation(inst, QPASMaster(factorization = f); options = o)
         d = r.stats.diagnostics
         @test length(d) == r.stats.iterations ÷ 25 + (r.stats.iterations % 25 == 0 ? 0 : 1)
         @test d[end].iteration == r.stats.iterations              # final snapshot
         @test all(x -> x.factor_stored >= x.factor_effective, d)
         @test all(x -> x.factor_effective <= x.factor_dense, d)
-        @test all(x -> x.reach >= 0 && x.peak_rss_MB > 0 && x.cholmod_MB > 0, d)
+        @test all(x -> x.reach >= 0 && x.peak_rss_MB > 0 && x.factor_MB > 0, d)
+        @test all(x -> x.factor_residual < 1e-9, d)              # no drift between rebuilds
+        @test all(x -> x.n_solve > 0 && x.t_solve > 0, d[2:end])
+        # dense: exactly the triangle of the active block is stored (its zeros are true zeros
+        # of L, not entries left behind by deletions)
+        f === :dense && @test all(x -> x.factor_stored == x.factor_dense, d)
         path = write_diagnostics_csv(tempname() * ".csv", r.stats)
         @test countlines(path) == length(d) + 1
         # masters without internals still get the memory columns

@@ -1,6 +1,11 @@
 # Tests of the hot-started QPAS in isolation: random multi-block regularized master problems,
 # hot-started sequences (new columns + moving center), dependent columns that make the reduced
-# Hessian singular, and the debug-mode factor verification.
+# Hessian singular, and the debug-mode factor verification. Everything runs once per LDLᵀ
+# backend (CHOLMOD and dense).
+
+# backend of the testset currently running; `_qopts` builds options for it
+const QPAS_BACKEND = Ref(:cholmod)
+_qopts(; kwargs...) = QPASOptions(; factorization = QPAS_BACKEND[], kwargs...)
 
 # Random pool: block-structured columns with sparse 0/1 coupling coefficients.
 function _random_pool(rng, m, P, n, capacity; density = 0.25)
@@ -45,7 +50,7 @@ function _highs_ineq_reference(pool, lo, hi, δ, center)
 end
 
 # QPAS state for coupling rows lo ≤ AXλ ≤ hi (slacks built as in QPASMaster).
-function _ineq_state(pool, lo, hi, δ; options = QPASOptions(debug = true))
+function _ineq_state(pool, lo, hi, δ; options = _qopts(debug = true))
     b, rows, signs = HQ.slack_structure(lo, hi)
     return HQ.QPASState(pool, b, δ; options, slack_rows = rows, slack_signs = signs)
 end
@@ -96,14 +101,16 @@ function _random_rows(rng, m; ge = 0.4, le = 0.2)
     return lo, hi
 end
 
-@testset "QPAS" begin
+@testset "QPAS ($backend)" for backend in HQ.FACTORIZATIONS
+    QPAS_BACKEND[] = backend
+
     @testset "single solve vs HiGHS (m=$m, P=$P, n=$n, δ=$δ)" for (m, P, n, δ) in
             [(8, 2, 12, 1.0), (20, 4, 60, 0.5), (30, 5, 120, 2.0), (15, 1, 40, 1.0)]
         rng = Xoshiro(m + P + n)
         pool = _random_pool(rng, m, P, n, 200)
         b = ones(m)
         center = randn(rng, m)
-        st = HQ.QPASState(pool, b, δ; options = QPASOptions(debug = true))
+        st = HQ.QPASState(pool, b, δ; options = _qopts(debug = true))
         HQ.set_center!(st, center)
         @test HQ.qpas_solve!(st) === :optimal
         _check_kkt(st)
@@ -117,7 +124,7 @@ end
         m, P, δ = 25, 4, 1.0
         pool = _random_pool(rng, m, P, P, 400)
         b = ones(m)
-        st = HQ.QPASState(pool, b, δ; options = QPASOptions(debug = true))
+        st = HQ.QPASState(pool, b, δ; options = _qopts(debug = true))
         center = zeros(m)
         for it in 1:60
             HQ.set_center!(st, center)
@@ -145,7 +152,7 @@ end
             rows = collect(HQ.column_rows(pool, src))
             _add_random_column!(rng, pool, rand(rng, 1:P); rows)
         end
-        st = HQ.QPASState(pool, ones(m), δ; options = QPASOptions(debug = true))
+        st = HQ.QPASState(pool, ones(m), δ; options = _qopts(debug = true))
         HQ.set_center!(st, randn(rng, m))
         @test HQ.qpas_solve!(st) === :optimal
         _check_kkt(st)
@@ -167,7 +174,7 @@ end
         HQ.add_column!(pool, 1, 0.0, Int[], Float64[], [1])
         HQ.add_column!(pool, 1, 0.0, [1], [1.0], [2])
         HQ.add_column!(pool, 1, 0.0, [2], [1.0], [3])
-        st = HQ.QPASState(pool, b, 1.0; options = QPASOptions(debug = true))
+        st = HQ.QPASState(pool, b, 1.0; options = _qopts(debug = true))
         @test HQ.qpas_solve!(st) === :optimal
         @test sort(HQ.items(st.kkt.ordering.N)) == [2, 3]
         @test st.π ≈ [0.0, 0.0] atol = 1e-12
@@ -206,7 +213,8 @@ end
         pool = _random_pool(rng, m, P, P, 400)
         lo, hi = _random_rows(rng, m; ge = 0.4, le = 0.3)
         # seed 3 refactors often, which exercises the rebuild under a row mask
-        opts = QPASOptions(debug = true, refactor_interval = seed == 3 ? 7 : 150)
+        opts = _qopts(debug = true, refactor_interval = seed == 3 ? 7 : 150,
+                      dense_refactor_interval = seed == 3 ? 7 : 0)
         st = _ineq_state(pool, lo, hi, δ; options = opts)
         center = zeros(m)
         for it in 1:60
@@ -298,12 +306,35 @@ end
     @testset "periodic refactorization" begin
         rng = Xoshiro(3)
         pool = _random_pool(rng, 20, 3, 80, 100)
-        st = HQ.QPASState(pool, ones(20), 1.0; options = QPASOptions(refactor_interval = 5))
+        st = HQ.QPASState(pool, ones(20), 1.0;
+                          options = _qopts(refactor_interval = 5, dense_refactor_interval = 5))
         HQ.qpas_solve!(st)
         HQ.set_center!(st, st.π)
         @test HQ.qpas_solve!(st) === :optimal
         @test st.total.refactorizations >= 1
         _check_kkt(st)
         @test HQ.verify_kkt(st.kkt, pool) < 1e-8
+    end
+
+    @testset "factor type and timers" begin
+        rng = Xoshiro(21)
+        pool = _random_pool(rng, 15, 3, 50, 100)
+        st = HQ.QPASState(pool, ones(15), 1.0; options = _qopts())
+        @test HQ.qpas_solve!(st) === :optimal
+        F = st.kkt.factor
+        @test HQ.LDLt.backend_name(F) == String(backend)
+        @test st isa HQ.QPASState{typeof(F)}
+        t = st.kkt.timer
+        calls(name) = t.calls[findfirst(==(name), t.names)]
+        @test calls(:rowadd) >= HQ.nullspace_dimension(st.kkt.ordering)
+        @test calls(:solve) >= 1 && calls(:assemble) >= calls(:rowadd)
+        # dense: the factor never stores more than the active block
+        if backend === :dense
+            @test F.k == HQ.nullspace_dimension(st.kkt.ordering)
+            @test HQ.LDLt.factor_stats(F, HQ.items(st.kkt.ordering.N)).stored == F.k * (F.k - 1) ÷ 2
+        end
+        @test HQ.factor_residual(st.kkt, pool) < 1e-10
+        # refactor interval: CHOLMOD default 150, dense never (no structural garbage)
+        @test HQ.refactor_interval(st.options) == (backend === :dense ? 0 : 150)
     end
 end

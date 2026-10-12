@@ -19,6 +19,30 @@ end
         @test i3.cg_options.stabilization.delta == 1.0
         @test i3.cg_options.pricing === :first_improving
         @test i3.qpas_options.refactor_interval == 150
+        @test i3.qpas_options.factorization in HQ.FACTORIZATIONS
+    end
+
+    @testset "factorization backend" begin
+        path = _write_config("""
+            [defaults.solvers]
+            qpas = true
+            [[experiment]]
+            name = "c"
+            [[experiment]]
+            name = "d"
+            [experiment.qpas]
+            factorization = "dense"
+            dense_refactor_interval = 500
+            """)
+        c, d = load_experiments(path)
+        @test c.qpas_options.factorization === :cholmod             # default
+        @test d.qpas_options.factorization === :dense
+        @test HQ.refactor_interval(d.qpas_options) == 500
+        @test HQ.refactor_interval(c.qpas_options) == 150
+        bad = _write_config("[[experiment]]\nname = \"x\"\n[experiment.solvers]\nqpas = true\n" *
+                            "[experiment.qpas]\nfactorization = \"lapack\"\n")
+        @test_throws ArgumentError load_experiments(bad)
+        @test_throws ArgumentError QPASMaster(factorization = :lapack)
     end
 
     @testset "defaults are merged and overridden per experiment" begin

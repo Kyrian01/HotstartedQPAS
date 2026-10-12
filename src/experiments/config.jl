@@ -94,7 +94,7 @@ function _build_experiment(name::String, s::Dict{String,Any})
     cg = _build(CGOptions, get(s, "column_generation", Dict{String,Any}()), "column_generation";
                 exclude = (:stabilization,), extra = (stabilization = stabilization,))
     validate(cg)
-    qpas = _build(QPASOptions, get(s, "qpas", Dict{String,Any}()), "qpas")
+    qpas = validate(_build(QPASOptions, get(s, "qpas", Dict{String,Any}()), "qpas"))
 
     # [lp] only configures the Big-M penalty of the LP master
     lp = get(s, "lp", Dict{String,Any}())
