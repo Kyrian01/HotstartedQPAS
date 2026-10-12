@@ -140,7 +140,7 @@ src/experiments/                 TOML config loading (config.jl) and the experim
 scripts/quickstart.jl            API tour
 experiments.toml                 the experiment definitions (all parameters documented)
 run.jl                           entry point: julia --project run.jl [config] [--only …]
-extra/                           the original sketches (reference only, not used)
+claude_context/                  context for Claude: original sketches and the earlier thesis (not used by the code)
 docs/                            the thesis
 ```
 

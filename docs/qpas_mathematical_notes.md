@@ -79,7 +79,7 @@ $$
 \pi \leftarrow \pi - \frac{\alpha}{\delta}\,Ap, \qquad Ap = \sum_{j\in N} y_j\,u_j = \sum_{k\in N\cup S} p_k\, a_k,
 $$
 
-which costs $O((|N| + p)\,\bar\nu + m)$. Keeping $g$ instead (as in the sketch `extra/qpas.jl`)
+which costs $O((|N| + p)\,\bar\nu + m)$. Keeping $g$ instead (as in the sketch `claude_context/qpas.jl`)
 requires $g \leftarrow g + \frac\alpha\delta A^\top(Ap)$ at every step, which is $O(\mathrm{nnz}(A))$
 and grows with the number of generated columns.
 
@@ -139,7 +139,7 @@ $$
 O\big((|N| + p)\,\bar\nu\big),
 $$
 
-independent of $n$. The sketch `extra/KKTFactor.jl` instead maintains $AZ$ and its row
+independent of $n$. The sketch `claude_context/KKTFactor.jl` instead maintains $AZ$ and its row
 lists (`AZt_cols`) explicitly. Every working-set change must then update those structures
 consistently, with sorted inserts and deletes, and a representative swap rewrites $|\nu|$
 columns of $AZ$.
