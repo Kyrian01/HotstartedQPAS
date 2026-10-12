@@ -49,6 +49,7 @@ verbose                = false              # progress line every log_every iter
 log_every              = 100
 diagnostics_every      = 0                  # memory, factor nnz, |N|, … every k iterations
                                             #   → <solver>_diagnostics.csv (0 = off)
+diagnostics_residual   = false              # diagnostics also record ‖LDLᵀ − H_eff‖ (slow)
 
 # ── stabilization (explicit_qp, eliminated_qp, qpas) ─────────────────────────────────────
 [defaults.stabilization]
@@ -63,7 +64,11 @@ dual_tolerance     = 1e-10    # optimal if all multipliers ≥ −tol · max(1, 
 ratio_tolerance    = 1e-14    # direction components ≥ −tol are ignored in the ratio test
 singular_tolerance = 1e-10    # relative pivot below which the reduced Hessian is singular
 check_pivots       = true     # inspect pivots after expansions
-refactor_interval  = 150      # rebuild the LDLᵀ factor every this many row updates (0 = never)
+factorization      = "cholmod" # LDLᵀ backend: "cholmod" (sparse, n_max × n_max, thesis) or
+                              #   "dense" (active block |N| × |N| only, ~2.5x faster master;
+                              #   docs/dense_ldlt_backend.md)
+refactor_interval  = 150      # cholmod: rebuild the factor every this many updates (0 = never)
+dense_refactor_interval = 0   # dense: rebuild every this many updates (0 = never; not needed)
 sparse_solves      = true     # solve only on the nullspace set N (cost independent of n_max)
 debug              = false    # verify the factor after every iteration (very slow)
 

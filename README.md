@@ -2,7 +2,9 @@
 
 Column generation for the multi-pilot crew scheduling LP, with quadratic proximal
 stabilization and a **hot-started nullspace active-set QP solver (QPAS)** whose reduced-Hessian
-LDLᵀ factorization is updated in place with CHOLMOD. This is the code for the master's
+LDLᵀ factorization is updated in place, either with CHOLMOD (the thesis method) or with a dense
+factor of the active block (`factorization = "dense"`, ~2.5x faster master solves, see
+[`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md)). This is the code for the master's
 thesis *"Hot-Started Active-Set Method for Regularized Column Generation"* (K. Bäumer,
 [`docs/Masterthesis_Kyrian_Baumer.pdf`](docs/Masterthesis_Kyrian_Baumer.pdf)).
 
@@ -42,7 +44,7 @@ eliminated_qp = false
 | `[instance]` | instance generator: nodes, edge probability, tasks, pilots, inequality fraction, seed, … |
 | `[column_generation]` | iteration/column/time limits, pricing rule, tolerances, verbosity |
 | `[stabilization]` | `delta`, `center_update` |
-| `[qpas]` | QPAS tolerances, refactorization interval, sparse solves, debug |
+| `[qpas]` | QPAS tolerances, factorization backend (`cholmod` / `dense`), refactorization interval, sparse solves, debug |
 | `[lp]` | `big_m` |
 | `[output]` | output directory, per-iteration traces, saving the instance |
 
@@ -112,6 +114,8 @@ versus ~46 s for LP CG.
 src/
 ├── HotstartedQPAS.jl            module definition, includes, exports
 ├── backends/                    the only code that calls into C libraries
+│   ├── ldlt_interface.jl        UpdatableLDLt: the factor interface both backends implement
+│   ├── dense/DenseLDLt.jl       dense LDLᵀ of the active block (append / compacting delete / C1)
 │   ├── cholmod/                 CHOLMOD (SuiteSparse) layer
 │   │   ├── Cholmod.jl           submodule
 │   │   ├── types.jl             Julia mirrors of cholmod_dense / _sparse / _factor (+ layout check)
@@ -135,13 +139,14 @@ src/
 ├── cg/                          CGOptions, CGResult, the column generation driver
 ├── experiments/                 experiment config files and runner
 └── stats/                       CGStats / ExactStats, comparison tables, CSV traces
-test/                            unit + integration tests (CHOLMOD, problem, QPAS, end-to-end)
+test/                            unit + integration tests (CHOLMOD, dense factor, problem, QPAS on both backends, end-to-end)
 src/experiments/                 TOML config loading (config.jl) and the experiment runner (runner.jl)
 scripts/quickstart.jl            API tour
+scripts/benchmark_factorization.jl  CHOLMOD vs dense factor: CG runs, diagnostics, micro benchmark
 experiments.toml                 the experiment definitions (all parameters documented)
 run.jl                           entry point: julia --project run.jl [config] [--only …]
 claude_context/                  context for Claude: original sketches and the earlier thesis (not used by the code)
-docs/                            the thesis
+docs/                            the thesis and the notes on the QPAS, inequality rows and the dense factor
 ```
 
 ## Architecture
@@ -159,7 +164,8 @@ solve_column_generation(instance, master; options)
    │                          ├── x, π, μ, cost scale, counters, timers
    │                          └── KKTSystem
    │                                ├── ColumnOrdering [S, W, N]  (⇒ Z and AZ implicitly)
-   │                                ├── Cholmod.LDLtFactor  (reduced Hessian, n_max × n_max)
+   │                                ├── UpdatableLDLt: Cholmod.LDLtFactor (n_max × n_max, sparse)
+   │                                │   or DenseLDLt.DenseLDLtFactor (|N| × |N|, dense)
    │                                └── scratch buffers, optional debug copy of H
    └── CGStats               per-iteration traces + solver details ──► CGResult
 ```
@@ -216,12 +222,22 @@ These go beyond the thesis text. Each was measured or tested. Derivations and pr
    increasing index order, so every `rowadd` appends a last row) made the QPAS ~8x faster.
    `QPASOptions(refactor_interval = …)` controls this.
 6. **Sparse right-hand-side solves.** `cholmod_solve2` with a `Bset` pattern (= N) solves only
-   on the reach of N, so the solve cost does not depend on `n_max`.
+   on the reach of N. The arithmetic does not depend on `n_max`, but CHOLMOD allocates an
+   `n_max`-length workspace on every such call (160 kB at `n_max` = 20 000; 14 GB allocated
+   over an I3 run).
 7. **Replacement representative**: when a representative blocks, the column of its block in
    N with the largest weight replaces it.
 8. **Debug mode** (`QPASOptions(debug = true)`): keeps an explicit copy of H and checks
    after every iteration that it equals `(AZ)ᵀ(AZ)` rebuilt from scratch and that `LDLᵀ`
    reproduces it.
+9. **Dense factor backend** (`QPASOptions(factorization = :dense)`). While `H_eff` is positive
+   definite, `|N| ≤ m`, and on these instances `H_eff` is ~100 % dense. The dense backend
+   stores only the active `|N| × |N|` block in activation order: a new index is appended (one
+   triangular solve), a deleted slot is removed by a rank-one update of the trailing block
+   fused with compaction, and slack changes use method C1. It never holds structural zeros, so
+   it needs no periodic refactorization. On I1–I3 the master solve is 2.2–2.9x faster with
+   identical iteration counts and accuracy. Derivations and measurements:
+   [`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md).
 
 ### On iteration counts of the stabilized methods
 
@@ -238,8 +254,11 @@ column). `CGOptions.center_tolerance` controls how far the tail is followed.
 `cᵀλ`, coupling infeasibility, Lagrangian bound (when all pilots were priced), dual change
 `‖πₖ − πₖ₋₁‖∞`, number of columns, inner iterations (simplex / QP / active-set), columns
 added, and center moves. Solver-specific totals are in `stats.details`: for the QPAS these
-are iteration, step, expansion, reduction, singular-step, CHOLMOD-update and refactorization
-counts plus a time breakdown. Use `compare_results`, `print_details`, `write_trace_csv`.
+are iteration, step, expansion, reduction, singular-step, factor-update and refactorization
+counts, a time breakdown, the time and call count of every factor operation (assemble, rowadd,
+rowdel, updown, solve) and the factor memory. Use `compare_results`, `print_details`,
+`write_trace_csv`. The diagnostics traces (`diagnostics_every`) sample memory, factor contents
+and, with `diagnostics_residual = true`, the factor residual `‖LDLᵀ − H_eff‖`.
 
 ## Inequality coupling rows
 
@@ -269,3 +288,6 @@ conditions. Theory: [`docs/qpas_inequality_extension.md`](docs/qpas_inequality_e
 
 `julia --project run.jl --only I3`. The shipped config disables the two HiGHS QP masters for
 I3; set them to `true` in `experiments.toml` to include them (~10 min each).
+
+CHOLMOD vs dense factor: `julia --project scripts/benchmark_factorization.jl` (`--suite
+small|large|micro|report`, `--reps`, `--only`). Writes `results/factorization/report.md`.
