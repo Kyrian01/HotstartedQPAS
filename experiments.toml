@@ -39,8 +39,9 @@ seed                = 1      # random seed of the generator
 max_iterations         = 100000
 max_columns            = 20000              # column capacity n_max (fixed-size structures)
 time_limit             = 600.0              # seconds per solver run (use inf for none)
-pricing                = "first_improving"  # "first_improving": random pilot order, add the first
-                                            #   improving column; "all_blocks": one column per pilot
+pricing                = "all_blocks"       # "first_improving": random pilot order, add the first
+                                            #   improving column (thesis); "all_blocks": one column
+                                            #   per pilot (~2x faster on I3)
 reduced_cost_tolerance = 1e-6               # a column improves if its reduced cost < -tol
 center_tolerance       = 1e-6               # stabilized runs stop once ‖π − π̂‖∞ ≤ tol·max(1, ‖π‖∞)
 compute_bound          = false              # price all pilots every iteration (Lagrangian bound trace)
@@ -49,6 +50,7 @@ verbose                = false              # progress line every log_every iter
 log_every              = 100
 diagnostics_every      = 0                  # memory, factor nnz, |N|, … every k iterations
                                             #   → <solver>_diagnostics.csv (0 = off)
+diagnostics_residual   = false              # diagnostics also record ‖LDLᵀ − H_eff‖ (slow)
 
 # ── stabilization (explicit_qp, eliminated_qp, qpas) ─────────────────────────────────────
 [defaults.stabilization]
@@ -63,7 +65,11 @@ dual_tolerance     = 1e-10    # optimal if all multipliers ≥ −tol · max(1, 
 ratio_tolerance    = 1e-14    # direction components ≥ −tol are ignored in the ratio test
 singular_tolerance = 1e-10    # relative pivot below which the reduced Hessian is singular
 check_pivots       = true     # inspect pivots after expansions
-refactor_interval  = 150      # rebuild the LDLᵀ factor every this many row updates (0 = never)
+factorization      = "dense"  # LDLᵀ backend: "dense" (active block |N| × |N| only, 2–5x faster
+                              #   master; docs/dense_ldlt_backend.md) or "cholmod" (sparse,
+                              #   n_max × n_max, the thesis method)
+refactor_interval  = 150      # cholmod: rebuild the factor every this many updates (0 = never)
+dense_refactor_interval = 0   # dense: rebuild every this many updates (0 = never; not needed)
 sparse_solves      = true     # solve only on the nullspace set N (cost independent of n_max)
 debug              = false    # verify the factor after every iteration (very slow)
 
@@ -79,11 +85,32 @@ save_instance = false         # also save the generated instance (instance.jls)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
-#  Experiments (sizes as in thesis Table 5.1)
+#  Experiments
+#
+#  Grouped by purpose; run a group with --only. Measured runtimes (Zen 4 desktop, one run each,
+#  defaults above: dense factor, all_blocks pricing); the whole file takes about 8 minutes.
+#
+#  A  thesis instances, checked against the exact LP        I1 I2 I3 I2_ineq          ~2.5 min
+#     (I1: every solver; I2, I2_ineq: also LP CG ~75 s / ~10 s, I2_ineq explicit QP ~45 s)
+#  B  CHOLMOD vs dense factor on identical instances        cmp_I3_* cmp_L2_*          ~1.8 min
+#     (I3: 4.4 s vs 1.4 s; L2: 76 s vs 23 s)
+#  C  pricing rule (vs I3)                                  I3_first_improving         ~10 s
+#  D  stabilization: δ and center update (vs I3)            I3_delta0.3 I3_delta3      ~30 s
+#                                                           I3_bundle
+#  E  larger instances (no exact LP, no HiGHS masters)      L1 L2 L3 L2_ineq           ~1 min
+#  F  diagnostics: memory, factor contents, residual         I3_diag                    ~5 s
+#
+#  Examples
+#    julia --project run.jl --only I1,I2,I3,I2_ineq                      # group A
+#    julia --project run.jl --only cmp_I3_cholmod,cmp_I3_dense           # one comparison
+#    julia --project run.jl --only cmp_L2_cholmod,cmp_L2_dense,L1,L2,L3  # B (large) + E
+#  results/summary.csv collects one row per experiment and solver for all of them.
 # ══════════════════════════════════════════════════════════════════════════════════════════
 
+# ── A: thesis instances (sizes as in thesis Table 5.1), exact LP as reference ───────────
+
 [[experiment]]
-name = "I1"
+name = "I1"                   # small: every solver, finishes in seconds
 [experiment.instance]
 n_nodes          = 50
 edge_probability = 0.098
@@ -97,6 +124,9 @@ n_nodes          = 150
 edge_probability = 0.09
 n_tasks          = 230
 n_pilots         = 7
+[experiment.solvers]          # the HiGHS QP masters hit the 600 s limit here; set to true to compare
+explicit_qp   = false
+eliminated_qp = false
 
 [[experiment]]
 name = "I3"
@@ -105,42 +135,231 @@ n_nodes          = 175
 edge_probability = 0.091
 n_tasks          = 390
 n_pilots         = 10
-[experiment.solvers]          # the HiGHS QP masters take 10+ minutes here
-explicit_qp   = false
-eliminated_qp = false
-
-[[experiment]]
-name = "I4"                   # stress test: about twice the size of I3
-[experiment.instance]
-n_nodes          = 225
-edge_probability = 0.09
-n_tasks          = 500
-n_pilots         = 13
-[experiment.solvers]
+[experiment.solvers]          # LP CG takes ~8 min here, the HiGHS QP masters 10+ min
 lp            = false
 explicit_qp   = false
 eliminated_qp = false
-[experiment.column_generation]
-time_limit = 3600.0
-verbose    = true
-log_every  = 250
-
-# Example: mixed equality / inequality coverage rows (uncomment to use)
-# [[experiment]]
-# name = "I1_ineq"
-# [experiment.instance]
-# n_nodes             = 50
-# edge_probability    = 0.098
-# n_tasks             = 40
-# n_pilots            = 4
-# inequality_fraction = 0.3
 
 [[experiment]]
-name = "I2_ineq"
+name = "I2_ineq"              # half of the coverage rows are "≥ 1" (QPAS slacks, rank-one updates)
 [experiment.instance]
 n_nodes             = 150
 edge_probability    = 0.09
 n_tasks             = 230
 n_pilots            = 15
 inequality_fraction = 0.5
+[experiment.solvers]          # the eliminated HiGHS QP cannot handle inequality rows
+eliminated_qp = false
 
+# ── B: CHOLMOD vs dense factor ───────────────────────────────────────────────────────────
+# Each pair generates the identical instance (same generator settings and seed) and differs
+# only in the factor backend. Compare total / master time, refactorizations and the factor
+# statistics in results/<name>/summary.txt (docs/dense_ldlt_backend.md §5).
+
+[[experiment]]
+name = "cmp_I3_cholmod"
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.qpas]
+factorization = "cholmod"
+
+[[experiment]]
+name = "cmp_I3_dense"
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.qpas]
+factorization = "dense"
+
+[[experiment]]
+name = "cmp_L2_cholmod"       # m ≈ 760: CHOLMOD ~80 s, dense ~25 s
+[experiment.instance]
+n_nodes          = 300
+edge_probability = 0.08
+n_tasks          = 800
+n_pilots         = 18
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.qpas]
+factorization = "cholmod"
+
+[[experiment]]
+name = "cmp_L2_dense"
+[experiment.instance]
+n_nodes          = 300
+edge_probability = 0.08
+n_tasks          = 800
+n_pilots         = 18
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.qpas]
+factorization = "dense"
+
+# ── C: pricing rule (compare with I3, which uses the default all_blocks) ─────────────────
+
+[[experiment]]
+name = "I3_first_improving"   # thesis Alg. 1.3: one column per master solve
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+pricing = "first_improving"
+
+# ── D: stabilization (compare with I3: δ = 1, proximal point) ────────────────────────────
+
+[[experiment]]
+name = "I3_delta0.3"          # weaker stabilization
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.stabilization]
+delta = 0.3
+
+[[experiment]]
+name = "I3_delta3"            # stronger stabilization
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.stabilization]
+delta = 3.0
+
+[[experiment]]
+name = "I3_bundle"            # center moves only when the Lagrangian bound improves
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.stabilization]
+center_update = "best_bound"
+
+# ── E: larger instances (QPAS only; no exact reference) ──────────────────────────────────
+
+[[experiment]]
+name = "L1"                   # m ≈ 480 (was I4)
+[experiment.instance]
+n_nodes          = 225
+edge_probability = 0.09
+n_tasks          = 500
+n_pilots         = 13
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+time_limit = 3600.0
+
+[[experiment]]
+name = "L2"                   # m ≈ 760
+[experiment.instance]
+n_nodes          = 300
+edge_probability = 0.08
+n_tasks          = 800
+n_pilots         = 18
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+time_limit = 3600.0
+verbose    = true
+log_every  = 1000
+
+[[experiment]]
+name = "L3"                   # m ≈ 1140, 24 pilots
+[experiment.instance]
+n_nodes          = 400
+edge_probability = 0.07
+n_tasks          = 1200
+n_pilots         = 24
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+time_limit = 3600.0
+verbose    = true
+log_every  = 1000
+
+[[experiment]]
+name = "L2_ineq"              # L2 with 30 % "≥ 1" rows
+[experiment.instance]
+n_nodes             = 300
+edge_probability    = 0.08
+n_tasks             = 800
+n_pilots            = 18
+inequality_fraction = 0.3
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+time_limit = 3600.0
+
+# ── F: diagnostics ───────────────────────────────────────────────────────────────────────
+# Samples memory, |N|, factor contents and the factor residual ‖LDLᵀ − H_eff‖ every 50
+# iterations → results/I3_diag/qpas_diagnostics.csv. The residual check rebuilds H_eff, so
+# the total time of this run is not comparable with I3.
+
+[[experiment]]
+name = "I3_diag"
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+exact         = false
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.column_generation]
+diagnostics_every    = 50
+diagnostics_residual = true

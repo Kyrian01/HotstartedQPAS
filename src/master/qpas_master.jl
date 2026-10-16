@@ -3,8 +3,9 @@
 
 Stabilized restricted master problem in the eliminated form (thesis eq. 4.6), solved by the
 hot-started nullspace active-set method of thesis Chapter 4. The [`QPASState`](@ref) (iterate,
-working set, ordering and CHOLMOD LDLᵀ factor of the reduced Hessian) is carried over between
-column generation iterations; a new column only joins the working set.
+working set, ordering and LDLᵀ factor of the reduced Hessian) is carried over between
+column generation iterations; a new column only joins the working set. The factor backend is
+`QPASOptions.factorization` (`:cholmod` or `:dense`).
 
 Coupling rows may be equalities, `≥` rows or `≤` rows (one finite bound). Every inequality row
 gets a slack variable, `aᵢᵀλ - sᵢ = ℓᵢ` or `aᵢᵀλ + sᵢ = uᵢ`, which makes the eliminated form
@@ -20,9 +21,10 @@ mutable struct QPASMaster <: AbstractMasterSolver
 end
 
 QPASMaster(; kwargs...) = QPASMaster(QPASOptions(; kwargs...))
-QPASMaster(options::QPASOptions) = QPASMaster(options, nothing, nothing)
+QPASMaster(options::QPASOptions) = QPASMaster(validate(options), nothing, nothing)
 
-method_name(::QPASMaster) = "Hot-start QPAS CG"
+method_name(m::QPASMaster) =
+    m.options.factorization === :cholmod ? "Hot-start QPAS CG" : "Hot-start QPAS CG (dense)"
 is_stabilized(::QPASMaster) = true
 supports_inequalities(::QPASMaster) = true
 
@@ -97,7 +99,8 @@ function solve!(m::QPASMaster)
     return sol
 end
 
-diagnostics(m::QPASMaster) = m.state === nothing ? nothing : qpas_diagnostics(m.state)
+diagnostics(m::QPASMaster; residual::Bool = false) =
+    m.state === nothing ? nothing : qpas_diagnostics(m.state; residual)
 
 function solver_details(m::QPASMaster)
     st = m.state
@@ -111,7 +114,8 @@ function solver_details(m::QPASMaster)
         "  of which representative swaps" => c.representative_swaps,
         "working-set reductions" => c.reductions,
         "singular-Hessian steps" => c.singular_steps,
-        "CHOLMOD row updates" => c.factor_updates,
+        "factorization backend" => LDLt.backend_name(st.kkt.factor),
+        "factor updates (row add/del, rank-one)" => c.factor_updates,
         "refactorizations" => c.refactorizations,
         "final |N| (nullspace dim.)" => nullspace_dimension(st.kkt.ordering),
     ]
@@ -120,8 +124,11 @@ function solver_details(m::QPASMaster)
     push!(details, "factor nnz stored / effective (off-diag.)" =>
                    "$(dg.factor_stored) / $(dg.factor_effective)")
     push!(details, "  dense factor of H_eff would have" => dg.factor_dense)
-    push!(details, "CHOLMOD memory now / peak [MB]" =>
-                   "$(round(dg.cholmod_MB; digits = 2)) / $(round(dg.cholmod_peak_MB; digits = 2))")
+    push!(details, "factor memory now / peak [MB]" =>
+                   "$(round(dg.factor_MB; digits = 2)) / $(round(dg.factor_peak_MB; digits = 2))")
+    for (k, v) in pairs(LDLt.backend_stats(st.kkt.factor))
+        push!(details, "  $(k)" => v isa AbstractFloat ? round(v; sigdigits = 4) : v)
+    end
     sp = st.kkt.surplus
     if n_surplus(sp) > 0
         # inequality rows: slack activity and the size of A_eff
@@ -133,6 +140,14 @@ function solver_details(m::QPASMaster)
     for (k, name) in enumerate(t.names)
         label = name === :refactor ? "time refactor [s] (within expand/reduce)" : "time $(name) [s]"
         push!(details, label => round(t.seconds[k]; sigdigits = 4))
+    end
+    # individual factor operations (overlapping the sections above)
+    ft = st.kkt.timer
+    for (k, name) in enumerate(ft.names)
+        ft.calls[k] == 0 && continue
+        push!(details, "factor op $(name) [s] (calls, µs/call)" =>
+                       "$(round(ft.seconds[k]; sigdigits = 4)) ($(ft.calls[k]), " *
+                       "$(round(1e6 * ft.seconds[k] / ft.calls[k]; sigdigits = 3)))")
     end
     return details
 end

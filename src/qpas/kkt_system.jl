@@ -6,8 +6,10 @@
 #
 # where A_eff holds the equality rows and the inequality rows whose slack is in the working set
 # (docs/qpas_inequality_extension.md, Cor. 3.3). Without inequality rows A_eff = A and H_eff is
-# the reduced Hessian H of the thesis. H_eff is kept as an LDLᵀ factor of fixed size n_max
-# (identity on indices outside N) and updated in place whenever N or the slack status changes:
+# the reduced Hessian H of the thesis. H_eff is kept as an LDLᵀ factor of a matrix of size n_max
+# that is the identity on indices outside N, and updated in place whenever N or the slack status
+# changes. The factor is either CHOLMOD's (stores all n_max indices, sparse) or the dense backend
+# (stores only N, |N| ≤ m), see src/backends/ldlt_interface.jl:
 #
 #   index j enters N  →  rowadd(j, H_eff[:, j])         (reduction, thesis §4.4.2)
 #   index j leaves N  →  rowdel(j)                      (expansion, thesis §4.4.1)
@@ -20,7 +22,7 @@
 # which costs O((|N| + p) · nnz per column), independent of the total number of columns.
 
 """
-    KKTSystem(n_blocks, n_rows, capacity, surplus; debug = false)
+    KKTSystem(n_blocks, n_rows, capacity, surplus; debug = false, factorization = :cholmod)
 
 Linear-algebra state of the nullspace KKT system:
 
@@ -28,17 +30,19 @@ Linear-algebra state of the nullspace KKT system:
   nullspace basis `Z` and `AZ` (see `nullspace.jl`), which are therefore implicit
 - `surplus::SurplusSet`: the slacks of the inequality rows and the split `W_s` / `N_s`; it
   determines the row mask of `H_eff`
-- `factor::Cholmod.LDLtFactor`: LDLᵀ of the fixed-size effective reduced Hessian
+- `factor::F`: LDLᵀ of the effective reduced Hessian (`Cholmod.LDLtFactor` or
+  `DenseLDLt.DenseLDLtFactor`, both `<: UpdatableLDLt`)
 - `hdiag`: unmasked `‖a_j - a_rep(j)‖²` at activation, the scale for pivot/singularity tests
-- `updates_since_refactor`, `total_updates`: CHOLMOD row additions/deletions + rank-one updates
+- `updates_since_refactor`, `total_updates`: factor row additions/deletions + rank-one updates
+- `timer`: time and call count of every factor operation (`FACTOR_TIMER_SECTIONS`)
 - scratch buffers for Hessian column and rank-one vector assembly
 - `debug_H`: explicit mirror of `H_eff` (active entries only, `(k, j) => H_eff[k, j]`),
   kept only in debug mode
 """
-mutable struct KKTSystem
+mutable struct KKTSystem{F<:UpdatableLDLt}
     ordering::ColumnOrdering
     surplus::SurplusSet
-    factor::Cholmod.LDLtFactor
+    factor::F
     hdiag::Vector{Float64}
     u::Vector{Float64}                 # dense n_rows scatter of a_j - a_rep(j); zero between uses
     rep_dot::Vector{Float64}           # (a_rep(b))ᵀ u per block
@@ -50,15 +54,33 @@ mutable struct KKTSystem
     affected::Vector{Int}              # ν: N-columns of a block whose representative changes
     updates_since_refactor::Int
     total_updates::Int
+    timer::SectionTimer
     debug_H::Union{Nothing,Dict{Tuple{Int,Int},Float64}}
 end
 
 function KKTSystem(n_blocks::Integer, n_rows::Integer, capacity::Integer,
-                   surplus::SurplusSet = SurplusSet(Int[], Float64[], n_rows); debug::Bool = false)
-    return KKTSystem(ColumnOrdering(n_blocks, capacity), surplus, Cholmod.LDLtFactor(capacity),
+                   surplus::SurplusSet = SurplusSet(Int[], Float64[], n_rows); debug::Bool = false,
+                   factorization::Symbol = :cholmod)
+    factor = make_factor(factorization, capacity, n_rows)
+    return KKTSystem(ColumnOrdering(n_blocks, capacity), surplus, factor,
                      zeros(capacity), zeros(n_rows), zeros(n_blocks), fill(false, n_blocks),
                      zeros(Int, capacity), zeros(capacity), zeros(Int, capacity), zeros(capacity),
-                     Int[], 0, 0, debug ? Dict{Tuple{Int,Int},Float64}() : nothing)
+                     Int[], 0, 0, SectionTimer(FACTOR_TIMER_SECTIONS),
+                     debug ? Dict{Tuple{Int,Int},Float64}() : nothing)
+end
+
+"""
+    make_factor(factorization, capacity, n_rows) -> UpdatableLDLt
+
+Identity factor of size `capacity` (= `n_max`) for the chosen backend. The dense backend
+starts with `n_rows + 1` slots: `|N| ≤ m` while `H_eff` is positive definite, plus one slot for
+a dependent column that is added and then undone (it grows if ever needed).
+"""
+function make_factor(factorization::Symbol, capacity::Integer, n_rows::Integer)
+    factorization === :cholmod && return Cholmod.LDLtFactor(capacity)
+    factorization === :dense &&
+        return DenseLDLt.DenseLDLtFactor(capacity; capacity = min(capacity, n_rows + 1))
+    throw(ArgumentError("unknown factorization :$factorization (allowed: $(join(FACTORIZATIONS, ", ")))"))
 end
 
 """
@@ -70,6 +92,10 @@ diagonal `hjj = ‖a_j - a_rep(j)‖²` over the rows of `A_eff`; `scale` is the
 rows (the pivot scale, which does not change when rows are masked).
 """
 function hessian_column!(kkt::KKTSystem, pool::ColumnPool, j::Int)
+    return @timed_section kkt.timer :assemble _hessian_column!(kkt, pool, j)
+end
+
+function _hessian_column!(kkt::KKTSystem, pool::ColumnPool, j::Int)
     ord = kkt.ordering
     block = pool.block
     u = kkt.u
@@ -137,7 +163,7 @@ Activate index `j` in the factor with the column previously assembled by
 """
 function insert_column!(kkt::KKTSystem, j::Int, nnz::Int, scale::Float64)
     # row/column j of the factor goes from e_j to the assembled Hessian column
-    Cholmod.rowadd!(kkt.factor, j, kkt.col_rows, kkt.col_vals, nnz)
+    @timed_section kkt.timer :rowadd LDLt.rowadd!(kkt.factor, j, kkt.col_rows, kkt.col_vals, nnz)
     kkt.hdiag[j] = scale
     kkt.updates_since_refactor += 1
     kkt.total_updates += 1
@@ -167,7 +193,7 @@ Reset row/column `j` of the factor to the identity and remove `j` from `N`. The 
 decides where `j` goes next (W or S).
 """
 function deactivate!(kkt::KKTSystem, j::Int)
-    Cholmod.rowdel!(kkt.factor, j)
+    @timed_section kkt.timer :rowdel LDLt.rowdel!(kkt.factor, j)
     kkt.updates_since_refactor += 1
     kkt.total_updates += 1
     if kkt.debug_H !== nothing
@@ -191,6 +217,10 @@ i.e. row `i` of `AZ`. Activating the slack adds `vvᵀ` to `H_eff`, freeing it s
 (docs/qpas_inequality_extension.md, Thm. 4.1/4.2).
 """
 function surplus_vector!(kkt::KKTSystem, pool::ColumnPool, σ::Int)
+    return @timed_section kkt.timer :assemble _surplus_vector!(kkt, pool, σ)
+end
+
+function _surplus_vector!(kkt::KKTSystem, pool::ColumnPool, σ::Int)
     ord = kkt.ordering
     block = pool.block
     i = kkt.surplus.row[σ]
@@ -217,10 +247,11 @@ end
     rank_one_update!(kkt, update, nnz) -> Bool
 
 `H_eff ± vvᵀ` with the vector assembled by [`surplus_vector!`](@ref) (`+` if `update`).
-Returns `false` if CHOLMOD flags a downdate as not positive definite.
+Returns `false` if the backend flags a downdate as not positive definite.
 """
 function rank_one_update!(kkt::KKTSystem, update::Bool, nnz::Int)
-    ok = Cholmod.updown!(kkt.factor, update, kkt.v_rows, kkt.v_vals, nnz)
+    ok = @timed_section kkt.timer :updown LDLt.updown!(kkt.factor, update, kkt.v_rows,
+                                                         kkt.v_vals, nnz)
     # a rank-one change leaves stored entries behind like rowdel: count it for refactoring
     kkt.updates_since_refactor += 1
     kkt.total_updates += 1
@@ -243,7 +274,7 @@ indicate a (numerically) singular effective reduced Hessian. The unmasked norm i
 so that a column whose masked part vanishes is still recognised as singular.
 """
 min_pivot_ratio(kkt::KKTSystem) =
-    Cholmod.min_scaled_pivot(kkt.factor, items(kkt.ordering.N), kkt.hdiag)
+    LDLt.min_scaled_pivot(kkt.factor, items(kkt.ordering.N), kkt.hdiag)
 
 """
     refactor!(kkt, pool)
@@ -254,10 +285,10 @@ pivots degrade.
 
 Indices are re-activated in increasing order: with CHOLMOD's natural ordering every
 `rowadd` then appends the last row of the factor (one triangular solve, no update of
-trailing columns).
+trailing columns). The dense backend always appends, in any order.
 """
 function refactor!(kkt::KKTSystem, pool::ColumnPool)
-    Cholmod.reset!(kkt.factor)
+    LDLt.reset!(kkt.factor)
     ord = kkt.ordering
     order = sort!(copy(items(ord.N)))
     empty!(ord.N)
@@ -277,7 +308,7 @@ Debug check, run after every QPAS iteration in debug mode:
 1. the ordering invariants hold;
 2. the effective reduced Hessian on `N`, recomputed from scratch as `(A_eff Z)ᵀ(A_eff Z)`,
    equals the incrementally maintained mirror `debug_H` (if present);
-3. the CHOLMOD factor reproduces it: `(L D Lᵀ)[N, N] = H_eff`, and every inactive index has
+3. the factor reproduces it: `(L D Lᵀ)[N, N] = H_eff`, and every inactive index has
    `D[k] = 1` and no coupling to `N` in `L`.
 
 All work is restricted to `N` (`|N| ≤ m`), so this stays usable on full-size instances.
@@ -302,9 +333,8 @@ function verify_kkt(kkt::KKTSystem, pool::ColumnPool; tol::Real = 1e-8)
     end
 
     # LDLᵀ restricted to the rows of N must reproduce H_eff
-    L, d = Cholmod.factor_matrices(kkt.factor)
-    LN = L[idx, :]
-    err = maximum(abs, Matrix(LN * Diagonal(d) * LN') - H; init = 0.0) / scale
+    L, d = LDLt.factor_matrices(kkt.factor)
+    err = _factor_error(L, d, idx, H, scale)
     err <= tol || error("KKT verification: LDLᵀ factor is off by $err on N")
     # inactive indices must still be identity rows, decoupled from N
     active = falses(length(d))
@@ -315,4 +345,21 @@ function verify_kkt(kkt::KKTSystem, pool::ColumnPool; tol::Real = 1e-8)
     maximum(abs, L[idx, inactive]; init = 0.0) <= tol * scale ||
         error("KKT verification: L couples N to inactive indices")
     return err
+end
+
+_factor_error(L, d, idx, H, scale) =
+    (LN = L[idx, :]; maximum(abs, Matrix(LN * Diagonal(d) * LN') - H; init = 0.0) / scale)
+
+"""
+    factor_residual(kkt, pool) -> Float64
+
+`max |(L D Lᵀ)[N, N] - H_eff| / max(1, max |H_eff|)` with `H_eff` rebuilt from the pool: how
+far the incrementally updated factor has drifted from the matrix it represents. Used by the
+diagnostics traces; `O(m|N|² + |N|³)`.
+"""
+function factor_residual(kkt::KKTSystem, pool::ColumnPool)
+    idx, H = reduced_hessian(kkt.ordering, pool; row_free = kkt.surplus.row_free)
+    isempty(idx) && return 0.0
+    L, d = LDLt.factor_matrices(kkt.factor)
+    return _factor_error(L, d, idx, H, max(1.0, maximum(abs, H)))
 end

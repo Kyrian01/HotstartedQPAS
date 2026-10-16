@@ -14,11 +14,46 @@ end
         @test [e.name for e in exps][1:3] == ["I1", "I2", "I3"]
         i3 = exps[3]
         @test i3.instance.n_nodes == 175 && i3.instance.n_pilots == 10
-        @test i3.solvers == ["exact", "lp", "qpas"]          # HiGHS QPs disabled for I3
+        @test i3.solvers == ["exact", "qpas"]                # LP and HiGHS QPs disabled for I3
         @test exps[1].solvers == ["exact", "lp", "explicit_qp", "eliminated_qp", "qpas"]
         @test i3.cg_options.stabilization.delta == 1.0
-        @test i3.cg_options.pricing === :first_improving
+        @test i3.cg_options.pricing === :all_blocks
         @test i3.qpas_options.refactor_interval == 150
+        @test i3.qpas_options.factorization === :dense
+        # the backend comparison pairs generate the same instance and differ only in the factor
+        byname = Dict(e.name => e for e in exps)
+        for inst in ("I3", "L2")
+            c, d = byname["cmp_$(inst)_cholmod"], byname["cmp_$(inst)_dense"]
+            @test c.qpas_options.factorization === :cholmod
+            @test d.qpas_options.factorization === :dense
+            @test (c.instance.n_nodes, c.instance.n_tasks, c.instance.seed) ==
+                  (d.instance.n_nodes, d.instance.n_tasks, d.instance.seed)
+        end
+        @test byname["I3_first_improving"].cg_options.pricing === :first_improving
+        @test byname["I3_diag"].cg_options.diagnostics_residual
+    end
+
+    @testset "factorization backend" begin
+        path = _write_config("""
+            [defaults.solvers]
+            qpas = true
+            [[experiment]]
+            name = "c"
+            [[experiment]]
+            name = "d"
+            [experiment.qpas]
+            factorization = "dense"
+            dense_refactor_interval = 500
+            """)
+        c, d = load_experiments(path)
+        @test c.qpas_options.factorization === :cholmod             # default
+        @test d.qpas_options.factorization === :dense
+        @test HQ.refactor_interval(d.qpas_options) == 500
+        @test HQ.refactor_interval(c.qpas_options) == 150
+        bad = _write_config("[[experiment]]\nname = \"x\"\n[experiment.solvers]\nqpas = true\n" *
+                            "[experiment.qpas]\nfactorization = \"lapack\"\n")
+        @test_throws ArgumentError load_experiments(bad)
+        @test_throws ArgumentError QPASMaster(factorization = :lapack)
     end
 
     @testset "defaults are merged and overridden per experiment" begin

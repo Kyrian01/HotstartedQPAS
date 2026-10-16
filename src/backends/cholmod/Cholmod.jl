@@ -24,6 +24,10 @@ module Cholmod
 using SuiteSparse_jll: libcholmod
 import SparseArrays
 using SparseArrays: SparseMatrixCSC, sparse
+# the generic functions this backend implements (shared with the dense backend)
+import ..LDLtInterface: UpdatableLDLt, rowadd!, rowdel!, updown!, solve!, rhs_buffer, pivot,
+                        min_scaled_pivot, reset!, dimension, factor_matrices, factor_stats,
+                        last_reach, backend_name, needs_periodic_refactor, backend_stats
 
 include("types.jl")
 include("libcholmod.jl")

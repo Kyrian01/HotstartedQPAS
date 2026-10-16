@@ -33,7 +33,7 @@ function main(args)
 
     if list
         for e in load_experiments(config)
-            println(rpad(e.name, 16), join(e.solvers, ", "))
+            println(rpad(e.name, 22), join(e.solvers, ", "))
         end
         return
     end
