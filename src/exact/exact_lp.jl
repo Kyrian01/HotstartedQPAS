@@ -17,15 +17,16 @@ struct ExactResult
 end
 
 """
-    solve_exact(instance; output = false, solver = "simplex") -> ExactResult
+    solve_exact(instance; output = false, solver = "simplex", time_limit = Inf) -> ExactResult
 
 Solve the full LP relaxation in one shot with HiGHS: all coupling rows and all pilots' flow
 conservation rows are stacked into a single constraint matrix
 (see [`stacked_constraint_matrix`](@ref)). `solver` is passed to HiGHS' `solver` option
-(`"simplex"`, `"ipm"` or `"choose"`).
+(`"simplex"`, `"ipm"` or `"choose"`); a finite `time_limit` (seconds) to its `time_limit`
+option, in which case the status may be `:time_limit` and the objective `NaN`.
 """
 function solve_exact(inst::CrewSchedulingInstance; output::Bool = false,
-                     solver::AbstractString = "simplex")
+                     solver::AbstractString = "simplex", time_limit::Real = Inf)
     t_setup = time_ns()
     E, P, T = n_edges(inst), n_pilots(inst), n_tasks(inst)
     A = stacked_constraint_matrix(inst.network, inst.task_matrix, P)
@@ -38,6 +39,7 @@ function solve_exact(inst::CrewSchedulingInstance; output::Bool = false,
 
     model = HighsModel(; output)
     set_option!(model, "solver", solver)
+    isfinite(time_limit) && set_option!(model, "time_limit", Float64(time_limit))
     # LP relaxation: box 0 ≤ x ≤ 1 on every pilot's edge flows
     pass_lp!(model, A, cost, zeros(nvar), ones(nvar), row_lower, row_upper)
     setup_time = (time_ns() - t_setup) * 1e-9

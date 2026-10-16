@@ -1,0 +1,938 @@
+\chapter{Computational Results}
+\label{chap:results}
+
+\vspace*{\fill}
+
+This chapter evaluates the hot-started nullspace active-set method on generated instances of
+the \textbf{airline crew scheduling problem}. Every instance is solved in two variants: with
+equality coverage rows only, and with 30\% of the coverage rows relaxed to ``$\ge$''
+inequalities. The active-set method is run with both factorizations of the effective reduced
+Hessian: the sparse factorization of \cref{chap:updates} and the dense factorization of
+\cref{chap:dense}.
+
+\medskip
+
+We first check \textbf{correctness}: every column generation method must reproduce the
+optimum of the full linear program, which is still small enough to be solved directly. We
+then study the \textbf{convergence behaviour} of regularized column generation, which
+consists of two clearly separated kinds of iterations, and the \textbf{computational time},
+broken down by solver, by iteration and by operation inside the active-set method, up to
+instances with almost a thousand linking rows.
+
+\medskip
+
+The last sections look inside the method. We follow the sizes of the nullspace sets over a run
+with inequality rows, measure the \textbf{contents of the sparse factorization} and the value
+of periodic refactorization, and finally compare the \textbf{two factorizations} operation by
+operation, in memory and in accuracy.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{Test Problem: Airline Crew Scheduling}
+\label{sec:test-problem}
+
+\subsection{The model}
+
+In the crew scheduling problem, $K$ pilots have to be assigned schedules that together
+operate a set of $m$ flights (\cref{ex:crew}). The schedules of a pilot are the source--sink
+paths in a \textbf{time--space network}: a directed acyclic graph $G = (V,E)$ whose nodes
+represent states of a pilot at given times, and whose edges represent the allowed transitions
+between them. The edge costs of pilot $k$ form the vector $c^{(k)}\in\R^{|E|}$, and every edge
+operates a subset of the flights, recorded in the \textbf{task matrix}
+$A_{\mathrm{task}}\in\{0,1\}^{m\times|E|}$. With $\xi_k\in\{0,1\}^{|E|}$ the edge vector of the
+path of pilot $k$ and $F$ the node--edge incidence matrix of $G$, the linear relaxation reads
+\begin{subequations} \label{eq:crew}
+\begin{align}
+\min_{\xi_1,\dots,\xi_K}\quad & \sum_{k=1}^{K} c^{(k)\top} \xi_k\\
+\text{s.t.}\quad & \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,\xi_k\Bigr)_i = 1 && (i\in\mathcal{R}_E),
+\label{eq:crew-eq}\\
+& \Bigl(\sum_{k=1}^{K}A_{\mathrm{task}}\,\xi_k\Bigr)_i \ge 1 && (i\in\mathcal{R}_I),
+\label{eq:crew-ineq}\\
+& F \xi_k = b^{(k)},\quad 0\le \xi_k\le 1 && (k = 1,\dots,K),
+\end{align}
+\end{subequations}
+where $b^{(k)}$ has the entry $-1$ at the source, $+1$ at the sink and $0$ elsewhere, and
+$\mathcal{R}_E$, $\mathcal{R}_I$ are the sets of equality and inequality coverage rows. This is a
+multi-block linear program (\cref{def:multiblock}) with identical block polytopes. A
+coverage row in $\mathcal{R}_E$ requires a flight to be operated exactly once; a row in
+$\mathcal{R}_I$ requires it at least once, which allows a pilot to travel on a flight as a
+passenger. The columns of the master problem are complete schedules, and the pricing
+problem~\eqref{eq:pricing} of pilot $k$ is a shortest path problem with the edge weights
+$c^{(k)} - A_{\mathrm{task}}^\top\pi$. These weights can be negative, but the graph is
+acyclic, so one pass of dynamic programming in topological order solves it in
+$O(|V|+|E|)$.
+
+\subsection{Instance generator}
+
+The instances are generated randomly but reproducibly.
+\begin{itemize}
+    \item \textbf{Network.} The nodes $1,\dots,|V|$ are ordered in time. A backbone edge
+          connects every node to the next one, which guarantees a source--sink path. A skip
+          edge from a node to any node at least two steps later exists independently with a
+          fixed probability. An edge that spans $\ell$ steps costs $\ell + U(0,1)$, multiplied
+          by $1 + 0.1\,U(0,1)$ for each pilot separately, where $U(0,1)$ is a uniform random
+          number.
+    \item \textbf{Flights.} Each skip edge operates a random set of up to ten flights whose
+          position in time is close to that of the edge. A flight is only attached to edges
+          that overlap in time, so that a single schedule operates every flight at most once.
+          The task matrix therefore has a banded structure.
+    \item \textbf{Feasibility.} Only flights that can be covered exactly once in the linear
+          relaxation are kept, so that the equality variant is feasible.
+    \item \textbf{Inequality rows.} In the inequality variant, a random 30\% of the coverage
+          rows are turned into ``$\ge1$'' rows.
+\end{itemize}
+
+\Cref{tab:instances} lists the six instance sizes. The instances I1--I4 are used for the
+comparison of all methods; S5 and S6, with up to 960 coverage rows, extend the study of
+scaling. The last column is the number of variables of the full edge-based
+formulation~\eqref{eq:crew}, which HiGHS solves directly to provide the reference optimum
+$z^\star$.
+
+\begin{table}[ht]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lrrrrrr}
+\toprule
+instance & $|V|$ & $|E|$ & $K$ & $m$ & $m_I$ (inequality variant) & variables of~\eqref{eq:crew} \\
+\midrule
+\tabinput{data/tab_instances.tex}
+\bottomrule
+\end{tabular}
+\caption{Test instances. $K$ is the number of pilots, $m$ the number of coverage rows, and
+$m_I$ the number of ``$\ge$'' rows in the inequality variant.}
+\label{tab:instances}
+\end{table}
+
+
+\section{Implementation and Setup}
+\label{sec:setup}
+
+All methods are implemented in Julia~1.12 \cite{bezanson2017julia} in one framework: the
+column generation driver, the pricing algorithm, the column pool and the statistics are
+shared, and only the solver of the restricted master problem differs. We compare six
+methods:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+method & master problem \\
+\midrule
+Exact LP (HiGHS) & none: formulation~\eqref{eq:crew} solved directly by the HiGHS simplex method \\
+LP CG (HiGHS) & classical linear master problem, HiGHS simplex, warm-started \\
+Explicit QP CG (HiGHS) & explicit regularized master problem~\eqref{eq:explicit}, HiGHS QP solver \\
+Eliminated QP CG (HiGHS) & eliminated regularized master problem~\eqref{eq:eliminated}, HiGHS QP \\
+QPAS CG, sparse factor & eliminated regularized master problem, \cref{alg:hot-qpas} with the factorization of \cref{chap:updates} \\
+QPAS CG, dense factor & eliminated regularized master problem, \cref{alg:hot-qpas} with the factorization of \cref{chap:dense} \\
+\bottomrule
+\end{tabular}
+}
+\end{center}
+
+HiGHS \cite{huangfu2018parallelizing} (version 1.15, with its simplex method for the LPs and
+its active-set QP solver for the QPs) is used through a persistent model, to which new columns
+are added incrementally, so that its LP solves are warm-started. The LP master starts with
+artificial columns of cost $M = 10^4$ on both sides of every linking row (\cref{sec:column-generation}),
+which keep it feasible until enough columns are generated. Our HiGHS implementation of the
+eliminated QP has no surplus variables, so it is run on the equality variant only. The sparse
+factorization of the active-set method uses CHOLMOD \cite{chen2008cholmod} from SuiteSparse~7.10
+for the factorization and its updates. The dense factorization is our own implementation of
+\cref{chap:dense}; its triangular solves call the BLAS routine \code{trsv} of OpenBLAS, and
+its rank-one modifications are plain loops over the columns of the stored array.
+
+\medskip
+
+All column generation runs use the same settings: the initial columns are the cheapest path
+of every pilot, pricing visits the pilots in random order and adds the first improving
+column, the proximal point rule moves the center after every iteration, and $\delta = 1$,
+$\varepsilon_{\mathrm{c}} = 10^{-6}$, $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The active-set
+method uses the column capacity $\nmax = 20\,000$ and the pivot tolerance
+$\varepsilon_{\mathrm{piv}} = 10^{-10}$ with both factorizations. The sparse factorization is
+refactorized every $\tau = 150$ updates unless stated otherwise; the dense factorization is
+only refactorized when the pivot invariant is violated (\cref{sec:dense-no-zeros}).
+
+\medskip
+
+The HiGHS QP masters are slow, so they are run to completion on I1 only; on the equality
+variant of I2 they are stopped after 120 seconds, which is enough to compare their path and
+their time per master problem with the active-set method. The LP master is run on I1--I3 with
+a limit of 900 seconds, and the direct LP solve of S5 and S6 is stopped after 300 seconds. All
+experiments ran single-threaded on an AMD Ryzen~7 7700 processor with 32\,GB of memory under
+Windows~11. Times of the active-set method are the faster of two runs, except for runs longer
+than one minute on S5 and S6, which were run once; all other times are from a single run.
+
+
+\section{Correctness}
+\label{sec:results-correctness}
+
+\Cref{tab:comparison-eq,tab:comparison-ineq} compare all methods on both variants. Besides the
+status, the number of column generation iterations, the number of generated columns and the
+times, they report three accuracy measures relative to the reference optimum $z^\star$:
+\begin{itemize}
+    \item the relative error of the cost, $(c^\top\lambda - z^\star)/|z^\star|$;
+    \item the relative gap of the best Lagrangian bound, $(z^\star - \theta)/|z^\star|$, which
+          is nonnegative for every valid bound (\cref{prop:lagrangian-bound});
+    \item the infeasibility $\lVert b - A\lambda\rVert_\infty$ of the final weights in the linking
+          rows (for inequality rows only the violated part).
+\end{itemize}
+
+\begin{table}[!htbp]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcrrrrccc}
+\toprule
+ & method & status & CG iter. & columns & time [s] & master [ms/iter.] & cost error & bound gap & infeasibility \\
+\midrule
+\tabinput{data/tab_comparison_eq.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Equality variant: all methods. ``time'' denotes a method stopped by its time limit
+(120\,s for the HiGHS QP masters on I2). Master times are averages per column generation
+iteration.}
+\label{tab:comparison-eq}
+\end{table}
+
+\begin{table}[!htbp]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcrrrrccc}
+\toprule
+ & method & status & CG iter. & columns & time [s] & master [ms/iter.] & cost error & bound gap & infeasibility \\
+\midrule
+\tabinput{data/tab_comparison_ineq.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Inequality variant (30\% ``$\ge$'' rows). The eliminated HiGHS QP master does not
+support inequality rows, and the HiGHS QP masters are run on I1 only.}
+\label{tab:comparison-ineq}
+\end{table}
+
+\paragraph{All methods reach the optimum.} Every column generation run that finishes within
+its time limit stops with an optimal status, and its Lagrangian bound agrees with $z^\star$
+to within $2\cdot10^{-7}$ relative or better. This confirms the exact termination criterion
+of \cref{thm:exact-termination} in practice, including the sign conditions of the inequality
+rows: the bound would be $-\infty$ if the projected duals violated them
+(\cref{rem:bound-sign}).
+
+\paragraph{The accuracy of the stabilized methods.} The stabilized methods stop when
+$\lVert\pi-\pihat\rVert_\infty\le\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$, which by
+\cref{prop:stop-accuracy} allows an infeasibility of up to $\delta\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$
+in the linking rows. The infeasibility column shows exactly this order of magnitude, about
+$10^{-5}$ for the larger instances, where the duals are of order $10$ to $100$. The cost
+$c^\top\lambda$ of such a slightly infeasible solution can be off by more than the
+infeasibility itself: on I2 it is $2\cdot10^{-5}$ below $z^\star$. The Lagrangian bound, which
+certifies the optimal value, is unaffected and agrees with $z^\star$ to about $2\cdot10^{-7}$. A
+tighter $\varepsilon_{\mathrm{c}}$ removes the cost error at the price of a few more center-only iterations. In a
+test on a smaller instance with $\delta = 5$, the cost error dropped from $10^{-6}$ for
+$\varepsilon_{\mathrm{c}} = 10^{-6}$ to $10^{-15}$ for $\varepsilon_{\mathrm{c}} = 10^{-9}$, with one additional iteration.
+
+\paragraph{The active-set method and HiGHS solve the same problem.} On instance I1, where
+all stabilized methods finish, the explicit and eliminated HiGHS QPs and the active-set method
+perform almost the same number of column generation iterations and generate almost the same
+number of columns: they follow the same sequence of master problems, as they should. The small
+differences come from the accuracy of the master solves, which affects the duals passed to
+pricing and hence the order in which columns are found.
+
+\paragraph{The two factorizations solve the same problem.} The two variants of the active-set
+method differ only in the linear algebra, so in exact arithmetic they produce the same iterates
+(\cref{sec:dense-comparison}). In floating point they agree closely: their final objectives
+differ by at most $6\cdot10^{-7}$ relative on all twelve runs (\cref{tab:backends} below),
+with the same accuracy against $z^\star$, and on I2 they perform exactly the same 11\,974
+iterations. Where the iteration counts differ, rounding differences have broken a tie in a
+ratio test or a pricing round differently, after which the runs continue on slightly
+different paths. The differences are at most 6\% on all runs but one: on the inequality
+variant of S6 the dense variant needs 9\,574 iterations against 6\,926, with the same final
+objective.
+
+
+\section[Convergence and the Two Phases]{Convergence and the Two Phases of Regularized Column Generation}
+\label{sec:results-phases}
+
+\Cref{fig:convergence} shows the convergence of the master objective on instance I2 for all
+column generation methods, together with the change of the duals from one iteration to the
+next. Here and in the rest of this section, ``QPAS'' denotes the active-set method with the
+dense factorization; the sparse one follows the same path (it performs the same iterations on
+I2).
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.6cm},
+    width=0.5\textwidth, height=0.42\textwidth, ymode=log,
+    xlabel={CG iteration}, tick label style={font=\scriptsize}, label style={font=\small},
+    title style={font=\small}, legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east},
+    every axis plot/.append style={line width=0.7pt}]
+\nextgroupplot[title={relative error of the master objective}, ymin=1e-9, ymax=1]
+    \addplot[cred] table[x=it, y=gap, col sep=comma] {data/conv_I2_0_lp.csv};
+    \addplot[cgreen] table[x=it, y=gap, col sep=comma] {data/conv_I2_0_explicit_qp.csv};
+    \addplot[cpurple, densely dashed] table[x=it, y=gap, col sep=comma] {data/conv_I2_0_eliminated_qp.csv};
+    \addplot[cblue] table[x=it, y=gap, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \legend{LP CG, explicit QP, eliminated QP, QPAS}
+\nextgroupplot[title={dual change $\lVert\pi_t - \pi_{t-1}\rVert_\infty$}, ymin=1e-6]
+    \addplot[cred, only marks, mark size=0.3pt] table[x=it, y=dpi, col sep=comma] {data/conv_I2_0_lp.csv};
+    \addplot[cblue, only marks, mark size=0.3pt] table[x=it, y=dpi, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \legend{LP CG, QPAS}
+\end{groupplot}
+\end{tikzpicture}
+\caption{Instance I2 (equality variant). Left: relative distance of the master objective to
+$z^\star$. Right: change of the duals between consecutive iterations. The two HiGHS QP masters
+stop at their time limit of 120 seconds after about 2\,000 iterations.}
+\label{fig:convergence}
+\end{figure}
+
+\paragraph{Stabilization.} The duals of the linear master problem jump by up to $2\cdot10^4$
+in the first iterations, when the artificial columns of cost $M = 10^4$ are still active, and
+by about $2$ in a typical iteration of the second half of the run. The regularized duals change
+by about $10^{-4}$ in a typical iteration of the second half. The linear master problem,
+however, reaches the optimum in fewer iterations on this instance. Its jumps explore the dual
+space quickly, while the proximal term keeps the regularized duals close to the center, so
+that they need many small steps. Regularization therefore does not reduce the number of
+iterations here. What it buys is iterations whose master problems differ only slightly from
+each other, which is exactly what the hot start exploits: an iteration of the active-set
+method costs $0.08$\,ms on average with the dense factorization and $0.19$\,ms with the
+sparse one, against $29$\,ms for the warm-started LP master (\cref{tab:comparison-eq}).
+
+\paragraph{The QP masters follow the same path.} The curves of the explicit QP, the
+eliminated QP and the active-set method are almost indistinguishable over the first 2\,000
+iterations, after which the HiGHS QP masters run out of time.
+
+\medskip
+
+The right panel of \cref{fig:convergence} shows a second feature of the regularized methods:
+from some point on, the duals change by very small amounts in most iterations. These are the
+center-only iterations of \cref{sec:center-update}. \Cref{fig:phases} shows how the two kinds
+of iterations are distributed over a run.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 2, horizontal sep=1.6cm, vertical sep=0.6cm,
+    xlabels at=edge bottom, xticklabels at=edge bottom},
+    width=0.5\textwidth, height=0.3\textwidth, xlabel={CG iteration},
+    tick label style={font=\scriptsize}, label style={font=\small}, title style={font=\small},
+    every axis plot/.append style={line width=0.7pt}]
+\nextgroupplot[title={I2, equality variant}, ylabel={columns}]
+    \addplot[cblue] table[x=it, y=ncol, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+\nextgroupplot[title={I2, inequality variant}]
+    \addplot[cblue] table[x=it, y=ncol, col sep=comma] {data/conv_I2_30_qpas_dense.csv};
+\nextgroupplot[ylabel={share adding a column}, ymin=0, ymax=1.05]
+    \addplot[const plot mark mid, fill=cblue!35, draw=cblue] table[x=it, y=share, col sep=comma]
+        {data/phases_I2_0.csv} \closedcycle;
+\nextgroupplot[ymin=0, ymax=1.05]
+    \addplot[const plot mark mid, fill=cblue!35, draw=cblue] table[x=it, y=share, col sep=comma]
+        {data/phases_I2_30.csv} \closedcycle;
+\end{groupplot}
+\end{tikzpicture}
+\caption{The two phases of regularized column generation (active-set method, instance I2).
+Top: number of columns. Bottom: share of the iterations in each window of 100 iterations
+that add a column; the remaining iterations are center-only iterations.}
+\label{fig:phases}
+\end{figure}
+
+\paragraph{Two phases.} A run starts with a \textbf{column phase}, in which (almost) every
+iteration adds a column. It is followed by a \textbf{proximal phase}, in which most
+iterations are center-only iterations that move the center towards the restricted dual
+optimum, interrupted by occasional iterations that find a new column because the duals have
+moved. The phases are not strictly separated: columns keep appearing far into the proximal
+phase.
+\Cref{tab:phases} quantifies this for all instances.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrrrr}
+\toprule
+ & & & & & first & last & \multicolumn{2}{c}{mean inner iter.} & master time \\
+instance & ineq. & CG iter. & with column & center-only & center-only & column & column & center-only & center-only \\
+\midrule
+\tabinput{data/tab_phases.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Column-adding and center-only iterations of the active-set method (dense
+factorization). ``inner iter.'' counts the iterations of the active-set method per master
+problem.}
+\label{tab:phases}
+\end{table}
+
+The two kinds of iterations differ sharply in cost. A column-adding iteration needs on
+average tens of active-set iterations, since the new column is released and the working set
+adapts to it. A center-only iteration needs at most two on average: as shown in
+\cref{prop:center-only}, once the working set has settled, the direction is zero, and the
+master problem is solved by a single multiplier test. The length of the proximal phase
+varies a lot between instances. On I2 and I3 (equality variant) center-only iterations are
+the large majority, on I4 they are a minority. On all instances except the tiny I1 their share
+of the master time is much smaller than their share of the iterations.
+
+\Cref{fig:optimality} shows how the optimality measures evolve over the two phases for the
+active-set method on I2. In the column phase, the cost error, the error of the master
+objective and the infeasibility decrease together. In the proximal phase, the Lagrangian
+bound becomes available, since all pilots are priced in every center-only iteration. The
+bound approaches $z^\star$ from below at the same rate at which the master objective
+approaches it, so the two errors are indistinguishable in the plot. The infeasibility, and
+with it the cost error, decrease more slowly and in steps: each step is a change of the
+working set that ends one of the dual walks of \cref{prop:center-only}.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.78\textwidth, height=0.42\textwidth, ymode=log, xlabel={CG iteration},
+    ymin=1e-9, ymax=10, tick label style={font=\scriptsize}, label style={font=\small},
+    legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east, legend columns=2},
+    every axis plot/.append style={line width=0.7pt}]
+    \addplot[cred!45, only marks, mark=*, mark size=0.7pt] table[x=it, y=bgap, col sep=comma] {data/bound_I2_0_qpas_dense.csv};
+    \addplot[corange] table[x=it, y=costgap, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \addplot[cgreen] table[x=it, y=infeas, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \addplot[cblue, densely dashed] table[x=it, y=gap, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \legend{bound gap $(z^\star-\theta)/|z^\star|$, cost error $|c^\top\lambda - z^\star|/|z^\star|$,
+            infeasibility, master objective error}
+\end{axis}
+\end{tikzpicture}
+\caption{Optimality measures of the active-set method over a run (I2, equality variant). The
+Lagrangian bound is only available in iterations that price all pilots, which are the
+iterations that find no column.}
+\label{fig:optimality}
+\end{figure}
+
+
+\section{Computational Time}
+\label{sec:results-time}
+
+\paragraph{Master time per iteration.} \Cref{fig:master-time} shows the time of the master
+solve per column generation iteration on I2. The time of the LP master and of the two HiGHS QP
+masters grows with the number of columns. The HiGHS QP solvers take 80--95\,ms per iteration
+in the second half of their run, since they rebuild their internal factorization for every
+master problem. The active-set method stays between $0.003$ and $1.6$\,ms per iteration with
+the dense factorization and between $0.006$ and $6.5$\,ms with the sparse one, with medians
+of $0.04$ and $0.07$\,ms in the second half of the run. That is about three orders of
+magnitude below the HiGHS QP masters and almost three orders of magnitude below the median of
+$30$\,ms of the warm-started LP master.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.78\textwidth, height=0.42\textwidth, ymode=log, xlabel={CG iteration},
+    ylabel={master time per iteration [ms]}, tick label style={font=\scriptsize},
+    label style={font=\small}, legend style={font=\scriptsize, at={(0.98,0.5)}, anchor=east},
+    every axis plot/.append style={line width=0.8pt}]
+    \addplot[cred, dashdotted] table[x=it, y=mtavg, col sep=comma] {data/conv_I2_0_lp.csv};
+    \addplot[cgreen] table[x=it, y=mtavg, col sep=comma] {data/conv_I2_0_explicit_qp.csv};
+    \addplot[cpurple, densely dashed] table[x=it, y=mtavg, col sep=comma] {data/conv_I2_0_eliminated_qp.csv};
+    \addplot[corange] table[x=it, y=mtavg, col sep=comma] {data/conv_I2_0_qpas.csv};
+    \addplot[cblue] table[x=it, y=mtavg, col sep=comma] {data/conv_I2_0_qpas_dense.csv};
+    \legend{LP CG, explicit QP, eliminated QP, QPAS (sparse), QPAS (dense)}
+\end{axis}
+\end{tikzpicture}
+\caption{Master time per column generation iteration on I2 (moving average over 50
+iterations).}
+\label{fig:master-time}
+\end{figure}
+
+\paragraph{Where the time goes.} \Cref{fig:breakdown} splits the time of the active-set
+method into its operations, for both factorizations, as shares of the total time of the run
+with the sparse factorization. With the sparse factorization, the largest share, 32--48\%, is
+the direction computation (the right-hand side and the sparse solve with the factor), followed
+by the updates of the factorization and the periodic refactorization, together 26--55\%; the
+refactorization share grows with the instance size. The dense factorization cuts the
+direction computation by a factor of 2.5 to 4, the updates by a factor of 3 to 4.5, and the
+refactorizations almost entirely. What remains is dominated by operations that do not touch
+the factor: the multiplier test, the only operation whose cost grows with the number of
+columns, is now about as expensive as the direction computation on the equality variants and
+takes between a fifth and two fifths of the time of the dense runs. Pricing takes less than
+7\% of the total time on all instances shown.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[xbar stacked, table/col sep=comma, width=0.8\textwidth, height=0.95\textwidth, xmin=0, xmax=100,
+    xlabel={share of the total time of the sparse run [\%]}, ytick=data,
+    yticklabels from table={data/breakdown.csv}{label},
+    y dir=reverse, bar width=6.5pt, tick label style={font=\scriptsize}, label style={font=\small},
+    legend style={font=\scriptsize, at={(0.5,-0.08)}, anchor=north, legend columns=3},
+    reverse legend=false]
+    \addplot[fill=cblue!70, draw=cblue] table[x=direction, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \addplot[fill=corange!70, draw=corange] table[x=multipliers, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \addplot[fill=cgrey!50, draw=cgrey] table[x=step, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \addplot[fill=cgreen!60, draw=cgreen] table[x=updates, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \addplot[fill=cred!60, draw=cred] table[x=refactor, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \addplot[fill=cpurple!50, draw=cpurple] table[x=pricing, y expr=\coordindex, col sep=comma] {data/breakdown.csv};
+    \legend{direction, multipliers, step, updates, refactorization, pricing}
+\end{axis}
+\end{tikzpicture}
+\caption{Time breakdown of the active-set method and of pricing with the sparse and the dense
+factorization, as shares of the total time of the sparse run on the same instance. ``updates''
+are the expansions and reductions of the working set without the refactorizations.}
+\label{fig:breakdown}
+\end{figure}
+
+\Cref{tab:counters} lists the events inside the active-set method for every run. Over a full
+run, the working set changes tens to hundreds of thousands of times, and every change is a
+single update of the factorization. Representative swaps are rare, because representatives
+carry the largest weights. Singular reduced Hessians occur, but only a handful of times per
+run, and each is resolved by one zero-curvature step. The final nullspace dimension $|\Nx|$
+stays below the number of coverage rows, as guaranteed by \cref{cor:dimension}. The sparse
+factorization is rebuilt hundreds to thousands of times per run, almost all of them periodic
+refactorizations; the dense one is rebuilt at most 16 times, each time because a singular
+release had to be undone or a pivot had decayed.
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrcrrrrr}
+\toprule
+ & & AS iter. & steps (full) & expans. & swaps & reduct. & surplus exp./red. & sing. & updates & refact. & $|\Nx|$ & $|\Ns|$ \\
+\midrule
+\tabinput{data/tab_qpas_counters.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Events inside the active-set method (dense factorization) over a whole column
+generation run: active-set iterations, primal steps (of which full steps), expansions,
+representative swaps, reductions, expansions/reductions of surpluses, singular steps,
+factorization updates, refactorizations (sparse / dense factorization), and the final sizes of
+$\Nx$ and $\Ns$.}
+\label{tab:counters}
+\end{table}
+
+\paragraph{Scaling.} \Cref{fig:scaling} shows the total time of the active-set method with
+both factorizations and of the direct LP solve as the instances grow, up to S6 with 960
+coverage rows, and \cref{tab:scaling} gives the details of the two largest instances. From I2
+to S6 the time of the dense variant grows almost exactly with the third power of $m$. Of this,
+the number of active-set iterations accounts for a factor of about $m^2$ (from 62\,000 on I2 to
+950\,000 on S6, \cref{tab:counters}) and the time per iteration for a factor of about $m$. The
+latter is less than the $O(|\Nx|^2)$ of the factor operations because, at these sizes, the
+parts of an iteration that grow only linearly, such as the right-hand side, the step and the
+multiplier test, still take a large share of its time. The sparse variant grows faster, about
+with $m^{3.5}$, because its refactorizations take an increasing share of the time, and the
+direct LP solve grows faster still. With the dense
+factorization, the complete column generation run is faster than the direct solution of the
+full LP from I2 on in the equality variant and on all instances in the inequality variant, by
+a factor of three to four on I4 and S5. On S6, and on the inequality variant of S5, the direct
+LP solve did not finish within 300 seconds, while the active-set method with the dense
+factorization solved both variants of S6 in 84--95 seconds. The inequality variant is
+consistently faster than the equality variant, since it needs fewer active-set iterations
+(\cref{sec:results-ineq}).
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.72\textwidth, height=0.5\textwidth, xmode=log, ymode=log,
+    xlabel={coverage rows $m$}, ylabel={total time [s]}, tick label style={font=\scriptsize},
+    label style={font=\small}, legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+    every axis plot/.append style={line width=0.8pt}, log basis x=10, unbounded coords=jump]
+    \addplot[corange, mark=triangle*, mark size=1.8pt] table[x=m, y=qpas, col sep=comma] {data/scaling_eq.csv};
+    \addplot[corange, dashed, mark=triangle, mark size=1.8pt] table[x=m, y=qpas, col sep=comma] {data/scaling_ineq.csv};
+    \addplot[cblue, mark=*, mark size=1.5pt] table[x=m, y=dense, col sep=comma] {data/scaling_eq.csv};
+    \addplot[cblue, dashed, mark=o, mark size=1.5pt] table[x=m, y=dense, col sep=comma] {data/scaling_ineq.csv};
+    \addplot[black!75, mark=square*, mark size=1.5pt] table[x=m, y=exact, col sep=comma] {data/scaling_eq.csv};
+    \addplot[black!75, dashed, mark=square, mark size=1.5pt] table[x=m, y=exact, col sep=comma] {data/scaling_ineq.csv};
+    \addplot[cgrey, dotted, domain=40:1000, samples=2] {1.1e-7*x^3};
+    \legend{QPAS sparse (equality), QPAS sparse (inequality), QPAS dense (equality),
+            QPAS dense (inequality), exact LP (equality), exact LP (inequality), $\propto m^3$}
+\end{axis}
+\end{tikzpicture}
+\caption{Total time against the number of coverage rows for instances I1--I4, S5 and S6. The
+exact LP of S6 and of the inequality variant of S5 did not finish within 300 seconds.}
+\label{fig:scaling}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccrrrrrrcc}
+\toprule
+ & ineq. & exact LP [s] & factor & status & CG iter. & columns & time [s] & master [ms/iter.] & refact. & $|\Nx|$ & bound gap & infeasibility \\
+\midrule
+\tabinput{data/tab_scaling.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{The large instances S5 and S6. The bound gap is only available where the direct LP
+solve finished within its limit of 300 seconds.}
+\label{tab:scaling}
+\end{table}
+
+
+\section{Inequality Rows}
+\label{sec:results-ineq}
+
+With 30\% inequality rows, column generation needs fewer active-set iterations on all
+instances, and fewer column generation iterations on I1--I4, considerably fewer on I1--I3
+(\cref{tab:comparison-eq,tab:comparison-ineq}): over-covering a flight is allowed, so the
+optimal schedules are found with fewer columns, and the proximal phase is shorter.
+
+\medskip
+
+\Cref{fig:sets} follows the sizes of the nullspace sets over a run with inequality rows.
+Within the first iterations, about 35 surpluses are released: the initial schedules
+over-cover their rows, so the duals of these rows become negative. These rows drop out of
+$\Aeff$, and by \cref{cor:dimension} they also reduce the room for nullspace columns,
+$|\Nx|\le m - |\Ns|$. Over the rest of the run $|\Ns|$ only changes slowly, between 37 and 51,
+ending at 48, while individual surpluses are released and fixed again thousands of times
+(\cref{tab:counters}). The number of nullspace columns grows during the column phase and ends
+at $|\Nx| = 306$, just below its bound $m - |\Ns| = 308$: at the end of the run, the effective
+reduced Hessian is almost as large as it can be.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.78\textwidth, height=0.42\textwidth, xlabel={CG iteration},
+    ylabel={set size}, tick label style={font=\scriptsize}, label style={font=\small},
+    legend style={font=\scriptsize, at={(0.98,0.5)}, anchor=east},
+    every axis plot/.append style={line width=0.8pt}, ymin=0]
+    \addplot[cgrey, dashed] table[x=it, y=m, col sep=comma] {data/sets_I3_30.csv};
+    \addplot[cred] table[x=it, y=bound, col sep=comma] {data/sets_I3_30.csv};
+    \addplot[cblue] table[x=it, y=N, col sep=comma] {data/sets_I3_30.csv};
+    \addplot[corange] table[x=it, y=Ns, col sep=comma] {data/sets_I3_30.csv};
+    \legend{$m$, $m - |\Ns|$ (bound on $|\Nx|$), $|\Nx|$, $|\Ns|$}
+\end{axis}
+\end{tikzpicture}
+\caption{Nullspace columns and free surpluses over a run (I3, inequality variant, dense
+factorization), sampled every 20 iterations.}
+\label{fig:sets}
+\end{figure}
+
+\medskip
+
+Surplus operations are frequent (\cref{tab:counters}): with inequality rows, 14--19\% of all
+expansions and reductions of the working set on I2--S6 are expansions and reductions of
+surpluses, each of which is a rank-one update or downdate of the factorization. The average
+time per master problem of the inequality variant is of the same order as that of the equality
+variant (\cref{tab:comparison-eq,tab:comparison-ineq}). The remaining differences come from the
+mix of iterations. On I2, for instance, the inequality variant has relatively few of the cheap
+center-only iterations (\cref{tab:phases}), which raises its average. Singular reduced
+Hessians, of columns or surpluses, occurred at most six times per run on I1--I4. The singular
+surplus release of \cref{thm:zc-surplus} is exercised by the test suite of the implementation
+on constructed instances.
+
+
+\section{Fill-In and Refactorization of the Sparse Factor}
+\label{sec:results-fill}
+
+The factorization of $\Heff$ is updated tens of thousands of times per run
+(\cref{tab:counters}). \Cref{fig:fill} shows what this does to the contents of the sparse
+factor, using the quantities of \cref{def:stored-effective}, without refactorization, with
+refactorization every 150 updates, and, for comparison, for the dense factor of
+\cref{chap:dense}.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=3 by 1, horizontal sep=0.5cm, yticklabels at=edge left},
+    width=0.38\textwidth, height=0.4\textwidth, xlabel={CG iteration}, ymode=log,
+    ymin=100, ymax=2e6, tick label style={font=\scriptsize}, label style={font=\small},
+    title style={font=\small}, legend style={font=\scriptsize, at={(0.98,0.02)}, anchor=south east},
+    every axis plot/.append style={line width=0.7pt}]
+\nextgroupplot[title={sparse, never refactorized}, ylabel={off-diagonal entries of $L$}]
+    \addplot[cred] table[x=it, y=stored, col sep=comma] {data/fill_I3_tau0.csv};
+    \addplot[cblue] table[x=it, y=effective, col sep=comma] {data/fill_I3_tau0.csv};
+    \addplot[cgrey, dashed] table[x=it, y=dense, col sep=comma] {data/fill_I3_tau0.csv};
+    \legend{stored, nonzero, dense equiv.}
+\nextgroupplot[title={sparse, $\tau = 150$}]
+    \addplot[cred] table[x=it, y=stored, col sep=comma] {data/fill_I3_tau150.csv};
+    \addplot[cblue] table[x=it, y=effective, col sep=comma] {data/fill_I3_tau150.csv};
+    \addplot[cgrey, dashed] table[x=it, y=dense, col sep=comma] {data/fill_I3_tau150.csv};
+\nextgroupplot[title={dense factor}]
+    \addplot[cred] table[x=it, y=stored, col sep=comma] {data/fill_I3_dense_tau0.csv};
+    \addplot[cblue] table[x=it, y=effective, col sep=comma] {data/fill_I3_dense_tau0.csv};
+    \addplot[cgrey, dashed] table[x=it, y=dense, col sep=comma] {data/fill_I3_dense_tau0.csv};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Contents of the factor $L$ of $\Heff$ over a run (I3, equality variant), sampled
+every 25 iterations: stored off-diagonal entries, the nonzero ones among them, and the
+off-diagonal entries of a dense factor of the same dimension. In the right panel the three
+curves coincide.}
+\label{fig:fill}
+\end{figure}
+
+\paragraph{The true factor is dense.} In all panels the nonzero entries coincide with the
+dense equivalent: the factor of $\Heff$ has essentially no exploitable sparsity. This confirms
+\cref{rem:natural-ordering} and the starting point of \cref{chap:dense}: a fill-reducing
+ordering cannot help, and the cost of a solve grows quadratically with $|\Nx|$.
+
+\paragraph{Structural zeros accumulate.} Without the periodic refactorization, the stored
+pattern of the sparse factor only grows. On I3 it reaches almost a million entries in the
+column phase, about thirty times the size of the actual factor, and almost all of them are
+structural zeros. Every solve and every update pays for them, and they connect active indices
+with inactive ones, which enlarges the reach of the sparse solves. The drop around iteration
+1\,400 is a refactorization triggered by a degraded pivot (\cref{sec:detection}). It resets the
+pattern, after which it grows again and stays at 1.2 to 2.6 times the size of the factor. With
+refactorization every 150 updates, the stored pattern stays within a small margin of the
+effective one for most of the run. The dense factor stores exactly the dense equivalent at
+every moment (\cref{prop:no-zeros}).
+
+\paragraph{The refactorization interval.} \Cref{tab:refactor} and \cref{fig:refactor} vary the
+refactorization interval of the sparse factorization. Without refactorization, the method is
+three to five times slower, and the sparse factor needs six to eleven times more memory.
+Refactorizing too often is also expensive, since every rebuild costs $O(|\Nx|^3)$
+(\cref{prop:refactor-cost}): with an interval of 25, I3 needs almost 3\,000 rebuilds and is
+70\% slower than with the default. Between these extremes the optimum is flat: any interval
+between 100 and 600 is within about 10\% of the best time, and the default of 150 is within
+3\% of the best on both instances. For the dense factorization, which has no structural zeros,
+a periodic refactorization only costs time: with $\tau = 150$ it is 5--10\% slower than without.
+Both dense variants are faster than the best sparse one by a factor of 2.1 to 2.6.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllrrrrrrr}
+\toprule
+ & factor & interval $\tau$ & time [s] & refact. & max.\ stored & max.\ zeros & mean zero share & reach$/|\Nx|$ & peak memory [MB] \\
+\midrule
+\tabinput{data/tab_refactor.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Effect of the refactorization interval (equality variants). ``max.\ zeros'' is the
+largest number of stored entries that are zero; for the dense factor these are entries of
+$L$ that happen to vanish, not structural zeros. ``reach$/|\Nx|$'' is the average number of
+rows touched by a solve per nullspace column. ``never'' still refactorizes when a pivot
+degrades. These runs form a separate series (times are the faster of two runs), so the times
+differ slightly from \cref{tab:comparison-eq}.}
+\label{tab:refactor}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.68\textwidth, height=0.42\textwidth, xmode=log, xlabel={refactorization interval $\tau$},
+    ylabel={total time [s]}, xtick={25,50,100,150,300,600,2000},
+    xticklabels={25,50,100,150,300,600,never}, tick label style={font=\scriptsize},
+    label style={font=\small}, legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+    ymin=0, unbounded coords=jump, every axis plot/.append style={line width=0.8pt}]
+    \addplot[cblue, mark=*, mark size=1.5pt] table[x=tau, y=time, col sep=comma] {data/refactor_I2.csv};
+    \addplot[corange, mark=square*, mark size=1.5pt] table[x=tau, y=time, col sep=comma] {data/refactor_I3.csv};
+    \addplot[cblue, dashed, domain=20:2500] table[x=tau, y=time, col sep=comma] {data/refactor_I2_dense.csv};
+    \addplot[corange, dashed] table[x=tau, y=time, col sep=comma] {data/refactor_I3_dense.csv};
+    \legend{I2 sparse, I3 sparse, I2 dense, I3 dense}
+\end{axis}
+\end{tikzpicture}
+\caption{Total time of the active-set method against the refactorization interval of the
+sparse factorization. The dashed lines show the dense factorization without periodic
+refactorization.}
+\label{fig:refactor}
+\end{figure}
+
+
+\section{The Sparse and the Dense Factorization}
+\label{sec:results-factorizations}
+
+\Cref{tab:backends} compares the two factorizations on all instances and variants. Both
+variants of the active-set method reach the same objective and the same accuracy
+(\cref{sec:results-correctness}), and their iteration counts are close, so the time
+difference is caused by the linear algebra.
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrrrrrrc}
+\toprule
+ & & & CG iter. & \multicolumn{3}{c}{master time [s]} & \multicolumn{2}{c}{total time [s]} & refact. & \multicolumn{2}{c}{factor memory [MB]} & objective \\
+\cmidrule(lr){5-7}\cmidrule(lr){8-9}\cmidrule(lr){11-12}
+instance & ineq. & $m$ & sparse / dense & sparse & dense & speedup & sparse & dense & sparse / dense & sparse & dense & rel.\ difference \\
+\midrule
+\tabinput{data/tab_backends.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{The two factorizations of the effective reduced Hessian. Master times are summed over
+the run, the speedup is their ratio, and the factor memory is the peak of the memory held by
+the factorization.}
+\label{tab:backends}
+\end{table}
+
+\paragraph{Speed.} The dense factorization makes the master problems 2.3 to 4.2 times
+faster, and the speedup grows with the number of linking rows: 2.4 to 2.8 at $m = 225$ and $356$,
+3.3 at $m = 480$, 3.6 at $m = 668$ and 4.2 at $m = 960$ (equality variants). Two effects
+contribute. First, every operation on the factor is cheaper, as shown below. Second, the sparse
+factorization has to be rebuilt periodically, and since a rebuild costs $O(|\Nx|^3)$ while the
+interval stays fixed, these rebuilds take a growing share of its time
+(\cref{fig:breakdown}): almost 40\% on S6, with more than 4\,000 rebuilds. The dense
+factorization was rebuilt at most 16 times per run.
+
+\paragraph{Cost per operation.} \Cref{tab:ops} lists the average time of the individual
+factor operations as measured inside the runs. On the instances of the study, a solve and a
+row addition are about five times faster with the dense factorization, and a row deletion five
+to seven times. Assembling
+a new row of $\Heff$ from the column pool, which is the same code for both factorizations,
+now costs more than adding it to the factor.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+ & \multicolumn{2}{c}{solve} & \multicolumn{2}{c}{row addition} & \multicolumn{2}{c}{row deletion} & \multicolumn{2}{c}{assembly of a row} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+instance & sparse & dense & sparse & dense & sparse & dense & sparse & dense \\
+\midrule
+\tabinput{data/tab_ops.tex}
+\bottomrule
+\end{tabular}
+\caption{Average time per factor operation in $\mu$s over a column generation run (equality
+variants). Row additions include those of the refactorizations.}
+\label{tab:ops}
+\end{table}
+
+To separate the cost of the operations from the behaviour of the active-set method,
+\cref{fig:micro} and \cref{tab:micro} measure them in isolation. The matrix is the Gram matrix
+of $k+1$ random sparse columns with entries in $\{-1,0,1\}$, which is dense like $\Heff$, both
+factorizations hold its first $k$ indices, and every operation is repeated and the median time
+is reported.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.4cm},
+    width=0.5\textwidth, height=0.42\textwidth, xmode=log, ymode=log, xlabel={active size $k$},
+    tick label style={font=\scriptsize}, label style={font=\small}, title style={font=\small},
+    legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+    every axis plot/.append style={line width=0.8pt}]
+\nextgroupplot[title={solve and row addition}, ylabel={time per operation [$\mu$s]}]
+    \addplot[corange, mark=*, mark size=1.2pt] table[x=k, y=sparse, col sep=comma] {data/micro_solve.csv};
+    \addplot[cblue, mark=*, mark size=1.2pt] table[x=k, y=dense, col sep=comma] {data/micro_solve.csv};
+    \addplot[corange, dashed, mark=square*, mark size=1.2pt] table[x=k, y=sparse, col sep=comma] {data/micro_append.csv};
+    \addplot[cblue, dashed, mark=square*, mark size=1.2pt] table[x=k, y=dense, col sep=comma] {data/micro_append.csv};
+    \legend{solve (sparse), solve (dense), append (sparse), append (dense)}
+\nextgroupplot[title={deletion and rank-one update}]
+    \addplot[corange, mark=*, mark size=1.2pt] table[x=k, y=sparse, col sep=comma] {data/micro_delete_first.csv};
+    \addplot[cblue, mark=*, mark size=1.2pt] table[x=k, y=dense, col sep=comma] {data/micro_delete_first.csv};
+    \addplot[corange, dashed, mark=square*, mark size=1.2pt] table[x=k, y=sparse, col sep=comma] {data/micro_update.csv};
+    \addplot[cblue, dashed, mark=square*, mark size=1.2pt] table[x=k, y=dense, col sep=comma] {data/micro_update.csv};
+    \legend{delete oldest (sparse), delete oldest (dense), update (sparse), update (dense)}
+\end{groupplot}
+\end{tikzpicture}
+\caption{Median time of the factor operations against the number $k$ of active indices, for a
+dense Gram matrix. The sparse factor has the dimension $\nmax = 20\,000$.}
+\label{fig:micro}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrr}
+\toprule
+ & \multicolumn{2}{c}{$k = 100$} & \multicolumn{2}{c}{$k = 350$} & \multicolumn{2}{c}{$k = 1000$} & \multicolumn{2}{c}{$k = 2000$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+operation & sparse & dense & sparse & dense & sparse & dense & sparse & dense \\
+\midrule
+\tabinput{data/tab_micro.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Median time per operation in $\mu$s, and the memory of the factor, against the number
+$k$ of active indices.}
+\label{tab:micro}
+\end{table}
+
+The dense factorization is faster for every operation and every size. The largest gains are
+for the operations that the sparse factorization performs through index structures: solves
+and appends are 2 to 10 times faster, refactorizations 6 to 12 times. Deletions and rank-one
+modifications, which both factorizations perform by the same column-oriented rank-one
+recursion, are 1.2 to 2.6 times faster. For the sparse factorization the time per operation
+grows faster than $k^2$ beyond $k\approx1000$, the dense one stays close to $k^2$. The memory
+of the dense factor is seven to nine times smaller, since it neither stores indices nor embeds
+the factor in $\nmax$ dimensions.
+
+\paragraph{Deletions.} By \cref{prop:delete-cost}, the cost of a deletion depends on the
+position of the removed index. Over a run, the trailing part $(t-\ell)/t$ that a deletion
+updates was on average 0.22 to 0.36 of the factor on all instances: as anticipated in
+\cref{sec:dense-delete}, most removed indices had been active only for a short time. The
+dense factor never needed more than $m+1$ positions, as guaranteed by~\eqref{eq:dense-size}.
+
+\paragraph{Accuracy.} \Cref{fig:residual} shows the residual
+$\max|(LDL^\top)_{\Nx\Nx} - \Heff|/\max(1,\max|\Heff|)$ of the factor over a run, with $\Heff$
+recomputed from the columns at every sample. For both factorizations it stays at the level of
+the rounding error, below $3\cdot10^{-15}$ on all runs of I1--I4, and it does not grow over
+the run. The dense factor is rebuilt only a handful of times per run and yet does not drift,
+even over almost 150\,000 updates on I4: the rank-one modifications of \cref{alg:c1} are
+stable in practice, as \cref{rem:c1-stability} suggests.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.4cm, yticklabels at=edge left},
+    width=0.5\textwidth, height=0.38\textwidth, ymode=log, ymin=1e-17, ymax=1e-13,
+    xlabel={CG iteration}, tick label style={font=\scriptsize}, label style={font=\small},
+    title style={font=\small}, legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east},
+    every axis plot/.append style={line width=0.7pt}]
+\nextgroupplot[title={I3, equality variant}, ylabel={relative residual}]
+    \addplot[corange] table[x=it, y=residual, col sep=comma] {data/resid_I3_0_sparse.csv};
+    \addplot[cblue] table[x=it, y=residual, col sep=comma] {data/resid_I3_0_dense.csv};
+    \legend{sparse, dense}
+\nextgroupplot[title={I4, inequality variant}]
+    \addplot[corange] table[x=it, y=residual, col sep=comma] {data/resid_I4_30_sparse.csv};
+    \addplot[cblue] table[x=it, y=residual, col sep=comma] {data/resid_I4_30_dense.csv};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Relative residual of the factorization over a run, sampled every 20 iterations.}
+\label{fig:residual}
+\end{figure}
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+The experiments support the main claims of this work.
+\begin{itemize}
+    \item \textbf{Correctness.} The active-set method solves the same sequence of master
+          problems as a general-purpose QP solver, reproduces the optimum of the full linear
+          program, and certifies it by the Lagrangian bound, for equality and inequality rows
+          and with both factorizations.
+    \item \textbf{Speed.} With the dense factorization, a master problem of the active-set
+          method costs between $0.003$ and $13$\,ms on average on our instances, and $0.08$\,ms
+          on I2. That is almost three orders of magnitude less than a HiGHS QP master and two
+          to three orders of magnitude less than a warm-started LP master. This makes regularized column
+          generation much faster than classical column generation, although it often needs
+          more iterations: on I3, 3.0\,s against 663\,s. The complete run is faster than the
+          direct solution of the full LP from I2 on, and on the largest instances the direct
+          solve does not finish within the time in which the active-set method is done.
+    \item \textbf{Inequality rows} add no new kind of linear algebra: the surplus operations
+          are rank-one modifications of the same factorization, free surpluses lower the bound
+          $m - |\Ns|$ on the size of $\Heff$, the time per master problem stays of the same
+          order, and the runs are shorter.
+    \item \textbf{The factorization.} The factor of $\Heff$ is dense. A sparse factorization
+          needs periodic refactorization to control its structural zeros, and a fixed interval
+          of a few hundred updates works well. A dense factorization in activation order
+          needs none, is two to four times faster with a speedup that grows with $m$, needs an
+          order of magnitude less memory, and is just as accurate.
+\end{itemize}
+
+The experiments also show the limits of the approach. Since $\Heff$ is dense, the cost of the
+method grows with the cube of the number of linking rows, and the \textbf{proximal phase} can
+be long, since the duals approach the restricted optimum in many small steps
+(\cref{prop:center-only}). With the dense factorization the factor is no longer the dominant
+cost: the multiplier test, which touches every column of the working set, now costs as much as
+the direction computation. Natural next steps are therefore an incremental multiplier test that
+avoids rescanning all columns, and an adaptive stabilization parameter in the proximal phase.
+A change of $\delta$ does not affect the factorization (\cref{rem:factor-independent}) and is
+therefore free for this method.

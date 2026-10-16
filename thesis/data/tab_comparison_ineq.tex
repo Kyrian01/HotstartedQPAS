@@ -1,16 +1,19 @@
-\multirow{4}{*}{I1} & Exact LP (HiGHS) & opt. & -- & -- & 0.01 & -- & $0$ & $0$ & $0$ \\
- & LP CG (HiGHS) & opt. & 138 & 141 & 0.03 & 0.220 & $0$ & $0$ & $1.8\cdot 10^{-15}$ \\
- & Explicit QP CG (HiGHS) & opt. & 370 & 89 & 0.56 & 1.489 & $5.1\cdot 10^{-11}$ & $2.1\cdot 10^{-10}$ & $1.2\cdot 10^{-9}$ \\
- & Hot-started QPAS CG & opt. & 369 & 94 & 0.01 & 0.020 & $0$ & $0$ & $8.4\cdot 10^{-15}$ \\
+\multirow{5}{*}{I1} & Exact LP (HiGHS) & opt. & -- & -- & 0.01 & -- & $0$ & $0$ & $0$ \\
+ & LP CG (HiGHS) & opt. & 138 & 141 & 0.03 & 0.206 & $0$ & $0$ & $1.8\cdot 10^{-15}$ \\
+ & Explicit QP CG (HiGHS) & opt. & 370 & 89 & 0.53 & 1.409 & $5.1\cdot 10^{-11}$ & $2.1\cdot 10^{-10}$ & $1.2\cdot 10^{-9}$ \\
+ & QPAS CG, sparse factor & opt. & 369 & 94 & 0.01 & 0.021 & $0$ & $0$ & $8.4\cdot 10^{-15}$ \\
+ & QPAS CG, dense factor & opt. & 370 & 91 & 0.00 & 0.005 & $0$ & $0$ & $1.1\cdot 10^{-14}$ \\
 \midrule
-\multirow{4}{*}{I2} & Exact LP (HiGHS) & opt. & -- & -- & 1.32 & -- & $0$ & $0$ & $0$ \\
- & LP CG (HiGHS) & opt. & 1\,860 & 1\,866 & 30.51 & 16.344 & $1.1\cdot 10^{-12}$ & $1.1\cdot 10^{-10}$ & $1.0\cdot 10^{-11}$ \\
- & Explicit QP CG (HiGHS) & opt. & 1\,573 & 715 & 95.51 & 60.638 & $-8.3\cdot 10^{-7}$ & $5.5\cdot 10^{-11}$ & $1.5\cdot 10^{-5}$ \\
- & Hot-started QPAS CG & opt. & 1\,630 & 716 & 0.78 & 0.457 & $-1.9\cdot 10^{-7}$ & $0$ & $5.6\cdot 10^{-6}$ \\
+\multirow{4}{*}{I2} & Exact LP (HiGHS) & opt. & -- & -- & 1.20 & -- & $0$ & $0$ & $0$ \\
+ & LP CG (HiGHS) & opt. & 1\,860 & 1\,866 & 31.28 & 16.756 & $1.1\cdot 10^{-12}$ & $1.1\cdot 10^{-10}$ & $1.0\cdot 10^{-11}$ \\
+ & QPAS CG, sparse factor & opt. & 1\,630 & 716 & 0.79 & 0.468 & $-1.9\cdot 10^{-7}$ & $0$ & $5.6\cdot 10^{-6}$ \\
+ & QPAS CG, dense factor & opt. & 1\,669 & 718 & 0.36 & 0.200 & $-4.4\cdot 10^{-7}$ & $0$ & $6.9\cdot 10^{-6}$ \\
 \midrule
-\multirow{3}{*}{I3} & Exact LP (HiGHS) & opt. & -- & -- & 5.43 & -- & $0$ & $0$ & $0$ \\
- & LP CG (HiGHS) & opt. & 3\,761 & 3\,770 & 302.25 & 80.270 & $0$ & $3.2\cdot 10^{-13}$ & $3.6\cdot 10^{-13}$ \\
- & Hot-started QPAS CG & opt. & 5\,460 & 1\,377 & 5.13 & 0.906 & $-4.7\cdot 10^{-9}$ & $2.7\cdot 10^{-10}$ & $4.0\cdot 10^{-6}$ \\
+\multirow{4}{*}{I3} & Exact LP (HiGHS) & opt. & -- & -- & 5.51 & -- & $0$ & $0$ & $0$ \\
+ & LP CG (HiGHS) & opt. & 3\,761 & 3\,770 & 305.14 & 81.036 & $0$ & $3.2\cdot 10^{-13}$ & $3.6\cdot 10^{-13}$ \\
+ & QPAS CG, sparse factor & opt. & 5\,460 & 1\,377 & 5.09 & 0.899 & $-4.7\cdot 10^{-9}$ & $2.7\cdot 10^{-10}$ & $4.0\cdot 10^{-6}$ \\
+ & QPAS CG, dense factor & opt. & 5\,193 & 1\,392 & 2.11 & 0.376 & $-1.6\cdot 10^{-8}$ & $2.6\cdot 10^{-10}$ & $5.8\cdot 10^{-6}$ \\
 \midrule
-\multirow{2}{*}{I4} & Exact LP (HiGHS) & opt. & -- & -- & 21.95 & -- & $0$ & $0$ & $0$ \\
- & Hot-started QPAS CG & opt. & 2\,856 & 2\,099 & 17.38 & 6.018 & $5.9\cdot 10^{-10}$ & $4.8\cdot 10^{-11}$ & $4.3\cdot 10^{-6}$ \\
+\multirow{3}{*}{I4} & Exact LP (HiGHS) & opt. & -- & -- & 22.29 & -- & $0$ & $0$ & $0$ \\
+ & QPAS CG, sparse factor & opt. & 2\,856 & 2\,099 & 17.06 & 5.910 & $5.9\cdot 10^{-10}$ & $4.8\cdot 10^{-11}$ & $4.3\cdot 10^{-6}$ \\
+ & QPAS CG, dense factor & opt. & 2\,960 & 2\,102 & 6.22 & 2.047 & $5.9\cdot 10^{-10}$ & $6.7\cdot 10^{-11}$ & $4.3\cdot 10^{-6}$ \\

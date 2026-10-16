@@ -7,7 +7,8 @@
 
 using Printf, Statistics
 
-const DATA = joinpath(@__DIR__, "..", "data")
+# HQ_PLOT_DATA=<dir> reads <dir>/raw and writes into <dir> instead (for testing the script)
+const DATA = get(ENV, "HQ_PLOT_DATA", joinpath(@__DIR__, "..", "data"))
 const RAW = joinpath(DATA, "raw")
 
 # ── tiny CSV reader (handles "quoted, fields") ──────────────────────────────────────────
@@ -35,8 +36,8 @@ function readcsv(path)
     return header, rows
 end
 
-num(x) = x == "" ? NaN : parse(Float64, x)
-col(rows, k) = [num(r[k]) for r in rows]
+num(x) = x in ("", "nan", "NaN", "missing") ? NaN : parse(Float64, x)
+col(rows, k) = [num(get(r, k, "")) for r in rows]
 
 function writecsv(path, header, columns...)
     open(path, "w") do io
@@ -62,6 +63,7 @@ function tex_sci(x)
     return @sprintf("\$%.1f\\cdot 10^{%d}\$", m, e)
 end
 tex_int(x) = begin
+    isnan(x) && return "--"
     s = string(round(Int, x))
     # thin space as thousands separator
     parts = String[]
@@ -71,11 +73,17 @@ tex_int(x) = begin
     pushfirst!(parts, s)
     join(parts, "\\,")
 end
+# time in seconds with a sensible number of digits
+tex_time(x) = isnan(x) ? "--" : x < 1 ? @sprintf("%.3f", x) : x < 100 ? @sprintf("%.2f", x) : @sprintf("%.0f", x)
 
 const SOLVER_NAME = Dict("exact" => "Exact LP (HiGHS)", "lp" => "LP CG (HiGHS)",
                          "explicit_qp" => "Explicit QP CG (HiGHS)",
                          "eliminated_qp" => "Eliminated QP CG (HiGHS)",
-                         "qpas" => "Hot-started QPAS CG")
+                         "qpas" => "QPAS CG, sparse factor",
+                         "qpas_dense" => "QPAS CG, dense factor")
+const MAIN_INSTANCES = ["I1", "I2", "I3", "I4"]
+const ALL_INSTANCES = ["I1", "I2", "I3", "I4", "S5", "S6"]
+tagof(name, frac) = "$(name)_$(round(Int, 100frac))"
 
 # ── 1. spy plot of D_W ──────────────────────────────────────────────────────────────────
 let p = joinpath(RAW, "spy_DW.csv")
@@ -89,27 +97,41 @@ let p = joinpath(RAW, "spy_DW.csv")
     end
 end
 
-# ── 2. instances table ──────────────────────────────────────────────────────────────────
+# ── 2. instances table (I1–I4 from the comparison, S5/S6 from the scaling runs) ─────────
 _, inst = readcsv(joinpath(RAW, "instances.csv"))
+_, scal = isfile(joinpath(RAW, "scaling.csv")) ? readcsv(joinpath(RAW, "scaling.csv")) :
+          (String[], Dict{String,String}[])
+for name in unique(r["instance"] for r in scal), frac in (0.0, 0.3)
+    rs = [r for r in scal if r["instance"] == name && num(r["frac"]) == frac]
+    isempty(rs) && continue
+    r = rs[1]
+    push!(inst, Dict("instance" => name, "frac" => r["frac"], "V" => r["V"], "E" => r["E"],
+                     "m" => r["m"], "m_ineq" => r["m_ineq"], "pilots" => r["pilots"],
+                     "N" => string(round(Int, num(r["E"]) * num(r["pilots"])))))
+end
+instrow(name, frac) = first(r for r in inst if r["instance"] == name && num(r["frac"]) == frac)
 open(joinpath(DATA, "tab_instances.tex"), "w") do io
-    for name in unique(r["instance"] for r in inst)
+    for name in ALL_INSTANCES
         count(r -> r["instance"] == name, inst) == 2 || continue
-        r0 = first(r for r in inst if r["instance"] == name && num(r["frac"]) == 0.0)
-        r3 = first(r for r in inst if r["instance"] == name && num(r["frac"]) == 0.3)
+        r0, r3 = instrow(name, 0.0), instrow(name, 0.3)
         println(io, join([name, r0["V"], tex_int(num(r0["E"])), r0["pilots"], r0["m"],
                           r3["m_ineq"], tex_int(num(r0["N"]))], " & "), " \\\\")
     end
 end
 
-# ── 3. comparison tables ────────────────────────────────────────────────────────────────
+# ── 3. comparison tables (I1–I4) ────────────────────────────────────────────────────────
 _, comp = readcsv(joinpath(RAW, "comparison.csv"))
+crow(name, frac, solver) = begin
+    rs = [r for r in comp if r["instance"] == name && num(r["frac"]) == frac && r["solver"] == solver]
+    isempty(rs) ? nothing : rs[1]
+end
 function comparison_table(frac)
     io = IOBuffer()
-    names = unique(r["instance"] for r in comp)
+    names = [n for n in MAIN_INSTANCES if any(r -> r["instance"] == n, comp)]
     for (ni, name) in enumerate(names)
         rows = [r for r in comp if r["instance"] == name && num(r["frac"]) == frac]
         isempty(rows) && continue
-        order = ["exact", "lp", "explicit_qp", "eliminated_qp", "qpas"]
+        order = ["exact", "lp", "explicit_qp", "eliminated_qp", "qpas", "qpas_dense"]
         sort!(rows; by = r -> findfirst(==(r["solver"]), order))
         zstar = num(rows[1]["exact_objective"])
         for (k, r) in enumerate(rows)
@@ -139,52 +161,106 @@ end
 write(joinpath(DATA, "tab_comparison_eq.tex"), comparison_table(0.0))
 write(joinpath(DATA, "tab_comparison_ineq.tex"), comparison_table(0.3))
 
-# ── 4. QPAS counters and time breakdown ─────────────────────────────────────────────────
+# ── 4. details of the active-set method: counters, time breakdown, operations ───────────
 _, det = readcsv(joinpath(RAW, "qpas_details.csv"))
-getdet(name, frac, key) = begin
-    r = [d for d in det if d["instance"] == name && num(d["frac"]) == frac && d["key"] == key]
+getdet(name, frac, solver, key) = begin
+    r = [d for d in det if d["instance"] == name && num(d["frac"]) == frac &&
+                           d["solver"] == solver && d["key"] == key]
     isempty(r) ? "" : r[1]["value"]
 end
+# "a (b, c)" -> (a, b, c); "a / b" -> (a, b)
+parse_op(s) = (m = match(r"([\d.eE+-]+) \((\d+), ([\d.eE+-]+)\)", s);
+               m === nothing ? (NaN, NaN, NaN) : (num(m[1]), num(m[2]), num(m[3])))
+parse_pair(s) = (p = split(s, " / "); length(p) == 2 ? (num(strip(p[1])), num(strip(p[2]))) : (NaN, NaN))
+
 open(joinpath(DATA, "tab_qpas_counters.tex"), "w") do io
-    for name in unique(r["instance"] for r in inst), frac in (0.0, 0.3)
-        g(k) = getdet(name, frac, k)
+    for name in ALL_INSTANCES, frac in (0.0, 0.3)
+        g(k) = getdet(name, frac, "qpas_dense", k)
         g("active-set iterations") == "" && continue
         steps = split(g("primal steps (full)"), " ")
         full = strip(steps[2], ['(', ')'])
         slack = g("slack expansions / reductions")
-        slack = slack == "" ? "--" : replace(slack, " / " => " / ")
+        slack = slack == "" ? "--" : join((tex_int(num(strip(s))) for s in split(slack, "/")), " / ")
         nfree = g("final free slacks |N_s|")
+        refs = getdet(name, frac, "qpas", "refactorizations")
         println(io, join([name, frac == 0 ? "--" : "30\\%", tex_int(num(g("active-set iterations"))),
                           tex_int(num(steps[1])) * " (" * tex_int(num(full)) * ")",
                           tex_int(num(g("working-set expansions"))),
-                          g("of which representative swaps"),
+                          tex_int(num(g("of which representative swaps"))),
                           tex_int(num(g("working-set reductions"))), slack,
-                          g("singular-Hessian steps"), tex_int(num(g("CHOLMOD row updates"))),
-                          g("refactorizations"), g("final |N| (nullspace dim.)"),
+                          g("singular-Hessian steps"),
+                          tex_int(num(g("factor updates (row add/del, rank-one)"))),
+                          (refs == "" ? "--" : tex_int(num(refs))) * " / " * g("refactorizations"),
+                          g("final |N| (nullspace dim.)"),
                           nfree == "" ? "--" : nfree], " & "), " \\\\")
     end
 end
+
+# time breakdown: both factorizations, as shares of the total time of the sparse run
 open(joinpath(DATA, "breakdown.csv"), "w") do io
     println(io, "label,direction,multipliers,step,updates,refactor,pricing")
-    for name in unique(r["instance"] for r in inst), frac in (0.0, 0.3)
-        g(k) = num(getdet(name, frac, k))
-        getdet(name, frac, "time direction [s]") == "" && continue
-        dir, mul, stp = g("time direction [s]"), g("time multipliers [s]"), g("time step [s]")
-        exp_, red = g("time expand [s]"), g("time reduce [s]")
-        ref = g("time refactor [s] (within expand/reduce)")
-        r = first(c for c in comp if c["instance"] == name && num(c["frac"]) == frac && c["solver"] == "qpas")
-        label = frac == 0 ? "$(name) eq." : "$(name) ineq."
-        tot = dir + mul + stp + exp_ + red + num(r["pricing_s"])
-        shares = [dir, mul, stp, exp_ + red - ref, ref, num(r["pricing_s"])] ./ tot .* 100
-        println(io, join(vcat(label, [@sprintf("%.2f", x) for x in shares]), ","))
+    for name in ALL_INSTANCES[2:end], frac in (0.0, 0.3)
+        getdet(name, frac, "qpas", "time direction [s]") == "" && continue
+        parts = Dict{String,Vector{Float64}}()
+        for solver in ("qpas", "qpas_dense")
+            g(k) = num(getdet(name, frac, solver, k))
+            dir, mul, stp = g("time direction [s]"), g("time multipliers [s]"), g("time step [s]")
+            exp_, red = g("time expand [s]"), g("time reduce [s]")
+            ref = g("time refactor [s] (within expand/reduce)")
+            r = crow(name, frac, solver)
+            pr = r === nothing ? NaN : num(r["pricing_s"])
+            parts[solver] = [dir, mul, stp, exp_ + red - ref, ref, pr]
+        end
+        tot = sum(parts["qpas"])
+        for (solver, lab) in (("qpas", "sparse"), ("qpas_dense", "dense"))
+            label = "$(name) $(frac == 0 ? "eq." : "ineq.") $(lab)"
+            println(io, join(vcat(label, [@sprintf("%.2f", x) for x in parts[solver] ./ tot .* 100]), ","))
+        end
     end
 end
 
-# ── 5. convergence traces (I2) ──────────────────────────────────────────────────────────
+# comparison of the two factorizations on every instance
+open(joinpath(DATA, "tab_backends.tex"), "w") do io
+    for name in ALL_INSTANCES, frac in (0.0, 0.3)
+        rs, rd = crow(name, frac, "qpas"), crow(name, frac, "qpas_dense")
+        (rs === nothing || rd === nothing) && continue
+        ms, md = num(rs["master_s"]), num(rd["master_s"])
+        ts, td = num(rs["total_s"]), num(rd["total_s"])
+        os, od = num(rs["objective"]), num(rd["objective"])
+        mems = parse_pair(getdet(name, frac, "qpas", "factor memory now / peak [MB]"))[2]
+        memd = parse_pair(getdet(name, frac, "qpas_dense", "factor memory now / peak [MB]"))[2]
+        m = num(instrow(name, frac)["m"])
+        println(io, join([name, frac == 0 ? "--" : "30\\%", tex_int(m),
+                          tex_int(num(rs["iterations"])) * " / " * tex_int(num(rd["iterations"])),
+                          tex_time(ms), tex_time(md), @sprintf("%.1f", ms / md),
+                          tex_time(ts), tex_time(td),
+                          tex_int(num(getdet(name, frac, "qpas", "refactorizations"))) * " / " *
+                              getdet(name, frac, "qpas_dense", "refactorizations"),
+                          tex_num(mems; digits = 1), tex_num(memd; digits = 1),
+                          tex_sci(abs(os - od) / abs(os))], " & "), " \\\\")
+    end
+end
+
+# time per factor operation (µs per call) on selected instances
+open(joinpath(DATA, "tab_ops.tex"), "w") do io
+    for name in ("I2", "I3", "I4", "S5", "S6")
+        g(solver, op) = parse_op(getdet(name, 0.0, solver, "factor op $(op) [s] (calls, µs/call)"))
+        getdet(name, 0.0, "qpas", "time direction [s]") == "" && continue
+        cells = String[name]
+        for op in ("solve", "rowadd", "rowdel", "assemble")
+            s, d = g("qpas", op)[3], g("qpas_dense", op)[3]
+            push!(cells, tex_num(s; digits = 1), tex_num(d; digits = 1))
+        end
+        println(io, join(cells, " & "), " \\\\")
+    end
+end
+
+# ── 5. convergence traces (I2, I3) ──────────────────────────────────────────────────────
 for (tag, frac) in (("I2_0", 0.0), ("I2_30", 0.3), ("I3_0", 0.0), ("I3_30", 0.3))
     name = split(tag, "_")[1]
-    zstar = num(first(r for r in comp if r["instance"] == name && num(r["frac"]) == frac)["exact_objective"])
-    for solver in ("lp", "explicit_qp", "eliminated_qp", "qpas")
+    crow(name, frac, "exact") === nothing && continue
+    zstar = num(crow(name, frac, "exact")["exact_objective"])
+    for solver in ("lp", "explicit_qp", "eliminated_qp", "qpas", "qpas_dense")
         p = joinpath(RAW, "trace_$(tag)_$(solver).csv")
         isfile(p) || continue
         _, tr = readcsv(p)
@@ -209,7 +285,7 @@ for (tag, frac) in (("I2_0", 0.0), ("I2_30", 0.3), ("I3_0", 0.0), ("I3_30", 0.3)
         bi = findall(!isnan, bgap)
         bi = bi[thin(length(bi), 600)]
         writecsv(joinpath(DATA, "bound_$(tag)_$(solver).csv"), ["it", "bgap"], it[bi], bgap[bi])
-        if solver == "qpas"
+        if solver == "qpas_dense"
             # phases: per bin of 100 iterations, share of iterations that added a column
             B = 100
             nb = cld(length(it), B)
@@ -220,11 +296,10 @@ for (tag, frac) in (("I2_0", 0.0), ("I2_30", 0.3), ("I3_0", 0.0), ("I3_30", 0.3)
     end
 end
 
-# ── 6. center-only statistics table ─────────────────────────────────────────────────────
+# ── 6. center-only statistics table (dense factor, the default) ─────────────────────────
 open(joinpath(DATA, "tab_phases.tex"), "w") do io
-    for name in unique(r["instance"] for r in inst), frac in (0.0, 0.3)
-        tag = "$(name)_$(round(Int, 100frac))"
-        p = joinpath(RAW, "trace_$(tag)_qpas.csv")
+    for name in MAIN_INSTANCES, frac in (0.0, 0.3)
+        p = joinpath(RAW, "trace_$(tagof(name, frac))_qpas_dense.csv")
         isfile(p) || continue
         _, tr = readcsv(p)
         added = col(tr, "columns_added") .> 0
@@ -242,36 +317,47 @@ open(joinpath(DATA, "tab_phases.tex"), "w") do io
     end
 end
 
-# ── 7. diagnostics: sets and fill ───────────────────────────────────────────────────────
-for tag in ("I2_0", "I2_30", "I3_0", "I3_30", "I4_0", "I4_30")
-    p = joinpath(RAW, "diag_$(tag)_qpas.csv")
+# ── 7. diagnostics: sets, fill, residual ────────────────────────────────────────────────
+for name in ALL_INSTANCES, frac in (0.0, 0.3)
+    tag = tagof(name, frac)
+    p = joinpath(RAW, "diag_$(tag)_qpas_dense.csv")
     isfile(p) || continue
     _, d = readcsv(p)
-    name = split(tag, "_")[1]
-    frac = endswith(tag, "_30") ? 0.3 : 0.0
-    m = num(first(r for r in inst if r["instance"] == name && num(r["frac"]) == frac)["m"])
+    m = num(instrow(name, frac)["m"])
     it = col(d, "iteration")
-    N = col(d, "N")
-    Ns = col(d, "N_s")
-    Ns = [isnan(x) ? 0.0 : x for x in Ns]
+    Ns = [isnan(x) ? 0.0 : x for x in col(d, "N_s")]
     writecsv(joinpath(DATA, "sets_$(tag).csv"), ["it", "N", "Ns", "bound", "m"],
-             it, N, Ns, m .- Ns, fill(m, length(it)))
+             it, col(d, "N"), Ns, m .- Ns, fill(m, length(it)))
 end
-for name in ("I2", "I3"), tau in (0, 25, 150, 600)
-    p = joinpath(RAW, "diag_$(name)_tau$(tau).csv")
+# factor residual ‖LDLᵀ − H_eff‖ over a run, both factorizations
+for name in MAIN_INSTANCES, frac in (0.0, 0.3)
+    tag = tagof(name, frac)
+    ps, pd = joinpath(RAW, "diag_$(tag)_qpas.csv"), joinpath(RAW, "diag_$(tag)_qpas_dense.csv")
+    (isfile(ps) && isfile(pd)) || continue
+    for (p, suffix) in ((ps, "sparse"), (pd, "dense"))
+        _, d = readcsv(p)
+        haskey(d[1], "factor_residual") || continue
+        writecsv(joinpath(DATA, "resid_$(tag)_$(suffix).csv"), ["it", "residual", "N"],
+                 col(d, "iteration"), max.(col(d, "factor_residual"), 1e-18), col(d, "N"))
+    end
+end
+const FILL_RUNS = [("tau0", "never"), ("tau25", "25"), ("tau150", "150"), ("tau600", "600"),
+                   ("dense_tau0", "dense")]
+for name in ("I2", "I3"), (suffix, _) in FILL_RUNS
+    p = joinpath(RAW, "diag_$(name)_$(suffix).csv")
     isfile(p) || continue
     _, d = readcsv(p)
-    writecsv(joinpath(DATA, "fill_$(name)_tau$(tau).csv"),
-             ["it", "stored", "effective", "dense", "reach", "N", "cholmod"],
+    writecsv(joinpath(DATA, "fill_$(name)_$(suffix).csv"),
+             ["it", "stored", "effective", "dense", "reach", "N", "MB"],
              col(d, "iteration"), col(d, "factor_stored"), col(d, "factor_effective"),
              col(d, "factor_dense"), col(d, "reach") ./ max.(col(d, "N"), 1), col(d, "N"),
-             col(d, "cholmod_MB"))
+             col(d, "factor_MB"))
 end
 let p = joinpath(RAW, "refactor.csv")
     if isfile(p)
         _, rf = readcsv(p)
         for name in ("I2", "I3")
-            rows = [r for r in rf if r["instance"] == name]
+            rows = [r for r in rf if r["instance"] == name && r["backend"] == "cholmod"]
             finite = sort([r for r in rows if num(r["tau"]) > 0]; by = r -> num(r["tau"]))
             never = [r for r in rows if num(r["tau"]) == 0]
             # finite intervals as a line; "never" (tau = 0) as a separate point at x = 2000,
@@ -279,20 +365,26 @@ let p = joinpath(RAW, "refactor.csv")
             xs = vcat([num(r["tau"]) for r in finite], 1000.0, [2000.0 for _ in never])
             ts = vcat(col(finite, "total_s"), NaN, col(never, "total_s"))
             writecsv(joinpath(DATA, "refactor_$(name).csv"), ["tau", "time"], xs, ts)
+            # the dense factor without periodic refactorization, as a horizontal reference line
+            dn = [r for r in rf if r["instance"] == name && r["backend"] == "dense" && num(r["tau"]) == 0]
+            isempty(dn) || writecsv(joinpath(DATA, "refactor_$(name)_dense.csv"), ["tau", "time"],
+                                    [20.0, 2500.0], fill(num(dn[1]["total_s"]), 2))
         end
         open(joinpath(DATA, "tab_refactor.tex"), "w") do io
             for name in ("I2", "I3")
                 rows = [r for r in rf if r["instance"] == name]
                 for (k, r) in enumerate(rows)
-                    tau = num(r["tau"])
-                    dp = joinpath(RAW, "diag_$(name)_tau$(round(Int, tau)).csv")
+                    tau = round(Int, num(r["tau"]))
+                    dense = r["backend"] == "dense"
+                    dp = joinpath(RAW, "diag_$(name)_$(dense ? "dense_" : "")tau$(tau).csv")
                     _, d = readcsv(dp)
                     st, ef = col(d, "factor_stored"), col(d, "factor_effective")
                     reach = col(d, "reach") ./ max.(col(d, "N"), 1)
-                    peak = maximum(col(d, "cholmod_peak_MB"))
+                    peak = maximum(col(d, "factor_peak_MB"))
                     waste = mean([s == 0 ? 0.0 : (s - e) / s for (s, e) in zip(st, ef)])
                     first_col = k == 1 ? "\\multirow{$(length(rows))}{*}{$name}" : ""
-                    println(io, join([first_col, tau == 0 ? "never" : string(round(Int, tau)),
+                    println(io, join([first_col, dense ? "dense" : "sparse",
+                                      tau == 0 ? "never" : string(tau),
                                       tex_num(num(r["total_s"])), tex_int(num(r["refactorizations"])),
                                       tex_int(maximum(st)), tex_int(maximum(st .- ef)),
                                       tex_num(100waste; digits = 0) * "\\%",
@@ -307,28 +399,88 @@ end
 
 # ── 8. scaling ──────────────────────────────────────────────────────────────────────────
 let
-    # I1, I2 from the comparison run, I3–S6 from the stress runs (same machine and code)
-    pts = Dict{Tuple{String,Float64},Tuple{Float64,Float64,Float64}}()   # (m, qpas, exact)
-    for name in ("I1", "I2", "I3", "I4"), frac in (0.0, 0.3)
-        rq = first(r for r in comp if r["instance"] == name && num(r["frac"]) == frac && r["solver"] == "qpas")
-        re = first(r for r in comp if r["instance"] == name && num(r["frac"]) == frac && r["solver"] == "exact")
-        m = num(first(r for r in inst if r["instance"] == name && num(r["frac"]) == frac)["m"])
-        pts[(name, frac)] = (m, num(rq["total_s"]), num(re["total_s"]))
+    pts = Dict{Tuple{String,Float64},NTuple{4,Float64}}()   # (m, sparse, dense, exact)
+    for name in MAIN_INSTANCES, frac in (0.0, 0.3)
+        rs, rd, re = crow(name, frac, "qpas"), crow(name, frac, "qpas_dense"), crow(name, frac, "exact")
+        (rs === nothing || rd === nothing || re === nothing) && continue
+        pts[(name, frac)] = (num(instrow(name, frac)["m"]), num(rs["total_s"]), num(rd["total_s"]),
+                             num(re["total_s"]))
     end
-    for f in ("scaling_stress1.csv", "scaling_stress2.csv")
-        _, rows = readcsv(joinpath(RAW, f))
-        for r in rows
-            r["instance"] in ("I1", "I2", "I3", "I4") && continue   # taken from the comparison
-            ex = haskey(r, "exact_s") && num(r["exact_s"]) > 0 ? num(r["exact_s"]) : NaN
-            pts[(r["instance"], num(r["ineq"]))] = (num(r["m"]), num(r["total_s"]), ex)
+    for name in unique(r["instance"] for r in scal), frac in (0.0, 0.3)
+        rs = [r for r in scal if r["instance"] == name && num(r["frac"]) == frac]
+        length(rs) == 2 || continue
+        get_(solver) = first(r for r in rs if r["solver"] == solver)
+        s, d = get_("qpas"), get_("qpas_dense")
+        ex = s["exact_status"] == "optimal" ? num(s["exact_s"]) : NaN
+        pts[(name, frac)] = (num(s["m"]), num(s["total_s"]), num(d["total_s"]), ex)
+    end
+    for (frac, suffix) in ((0.0, "eq"), (0.3, "ineq"))
+        keys_ = [(n, frac) for n in ALL_INSTANCES if haskey(pts, (n, frac))]
+        writecsv(joinpath(DATA, "scaling_$(suffix).csv"), ["name", "m", "qpas", "dense", "exact"],
+                 first.(keys_), [pts[k][1] for k in keys_], [pts[k][2] for k in keys_],
+                 [pts[k][3] for k in keys_], [pts[k][4] for k in keys_])
+    end
+    # the large instances in detail
+    open(joinpath(DATA, "tab_scaling.tex"), "w") do io
+        for name in unique(r["instance"] for r in scal), frac in (0.0, 0.3)
+            rs = [r for r in scal if r["instance"] == name && num(r["frac"]) == frac]
+            isempty(rs) && continue
+            ex_ok = rs[1]["exact_status"] == "optimal"
+            zstar = num(rs[1]["exact_objective"])
+            for (k, r) in enumerate(sort(rs; by = r -> r["solver"]))
+                first_cols = k == 1 ? ["\\multirow{2}{*}{$name}", frac == 0 ? "\\multirow{2}{*}{--}" : "\\multirow{2}{*}{30\\%}",
+                                       "\\multirow{2}{*}{" * (ex_ok ? tex_time(num(r["exact_s"])) : "\$>" * string(round(Int, num(r["exact_s"]))) * "\$") * "}"] :
+                                      ["", "", ""]
+                bgap = ex_ok ? (zstar - num(r["bound"])) / abs(zstar) : NaN
+                println(io, join(vcat(first_cols,
+                                      [r["solver"] == "qpas" ? "sparse" : "dense",
+                                       r["status"] == "optimal" ? "opt." : r["status"],
+                                       tex_int(num(r["iterations"])), tex_int(num(r["columns"])),
+                                       tex_time(num(r["total_s"])),
+                                       tex_num(1000 * num(r["master_s"]) / num(r["iterations"]); digits = 2),
+                                       tex_int(num(r["refactorizations"])), r["final_N"],
+                                       ex_ok ? tex_sci(bgap) : "--", tex_sci(num(r["infeasibility"]))]),
+                                 " & "), " \\\\")
+            end
+            println(io, "\\midrule")
         end
     end
-    order = ["I1", "I2", "I3", "I4", "S5", "S6"]
-    for (frac, suffix) in ((0.0, "eq"), (0.3, "ineq"))
-        keys_ = [(n, frac) for n in order if haskey(pts, (n, frac))]
-        writecsv(joinpath(DATA, "scaling_$(suffix).csv"), ["name", "m", "qpas", "exact"],
-                 first.(keys_), [pts[k][1] for k in keys_], [pts[k][2] for k in keys_],
-                 [pts[k][3] for k in keys_])
+    # drop the trailing \midrule
+    p = joinpath(DATA, "tab_scaling.tex")
+    s = read(p, String)
+    write(p, replace(s, r"\\midrule\s*$" => ""))
+end
+
+# ── 9. micro benchmark of the factor operations ─────────────────────────────────────────
+let p = joinpath(RAW, "micro.csv")
+    if isfile(p)
+        _, mc = readcsv(p)
+        ks = sort(unique(num.(getindex.(mc, "k"))))
+        val(k, b, op) = (r = [x for x in mc if num(x["k"]) == k && x["backend"] == b && x["op"] == op];
+                         isempty(r) ? NaN : num(r[1]["median_us"]))
+        for op in ("solve", "append", "delete_first", "delete_middle", "update", "downdate",
+                   "rebuild", "memory_MB")
+            writecsv(joinpath(DATA, "micro_$(op).csv"), ["k", "sparse", "dense", "ratio"], ks,
+                     [val(k, "cholmod", op) for k in ks], [val(k, "dense", op) for k in ks],
+                     [val(k, "cholmod", op) / val(k, "dense", op) for k in ks])
+        end
+        open(joinpath(DATA, "tab_micro.tex"), "w") do io
+            sel = [k for k in (100.0, 350.0, 1000.0, 2000.0) if k in ks]
+            for (op, label) in (("solve", "solve"), ("append", "append / row addition at the end"),
+                                ("delete_first", "delete the oldest index"),
+                                ("delete_middle", "delete a middle index"),
+                                ("update", "rank-one update"), ("downdate", "rank-one downdate"),
+                                ("rebuild", "refactorization (\$k\$ appends)"),
+                                ("memory_MB", "memory [MB]"))
+                cells = [label]
+                for k in sel
+                    s, d = val(k, "cholmod", op), val(k, "dense", op)
+                    f(x) = op == "memory_MB" ? tex_num(x; digits = 1) : x >= 1000 ? tex_int(x) : tex_num(x; digits = 1)
+                    push!(cells, f(s), f(d))
+                end
+                println(io, join(cells, " & "), " \\\\")
+            end
+        end
     end
 end
 

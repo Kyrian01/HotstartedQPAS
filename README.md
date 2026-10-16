@@ -2,9 +2,9 @@
 
 Column generation for the multi-pilot crew scheduling LP, with quadratic proximal
 stabilization and a **hot-started nullspace active-set QP solver (QPAS)** whose reduced-Hessian
-LDLᵀ factorization is updated in place, either with CHOLMOD (the thesis method) or with a dense
-factor of the active block (`factorization = "dense"`, ~2.5x faster master solves, see
-[`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md)).
+LDLᵀ factorization is updated in place, either as a sparse fixed-size factor with CHOLMOD or
+as a dense factor of the active block (`factorization = "dense"`, 2–4x faster master solves;
+thesis Chapter 8).
 
 ## The thesis
 
@@ -22,15 +22,14 @@ included:
 | 5 Nullspace Method | explicit sparse nullspace basis, decoupled reduced KKT system, effective reduced Hessian, multipliers = reduced costs |
 | 6 Efficient Updates | fixed-size `n_max` factor, expand/reduce, CHOLMOD `rowadd`/`rowdel`/`updown`, sparse solves, refactorization, hot start |
 | 7 Singular Reduced Hessians | detection and the zero-curvature step |
-| 8 Computational Results | crew scheduling instances, correctness, timings, inequality rows, fill-in |
+| 8 Dense Factorization | compact factor in activation order: append, delete by rank-one update, method C1, no structural zeros |
+| 9 Computational Results | crew scheduling instances up to m = 960, correctness, timings, inequality rows, fill-in, sparse vs dense factor |
 
 The LaTeX source is in `thesis/` (`pdflatex main`, twice). The figures are drawn by pgfplots
 from `thesis/data/`, which `thesis/scripts/generate_data.jl` and `make_plot_data.jl`
 produce. The earlier version of the thesis, which covers equality rows only and uses
 different numbering, is [`docs/Masterthesis_Kyrian_Baumer.pdf`](docs/Masterthesis_Kyrian_Baumer.pdf).
-Unless stated otherwise, thesis references below point to the new thesis. The dense backend
-is not in the thesis yet; its derivations are in
-[`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md).
+Unless stated otherwise, thesis references below point to the new thesis.
 
 ## Quick start
 
@@ -95,7 +94,7 @@ print_details(qpas)
 
 | # | solver | restricted master problem | thesis |
 |---|--------|---------------------------|--------|
-| 1 | `solve_exact` | — : the edge-based LP with all coupling and flow rows stacked in one matrix, HiGHS | §2.1, §8.1 |
+| 1 | `solve_exact` | — : the edge-based LP with all coupling and flow rows stacked in one matrix, HiGHS | §2.1, §9.1 |
 | 2 | `HighsLPMaster` | LP master with Big-M slacks, persistent HiGHS instance (`addCols`, warm-started simplex) | §2.3, Alg. 2.1 |
 | 3a | `HighsExplicitQPMaster` | stabilized QP that keeps `w`: Hessian `δI` on `w` only, HiGHS QP | §3.2 |
 | 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`: Hessian `(AX)ᵀ(AX)/δ`, HiGHS QP | §3.3 |
@@ -113,25 +112,22 @@ stability center to have converged (`π = π̂`, equivalently `AXλ = b`). There
 
 ## Results
 
-For the full results (all instances, equality and inequality variants, fill-in and
-refactorization) see thesis Chapter 8. Below is one sample run on instance I3: δ = 1,
-Apple M-series, Julia 1.13, single thread, 600 s time limit per method. "gap" is `objective − exact optimum`.
+The full results are in thesis Chapter 9 (`julia --project thesis/scripts/generate_data.jl`
+regenerates them, ~75 min; AMD Ryzen 7 7700, Julia 1.12, single thread, δ = 1). Total column
+generation time in seconds, equality variants:
 
-```
-I3: |V|=175, |E|=1546, pilots=10, tasks=360
-method                       status        iter   time [s]  master [ms]  inner it.       objective        gap   infeas
-Exact LP (HiGHS simplex)     optimal      21096      3.821          NaN      21096     1860.368950   0.00e+00  0.0e+00
-LP CG (HiGHS)                optimal       4771    504.198      105.616    1109096     1860.368950   1.35e-10  1.2e-12
-Explicit QP CG (HiGHS)       optimal       3047    522.231      171.309    5089921     1860.368537  -4.13e-04  5.7e-06
-Eliminated QP CG (HiGHS)     time_limit    2569    600.565      233.517    3688735     1860.367287  -1.66e-03  3.7e-05
-Hot-start QPAS CG            optimal       3020      5.439        1.762     119327     1860.368427  -5.23e-04  1.1e-05
-```
+| instance | m | exact LP | LP CG | QPAS, sparse factor | QPAS, dense factor |
+|---|---|---|---|---|---|
+| I2 | 225 | 1.50 | 70.9 | 2.54 | 1.18 |
+| I3 | 356 | 6.61 | 663 | 7.79 | 2.96 |
+| I4 | 480 | 24.2 | – | 22.6 | 6.98 |
+| S5 | 668 | 97.0 | – | 92.7 | 25.8 |
+| S6 | 960 | > 300 | – | 396 | 95.3 |
 
-The QPAS is ~93x faster than LP column generation in total time (~60x per master solve). The
-stabilized gaps (relative ~3e-7) come from stopping at `center_tolerance`: the final iterate
-satisfies `AXλ = b` only to ~1e-5, and its master objective equals the exact optimum to all
-printed digits. Lower `center_tolerance` for tighter gaps. On I2 the QPAS takes ~1.0 s
-versus ~46 s for LP CG.
+All runs that finish reproduce the exact optimum, and their Lagrangian bound agrees with it to
+≤ 2e-7 relative. The stabilized runs stop at `center_tolerance`, so the final iterate satisfies
+`AXλ = b` only to ~1e-5; lower `center_tolerance` for tighter cost errors. The HiGHS QP masters
+take 60–90 ms per master problem on I2, against 0.08 ms for the QPAS with the dense factor.
 
 ## Project layout
 
@@ -221,6 +217,8 @@ in without touching the driver.
 | structural zeros, periodic refactorization (§6.5) | `QPASOptions(refactor_interval = …)` |
 | hot start, center-only iterations (§6.6) | `register_columns!` (new column ⇒ W, factor unchanged) |
 | singular reduced Hessian, zero-curvature step (Ch. 7) | `reduce_working_set!` + `_singular_step!` |
+| dense factor in activation order: append, delete, method C1 (§8.2–8.5, Alg. 8.1) | `DenseLDLt.rowadd!` / `rowdel!` / `updown!` |
+| no structural zeros, refactorization only on pivot decay (§8.6) | `dense_refactor_interval = 0`, `needs_periodic_refactor` |
 
 ## Implementation notes for the QPAS
 
@@ -275,7 +273,7 @@ measured or tested. Shorter working notes are in
 With exact termination, the stabilized runs add far fewer *columns* than LP CG (I2: ~920 vs
 ~2400). However, they continue with "center-only" iterations after pricing stops finding
 columns, until `π = π̂`, which is a proximal-point tail on the restricted model (thesis
-§6.6.1 and §8.4). The runs in the earlier thesis stopped after five non-improving
+§6.6.1 and §9.4). The runs in the earlier thesis stopped after five non-improving
 iterations, which cuts this tail at the price of a larger gap (earlier thesis, Table 5.5).
 For the QPAS these iterations are cheap (hot start, no new column).
 `CGOptions.center_tolerance` controls how far the tail is followed.

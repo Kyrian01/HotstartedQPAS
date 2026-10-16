@@ -64,8 +64,8 @@ regularized master problem of column generation, in particular:
 \begin{enumerate}
     \item What is the structure of the active constraints of the regularized master problem,
           and does it allow an explicit nullspace basis?
-    \item How small is the linear system that has to be factorized, and how does it change
-          when the working set changes?
+    \item How small is the linear system that has to be factorized, how does it change
+          when the working set changes, and which kind of factorization suits it?
     \item Can the factorization be carried over from one column generation iteration to the
           next, so that a new column or a new stability center costs (almost) nothing?
     \item What changes when the linking constraints are inequalities, which add sign
@@ -106,18 +106,26 @@ The main results of this work are the following.
           restricted master problem (\cref{chap:nullspace}).
 
     \item \textbf{Updates and hot start.} Every change of the working set is a row
-          addition, a row deletion or a rank-one modification of a fixed-size $LDL^\top$
-          factorization. A new column or a new stability center leaves the factorization
-          unchanged (\cref{chap:updates}).
+          addition, a row deletion or a rank-one modification of an $LDL^\top$
+          factorization, realized with a sparse factorization of fixed size. A new column or a
+          new stability center leaves the factorization unchanged (\cref{chap:updates}).
 
     \item \textbf{Exact treatment of singular reduced Hessians.} A dependent nullspace
           direction is resolved by a zero-curvature step that keeps every working-set
           variable except the released one exactly at its bound (\cref{chap:singular}).
 
+    \item \textbf{A dense factorization of the effective reduced Hessian.} Since $\Heff$ is
+          small and dense, it is factorized densely, in the order in which the indices became
+          active. A new index is appended to the factor, a removed index is deleted by a
+          rank-one update of the indices behind it, and the factor never accumulates
+          structural zeros, so periodic refactorization becomes unnecessary. The new pivot of a
+          released column is exactly its Schur complement, which makes the detection of
+          singular reduced Hessians exact (\cref{chap:dense}).
+
     \item \textbf{A computational study} on generated crew scheduling instances with equality
           and inequality coverage rows: correctness against the full linear program, timing,
-          the two phases of convergence, and the effect of refactorization on the fill of the
-          factor (\cref{chap:results}).
+          the two phases of convergence, the fill of the sparse factor and its refactorization,
+          and a comparison of the sparse and the dense factorization (\cref{chap:results}).
 \end{itemize}
 
 
@@ -133,8 +141,10 @@ regularized master problem and establishes the five-set reordering of the constr
 effective reduced Hessian and recovers the Lagrange multipliers. \Cref{chap:updates}
 describes the updates of the factorization when the working set changes, the fixed-length
 representation, periodic refactorization and the hot start between column generation
-iterations. \Cref{chap:singular} treats singular reduced Hessians. \Cref{chap:results}
-presents the computational results, and \cref{chap:conclusion} concludes.
+iterations. \Cref{chap:singular} treats singular reduced Hessians. \Cref{chap:dense}
+replaces the sparse factorization by a dense factorization of the effective reduced Hessian
+alone and derives its update operations. \Cref{chap:results} presents the computational
+results, and \cref{chap:conclusion} concludes.
 
 \bigskip
 

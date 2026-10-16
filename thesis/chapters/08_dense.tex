@@ -1,0 +1,603 @@
+\chapter{A Dense Factorization of the Effective Reduced Hessian}
+\chaptermark{Dense Factorization}
+\label{chap:dense}
+
+\vspace*{\fill}
+
+\Cref{chap:updates} expressed every change of the working set as a row addition, a row
+deletion or a rank-one modification of an $LDL^\top$ factorization, and realized these
+operations with a sparse factorization of fixed dimension $\nmax$. This is the natural choice
+for a matrix that is embedded in an index range of the size of the column capacity. The matrix
+that actually has to be factorized, however, is small and dense: $\Heff$ never has more rows
+than there are linking rows, and almost all of its entries are nonzero.
+
+\medskip
+
+This chapter develops a \textbf{dense factorization} that exploits these two properties. It
+stores only the active indices, in the order in which they entered $\Nx$, so that a new index
+is always \textbf{appended} as the last row of the factor. A removed index is deleted from the
+factor by a \textbf{rank-one update} of the rows behind it, and the factor is compacted at the
+same time. We derive these operations from the classical rank-one modification algorithm and
+show four properties that make the dense factor attractive for the active-set method: the new
+pivot of a released column is exactly its Schur complement, so the singularity test of
+\cref{chap:singular} reduces to a single number; removals and updates never decrease a pivot;
+downdates fail exactly when the modified matrix is not positive definite; and the factor never
+contains a stored entry that does not belong to the current matrix, so that the periodic
+refactorization of \cref{sec:refactorization} becomes unnecessary.
+
+\medskip
+
+The two factorizations are interchangeable: the active-set method only requires the
+operations of \cref{sec:ldl-updates}, and both provide them. The chapter closes with a
+comparison of their costs; the measurements follow in \cref{sec:results-factorizations}.
+
+\vspace*{\fill}
+
+\newpage
+
+
+\section{Why a Dense Factor}
+\label{sec:why-dense}
+
+Three observations from the previous chapters motivate a different representation of the
+factor.
+
+\paragraph{The factorized matrix is small.} By \cref{cor:dimension}, as long as the reduced
+Hessian is positive definite,
+\begin{equation} \label{eq:dense-size}
+|\Nx|\;\le\;\rank(\Aeff)\;\le\;m .
+\end{equation}
+The release of a dependent column (\cref{prop:singular-cases}) adds one more index before it is
+detected and undone, so at most $m+1$ indices are ever active at the same time. The dimension of
+$\Heff$ is therefore bounded by the number of linking rows and does not depend on the column
+capacity $\nmax$ or on the number of generated columns. The fixed-length representation of
+\cref{sec:fixed-length}, in contrast, gives the factor the dimension $\nmax$, which is typically
+one to two orders of magnitude larger than $m$.
+
+\paragraph{The factorized matrix is dense.} The entry $(\Heff)_{jj'} = u_j^\top\Meff u_{j'}$
+of~\eqref{eq:implicit} is nonzero as soon as the differences $u_j = a_j - a_{\rep(j)}$ and
+$u_{j'}$ share a row of $\Aeff$. Two columns of the same block share their representative, so
+\[
+(\Heff)_{jj'} = a_j^\top\Meff a_{j'} - a_j^\top\Meff a_{S_k} - a_{S_k}^\top\Meff a_{j'}
++ a_{S_k}^\top\Meff a_{S_k}
+\qquad(\psi(j) = \psi(j') = k),
+\]
+which vanishes only by cancellation. Columns of different blocks compete for the same linking
+rows, which is the purpose of these rows, and therefore overlap as well. The measurements of
+\cref{sec:results-fill} confirm that the factor of $\Heff$ is practically dense, in agreement
+with \cref{rem:natural-ordering}. A sparse factorization of a dense matrix stores the same
+numbers as a dense one, together with row indices and column pointers, and its operations
+follow these index structures instead of streaming through contiguous memory.
+
+\paragraph{Sparse updates leave structural zeros.} As shown in \cref{sec:refactorization}, row
+deletions and rank-one modifications of a sparse factor keep the positions of the removed
+entries in its sparsity pattern. Every later operation pays for them until the factor is
+rebuilt, and the refactorization interval has to balance the two costs.
+
+\medskip
+
+A dense factor of the active block only has none of these drawbacks, provided that it can be
+updated as cheaply as the sparse one. The rest of this chapter shows that it can.
+
+
+\section{Compact Representation}
+\label{sec:compact}
+
+Throughout this chapter, $t = |\Nx|$ is the number of active indices, and
+$\Nx = \{j_1,\dots,j_t\}$ lists them in the order in which they entered $\Nx$: $j_1$ has been
+active the longest and $j_t$ is the most recent. The \textbf{position} of an active index is
+$\operatorname{pos}(j_\ell) = \ell$.
+
+\begin{definition}[Compact representation] \label{def:compact}
+The \textbf{compact effective reduced Hessian} is the $t\times t$ matrix
+\[
+\hat H_{\ell\ell'} = (\Heff)_{j_\ell j_{\ell'}}\qquad(\ell,\ell' = 1,\dots,t),
+\]
+i.e.\ $\Heff$ with its rows and columns arranged in activation order. The \textbf{dense
+factor} is its $LDL^\top$ factorization without pivoting,
+\[
+\hat H = LDL^\top,\qquad L\in\R^{t\times t}\ \text{unit lower triangular},\qquad
+D = \diag(d_1,\dots,d_t),
+\]
+stored as a dense array together with the list $j_1,\dots,j_t$ and the position map
+$\operatorname{pos}$.
+\end{definition}
+
+The factor exists and is unique whenever $\Heff$ is positive definite, and then all pivots
+$d_\ell$ are positive \cite{golub2013matrix}. The only object of size $\nmax$ is the integer
+array $\operatorname{pos}$, with the value $0$ for inactive indices; the floating-point data
+occupy at most $(m+1)^2$ entries by~\eqref{eq:dense-size}. The compact representation solves
+the same systems as the embedded one:
+
+\begin{lemma}[Solves in compact form] \label{lem:compact-solve}
+Let $\zeta\in\R^{\nmax}$ vanish outside $\Nx$, and let $\hat\zeta_\ell = \zeta_{j_\ell}$. If
+$\hat\eta$ solves $\hat H\hat\eta = \hat\zeta$, then $\eta$ with $\eta_{j_\ell} = \hat\eta_\ell$ and
+$\eta_j = 0$ for $j\notin\Nx$ solves $\Heff^{\mathrm{emb}}\eta = \zeta$.
+\end{lemma}
+
+\begin{proof}
+By \cref{lem:embedding}, the solution of $\Heff^{\mathrm{emb}}\eta = \zeta$ vanishes outside
+$\Nx$, and its restriction to $\Nx$ solves $\Heff\eta_x = \zeta_{\Nx}$. The matrix $\hat H$ is $\Heff$
+with rows and columns permuted by the same permutation as the entries of $\hat\zeta$ and
+$\hat\eta$, so $\hat H\hat\eta = \hat\zeta$ is this system written in activation order.
+\end{proof}
+
+A solve therefore consists of a gather of $\zeta$ into activation order, a forward substitution
+with $L$, a division by the pivots, a backward substitution with $L^\top$ and a scatter of the
+result, at the cost of $2t^2 + O(t)$ arithmetic operations, independent of $\nmax$.
+
+\medskip
+
+The activation order is not a fill-reducing ordering, and it need not be: the matrix is dense,
+so every ordering of its rows produces a dense factor. It is chosen because it turns a row
+addition into the cheapest possible operation, an append.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lll}
+\toprule
+change of the working set & change of $\hat H$ & dense operation \\
+\midrule
+(i) column leaves $\Nx$ & position $\operatorname{pos}(q)$ removed & delete (\cref{sec:dense-delete}) \\
+(ii) representative swap & rows of $\mathcal{N}_x^{(k)}$ rewritten & deletes + appends \\
+(iii) surplus becomes active & $+\,\hat v_i\hat v_i^\top$ & rank-one update (\cref{sec:dense-rank-one}) \\
+(iv) column enters $\Nx$ & new last row and column & append (\cref{sec:dense-append}) \\
+(v) surplus becomes free & $-\,\hat v_i\hat v_i^\top$ & rank-one downdate (\cref{sec:dense-rank-one}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Here $\hat v_i$ is the vector $v_i$ of~\eqref{eq:rank-one-up} in activation order. A
+representative swap is carried out as in \cref{sec:ldl-updates}: the replacement $S_k'$ is
+deleted, and every row of $\mathcal{N}_x^{(k)}\setminus\{S_k'\}$ is deleted and appended again with
+its new vector $z_j' = z_j - z_{S_k'}$. These rows thereby move to the end of the activation order.
+
+
+\section{Appending an Index}
+\label{sec:dense-append}
+
+When a column $r$ is released (case~(iv) of \cref{thm:H-reduce}), $\Heff$ is bordered by the
+vector $\gamma_r$ and the scalar $\gamma_{rr}$ of~\eqref{eq:bordered}. In the compact
+representation the new index takes position $t+1$, so the new matrix is
+\[
+\hat H' = \begin{bmatrix}\hat H & \hat\gamma\\ \hat\gamma^\top & \gamma_{rr}\end{bmatrix},
+\qquad \hat\gamma_\ell = (\gamma_r)_{j_\ell}.
+\]
+
+\begin{theorem}[Append] \label{thm:append}
+Let $\hat H = LDL^\top$ be positive definite. Then
+\[
+\hat H' = \begin{bmatrix} L & 0\\ l^\top & 1\end{bmatrix}
+\begin{bmatrix} D & 0\\ 0 & d_{t+1}\end{bmatrix}
+\begin{bmatrix} L & 0\\ l^\top & 1\end{bmatrix}^\top
+\qquad\text{with}\qquad
+Lw = \hat\gamma,\quad l = D^{-1}w,\quad d_{t+1} = \gamma_{rr} - w^\top D^{-1}w .
+\]
+The factor of $\hat H$ is not changed, and the new row costs one forward substitution,
+$t^2 + O(t)$ operations.
+\end{theorem}
+
+\begin{proof}
+Multiplying out the right-hand side gives the blocks
+\[
+LDL^\top = \hat H,\qquad LDl = Lw = \hat\gamma,\qquad
+l^\top Dl + d_{t+1} = w^\top D^{-1}w + d_{t+1} = \gamma_{rr},
+\]
+which are the blocks of $\hat H'$. The first factor is unit lower triangular and the middle one
+diagonal, so this is the $LDL^\top$ factorization of $\hat H'$ whenever $d_{t+1}\ne0$, by
+uniqueness. The vector $w$ is obtained from $Lw = \hat\gamma$ by forward substitution, and $l$
+and $d_{t+1}$ in $O(t)$ further operations.
+\end{proof}
+
+The new pivot has a simple meaning. It is exactly the quantity that decides whether the
+release is singular.
+
+\begin{cor}[The new pivot is the Schur complement] \label{cor:append-pivot}
+The new pivot of \cref{thm:append} is the Schur complement of~\eqref{eq:bordered},
+\[
+d_{t+1} = \sigma_r = \gamma_{rr} - \gamma_r^\top\Heff^{-1}\gamma_r
+= \bigl\lVert (I - \Pi_{\mathrm{eff}})\,\Aeff z_r\bigr\rVert^2 ,
+\]
+where $\Pi_{\mathrm{eff}}$ is the orthogonal projector onto the range of $\Aeff Z_x$. In particular
+$d_{t+1}\ge0$, and $d_{t+1} = 0$ if and only if the release of $r$ is singular.
+\end{cor}
+
+\begin{proof}
+From $Lw = \hat\gamma$ and $\hat H = LDL^\top$,
+\[
+w^\top D^{-1}w = \hat\gamma^\top L^{-\top}D^{-1}L^{-1}\hat\gamma = \hat\gamma^\top\hat H^{-1}\hat\gamma
+= \gamma_r^\top\Heff^{-1}\gamma_r ,
+\]
+since the permutation to activation order does not change this quadratic form. Hence
+$d_{t+1} = \sigma_r$. With $U = \Aeff Z_x$ and $u = \Aeff z_r$ we have $\Heff = U^\top U$,
+$\gamma_r = U^\top u$ and $\gamma_{rr} = u^\top u$, so
+\[
+\sigma_r = u^\top u - u^\top U(U^\top U)^{-1}U^\top u = u^\top(I - \Pi_{\mathrm{eff}})\,u
+= \lVert(I-\Pi_{\mathrm{eff}})\,u\rVert^2,
+\]
+because $\Pi_{\mathrm{eff}} = U(U^\top U)^{-1}U^\top$ is symmetric and idempotent. The last statement is
+part~(i) of \cref{prop:singular-cases}.
+\end{proof}
+
+\begin{remark}[Singularity detection with the dense factor] \label{rem:dense-detection}
+\Cref{cor:append-pivot} makes the detection of \cref{sec:detection} exact for released columns.
+An append leaves all existing pivots unchanged, and the new pivot, scaled by the pivot scale
+$\lVert u_r\rVert^2$ of \cref{def:pivot-invariant}, is
+\[
+\frac{d_{t+1}}{\lVert u_r\rVert^2} = \frac{\lVert(I-\Pi_{\mathrm{eff}})\,\Aeff z_r\rVert^2}{\lVert u_r\rVert^2}
+\;\le\;\sin^2\theta_r ,
+\]
+where $\theta_r$ is the angle between $\Aeff z_r$ and the range of $\Aeff Z_x$ (with equality if no
+row of $u_r$ is masked). The pivot invariant thus tests directly whether the new direction is
+numerically independent of the old ones. In the sparse factorization of \cref{prop:rowadd} the
+same information is spread over the new pivot and the downdated pivots of the later indices.
+A dependent column can moreover be removed again by deleting the last position, which by
+\cref{thm:delete} below costs no arithmetic at all. (Our implementation undoes it by a
+refactorization for both factorizations, which happens only a handful of times per run.)
+\end{remark}
+
+
+\section{Rank-One Modifications}
+\label{sec:dense-rank-one}
+
+The surplus cases~(iii) and~(v) change $\Heff$ by $\pm v_iv_i^\top$, and we will see in
+\cref{sec:dense-delete} that the deletion of an index requires a rank-one update as well. All
+three are instances of the following problem: given the factor $\hat H = LDL^\top$, a vector
+$v\in\R^t$ and a scalar $\varphi$, compute the factor of $\hat H + \varphi\,vv^\top$. We use the
+method C1 of Gill, Golub, Murray and Saunders \cite{gill1974methods}, and derive it here in a
+form that also yields the properties we need.
+
+\begin{theorem}[Rank-one modification] \label{thm:rank-one}
+Let $\hat H = LDL^\top$ with $d_1,\dots,d_t>0$, let $v\in\R^t$ and $\varphi\in\R$, and suppose that
+$\hat H + \varphi\,vv^\top$ is positive definite. Define $\varphi_1 = \varphi$, $v^{(0)} = v$, and
+for $j = 1,\dots,t$
+\begin{equation} \label{eq:c1}
+\chi_j = v^{(j-1)}_j,\qquad \bar d_j = d_j + \varphi_j\chi_j^2,\qquad
+\beta_j = \frac{\varphi_j\chi_j}{\bar d_j},\qquad \varphi_{j+1} = \frac{d_j}{\bar d_j}\,\varphi_j,\qquad
+v^{(j)} = v^{(j-1)} - \chi_j\,Le_j .
+\end{equation}
+Then $\hat H + \varphi\,vv^\top = \bar L\bar D\bar L^\top$ with $\bar D = \diag(\bar d_1,\dots,\bar d_t)$ and the
+unit lower triangular matrix $\bar L$ whose columns are
+\[
+\bar Le_j = Le_j + \beta_j\,v^{(j)}\qquad(j = 1,\dots,t).
+\]
+The vector $v^{(j)}$ vanishes in its first $j$ entries, so column $j$ of $\bar L$ differs from
+column $j$ of $L$ only below the diagonal.
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1: reduction to a diagonal matrix.} Let $\tilde v = L^{-1}v$. Then
+\[
+\hat H + \varphi\,vv^\top = L\,(D + \varphi\,\tilde v\tilde v^\top)\,L^\top .
+\]
+If $D + \varphi\tilde v\tilde v^\top = \tilde L\bar D\tilde L^\top$, then
+$\hat H + \varphi vv^\top = (L\tilde L)\,\bar D\,(L\tilde L)^\top$, and $\bar L = L\tilde L$ is unit lower triangular
+as a product of two such matrices. It therefore suffices to factorize the diagonal matrix plus
+a rank-one term.
+
+\emph{Step 2: factor of $D + \varphi\tilde v\tilde v^\top$.} We show by induction over $t$ that
+\begin{equation} \label{eq:c1-inner}
+\bar d_j = d_j + \varphi_j\tilde v_j^2,\qquad \tilde L_{rj} = \beta_j\tilde v_r\;\;(r>j),\qquad
+\beta_j = \varphi_j\tilde v_j/\bar d_j,\qquad \varphi_{j+1} = \varphi_jd_j/\bar d_j .
+\end{equation}
+Split off the first row and column:
+\[
+D + \varphi\tilde v\tilde v^\top =
+\begin{bmatrix} d_1 + \varphi\tilde v_1^2 & \varphi\tilde v_1\tilde v_2^\top\\
+\varphi\tilde v_1\tilde v_2 & D_2 + \varphi\tilde v_2\tilde v_2^\top\end{bmatrix},
+\]
+with $\tilde v = [\tilde v_1;\tilde v_2]$ and $D = \diag(d_1, D_2)$. One step of symmetric Gaussian
+elimination gives the pivot $\bar d_1 = d_1 + \varphi\tilde v_1^2$, which is positive because the
+matrix is positive definite, the first column $\varphi\tilde v_1\tilde v_2/\bar d_1 = \beta_1\tilde v_2$ of
+$\tilde L$ below the diagonal, and the Schur complement
+\[
+D_2 + \varphi\tilde v_2\tilde v_2^\top - \frac{\varphi^2\tilde v_1^2}{\bar d_1}\tilde v_2\tilde v_2^\top
+= D_2 + \varphi\Bigl(1 - \frac{\varphi\tilde v_1^2}{\bar d_1}\Bigr)\tilde v_2\tilde v_2^\top
+= D_2 + \underbrace{\varphi\,\frac{d_1}{\bar d_1}}_{=\varphi_2}\,\tilde v_2\tilde v_2^\top .
+\]
+The Schur complement of a positive definite matrix is positive definite and has the same form
+as the original matrix, with $D_2$, $\tilde v_2$ and $\varphi_2$, so the induction hypothesis
+gives~\eqref{eq:c1-inner} for the remaining indices.
+
+\emph{Step 3: the columns of $\bar L$.} By Step~2, column $j$ of $\tilde L$ is
+$e_j + \beta_j\sum_{r>j}\tilde v_re_r$, so
+\[
+\bar Le_j = L\tilde Le_j = Le_j + \beta_j\sum_{r>j}\tilde v_r\,Le_r .
+\]
+Since $L\tilde v = v$, the sum equals $v - \sum_{i\le j}\tilde v_i\,Le_i$. We show that this is
+$v^{(j)}$ and that $\chi_j = \tilde v_j$. Indeed, $v^{(j)} = v - \sum_{i\le j}\chi_i\,Le_i$ by its
+recursion. If $\chi_i = \tilde v_i$ for $i<j$, then $v^{(j-1)} = \sum_{r\ge j}\tilde v_r\,Le_r$, whose
+$j$-th entry is $\tilde v_j$ because $L$ is unit lower triangular; hence $\chi_j = \tilde v_j$. By
+induction, $\chi_j = \tilde v_j$ for all $j$, and $\bar Le_j = Le_j + \beta_jv^{(j)}$. The same
+representation shows that $v^{(j)} = \sum_{r>j}\tilde v_rLe_r$ vanishes in its first $j$ entries.
+Inserting $\chi_j = \tilde v_j$ into~\eqref{eq:c1-inner} gives~\eqref{eq:c1}.
+\end{proof}
+
+The recursion~\eqref{eq:c1} computes $\tilde v = L^{-1}v$ by forward substitution and builds the
+new factor in the same pass, column by column. \Cref{alg:c1} states it in the form in which it
+is implemented: the vector $v^{(j)}$ overwrites $v$, and the new column overwrites the old one.
+
+\begin{algobox}{Rank-One Modification $LDL^\top + \varphi\,vv^\top$ (Method C1)}{alg:c1}
+\State \textbf{Input:} $L$, $d$ of $\hat H = LDL^\top$, vector $v$, scalar $\varphi$
+\State $j_0\gets$ first index with $v_{j_0}\ne0$ \Comment{columns before $j_0$ are unchanged}
+\For{$j = j_0,\dots,t$}
+    \State $\chi\gets v_j$; \textbf{if} $\chi = 0$ \textbf{then continue} \Comment{column $j$ and $\varphi$ unchanged}
+    \State $\bar d\gets d_j + \varphi\chi^2$
+    \If{$\bar d\le0$} \textbf{return} \emph{not positive definite} \EndIf
+    \State $\beta\gets\varphi\chi/\bar d$; \;$\varphi\gets\varphi\,d_j/\bar d$; \;$d_j\gets\bar d$
+    \For{$r = j+1,\dots,t$}
+        \State $v_r\gets v_r - \chi\,L_{rj}$; \;$L_{rj}\gets L_{rj} + \beta\,v_r$
+    \EndFor
+\EndFor
+\end{algobox}
+
+If $\chi_j = 0$, then $\bar d_j = d_j$, $\beta_j = 0$ and $\varphi_{j+1} = \varphi_j$, and the column is
+unchanged; this justifies the skip in \cref{alg:c1}. The cost is $2(t - j_0)^2 + O(t)$
+operations, where $j_0$ is the position of the first nonzero of $v$. The following properties
+of~\eqref{eq:c1} are used below.
+
+\begin{prop}[Pivots of a rank-one modification] \label{prop:c1-pivots}
+In the situation of \cref{thm:rank-one}:
+\begin{enumerate}
+    \item If $\varphi>0$, then $\varphi_j>0$ and $\bar d_j\ge d_j$ for all $j$: an update never
+          decreases a pivot.
+    \item The pivots change by the factor
+          \[
+          \prod_{j=1}^{t}\frac{\bar d_j}{d_j} = 1 + \varphi\,v^\top\hat H^{-1}v .
+          \]
+    \item If $\varphi<0$ and the recursion~\eqref{eq:c1} is run without the assumption that
+          $\hat H + \varphi vv^\top$ is positive definite, then all $\bar d_j$ are positive if and only if
+          $\hat H + \varphi vv^\top$ is positive definite, i.e.\ if and only if
+          $1 + \varphi\,v^\top\hat H^{-1}v>0$.
+\end{enumerate}
+\end{prop}
+
+\begin{proof}
+(i) By induction: if $\varphi_j>0$, then $\bar d_j = d_j + \varphi_j\chi_j^2\ge d_j>0$ and
+$\varphi_{j+1} = \varphi_jd_j/\bar d_j>0$.
+
+(ii) The determinant of an $LDL^\top$ factorization is the product of its pivots, so
+\[
+\prod_j\frac{\bar d_j}{d_j} = \frac{\det(\hat H + \varphi vv^\top)}{\det\hat H}
+= 1 + \varphi\,v^\top\hat H^{-1}v
+\]
+by the matrix determinant lemma \cite{golub2013matrix}.
+
+(iii) The recursion performs symmetric Gaussian elimination without pivoting on
+$D + \varphi\tilde v\tilde v^\top$ (Step~2 of the proof of \cref{thm:rank-one}). Elimination without
+pivoting produces positive pivots $\bar d_1,\dots,\bar d_t$ if and only if all leading principal
+minors are positive, i.e.\ if and only if the matrix is positive definite, and
+$D + \varphi\tilde v\tilde v^\top$ is positive definite if and only if
+$\hat H + \varphi vv^\top = L(D+\varphi\tilde v\tilde v^\top)L^\top$ is. Since $\hat H$ is positive definite and
+$\hat H + \varphi vv^\top$ differs from it by a rank-one term, the latter is positive definite if and
+only if its determinant is positive (its smallest eigenvalue is the only one that can become
+nonpositive, by interlacing), i.e.\ by~(ii) if and only if $1 + \varphi v^\top\hat H^{-1}v>0$.
+\end{proof}
+
+For the two surplus cases, $\varphi = \pm1$ and $v = \hat v_i$. An activated surplus ($\varphi = 1$)
+can never fail and only increases pivots. A released surplus ($\varphi = -1$) produces positive
+pivots exactly when $\omega_i = 1 - v_i^\top\Heff^{-1}v_i>0$, i.e.\ exactly when its release is not
+singular (part~(ii) of \cref{prop:singular-cases}); the product of the pivot ratios is $\omega_i$.
+\Cref{alg:c1} stops as soon as a pivot is not positive, and the method then proceeds as in
+\cref{alg:singular}.
+
+\begin{remark}[Numerical behaviour] \label{rem:c1-stability}
+For $\varphi>0$ no cancellation occurs in $\bar d_j = d_j + \varphi_j\chi_j^2$, and method~C1 is
+numerically stable \cite{gill1974methods}. For $\varphi<0$ the subtraction can cancel, and the
+error grows when $\omega_i$ is small, i.e.\ when the downdated matrix is nearly singular. This is
+precisely the situation that the pivot invariant of \cref{def:pivot-invariant} detects, and it
+is then resolved by the zero-curvature step of \cref{chap:singular}. Away from it, the factor
+stays accurate over long runs; \cref{sec:results-factorizations} measures its residual.
+\end{remark}
+
+
+\section{Removing an Index}
+\label{sec:dense-delete}
+
+When the index $q\in\Nx$ leaves the nullspace set (case~(i) of \cref{thm:H-expand}), its row
+and column are removed from $\hat H$. Let $\ell = \operatorname{pos}(q)$ and partition the
+positions into the groups $1 = \{1,\dots,\ell-1\}$, $2 = \{\ell\}$ and $3 = \{\ell+1,\dots,t\}$:
+\[
+L = \begin{bmatrix} L_{11} & & \\ l_{21}^\top & 1 & \\ L_{31} & l_{32} & L_{33}\end{bmatrix},\qquad
+D = \diag(D_1, d_\ell, D_3).
+\]
+
+\begin{theorem}[Delete] \label{thm:delete}
+Removing row and column $\ell$ from $\hat H = LDL^\top$ gives the matrix with the factor
+\[
+\begin{bmatrix} L_{11} & 0\\ L_{31} & \bar L_{33}\end{bmatrix},\qquad
+\diag(D_1, \bar D_3),\qquad\text{where}\quad
+\bar L_{33}\bar D_3\bar L_{33}^\top = L_{33}D_3L_{33}^\top + d_\ell\,l_{32}l_{32}^\top .
+\]
+The trailing factor is a rank-one update with $\varphi = d_\ell>0$, computed by \cref{alg:c1}. The
+blocks $L_{11}$, $D_1$ and $L_{31}$ are kept.
+\end{theorem}
+
+\begin{proof}
+Multiplying out $LDL^\top$ block by block gives, for the blocks that remain after the removal,
+\[
+\hat H_{11} = L_{11}D_1L_{11}^\top,\qquad \hat H_{31} = L_{31}D_1L_{11}^\top,\qquad
+\hat H_{33} = L_{31}D_1L_{31}^\top + d_\ell\,l_{32}l_{32}^\top + L_{33}D_3L_{33}^\top .
+\]
+The proposed factor has the blocks $L_{11}D_1L_{11}^\top = \hat H_{11}$,
+$L_{31}D_1L_{11}^\top = \hat H_{31}$ and
+\[
+L_{31}D_1L_{31}^\top + \bar L_{33}\bar D_3\bar L_{33}^\top
+= L_{31}D_1L_{31}^\top + L_{33}D_3L_{33}^\top + d_\ell\,l_{32}l_{32}^\top = \hat H_{33}.
+\]
+It is unit lower triangular with a diagonal middle factor, so by uniqueness it is the $LDL^\top$
+factorization of the reduced matrix. The trailing matrix $L_{33}D_3L_{33}^\top + d_\ell l_{32}l_{32}^\top$
+is positive definite because $d_\ell>0$, so \cref{thm:rank-one} applies with $\varphi = d_\ell$.
+\end{proof}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=0.36cm, y=0.36cm, font=\small]
+    % before: lower triangle of L, t = 10, deleted position ell = 4
+    \fill[cblue!25] (0,10) -- (0,0) -- (10,0) -- cycle;
+    \fill[cred!35] (3,0) rectangle (4,7);                % column ell below the diagonal (l_32)
+    \fill[cred!35] (0,6) -- (0,7) -- (3,7) -- (3,6) -- cycle; % row ell (l_21)
+    \fill[cgreen!35] (4,0) -- (4,6) -- (10,0) -- cycle;   % L_33
+    \draw[thick] (0,10) -- (0,0) -- (10,0) -- cycle;
+    \draw (3,0) -- (3,7); \draw (4,0) -- (4,6); \draw (0,6) -- (4,6); \draw (0,7) -- (3,7);
+    \node at (1.2,3) {$L_{31}$};
+    \node at (6.2,1.6) {$L_{33}$};
+    \node[cred!70!black, above] at (3.5,7) {$\ell$};
+    \node[below] at (5,-0.3) {$L$ before};
+    % arrow
+    \draw[-{Stealth[length=3mm]}, thick] (11.2,4) -- (14.8,4)
+        node[midway, above, align=center] {\scriptsize delete $\ell$};
+    % after: t = 9
+    \begin{scope}[xshift=5.8cm]
+    \fill[cblue!25] (0,9) -- (0,0) -- (9,0) -- cycle;
+    \fill[cgreen!35] (3,0) -- (3,6) -- (9,0) -- cycle;
+    \draw[thick] (0,9) -- (0,0) -- (9,0) -- cycle;
+    \draw (3,0) -- (3,6); \draw (0,6) -- (3,6);
+    \node at (1.2,3) {$L_{31}$};
+    \node at (5.4,1.6) {$\bar L_{33}$};
+    \node[below] at (4.5,-0.3) {$L$ after};
+    \end{scope}
+    % legend
+    \begin{scope}[xshift=10.2cm, yshift=0.6cm]
+    \fill[cred!35] (0,7) rectangle (0.7,7.7); \node[right] at (0.9,7.35) {\scriptsize removed: $l_{21}$, $d_\ell$, $l_{32}$};
+    \fill[cgreen!35] (0,5.6) rectangle (0.7,6.3); \node[right] at (0.9,5.95) {\scriptsize updated by $d_\ell\,l_{32}l_{32}^\top$};
+    \fill[cblue!25] (0,4.2) rectangle (0.7,4.9); \node[right] at (0.9,4.55) {\scriptsize kept, rows below $\ell$ shifted up};
+    \end{scope}
+\end{tikzpicture}
+\caption{Deleting position $\ell$ from the dense factor (\cref{thm:delete}). The leading
+columns are kept, the trailing triangle receives a rank-one update with the removed column
+$l_{32}$ and the positive weight $d_\ell$, and all positions behind $\ell$ move up by one, so
+that the factor stays contiguous.}
+\label{fig:dense-delete}
+\end{figure}
+
+In an implementation, the update of the trailing block and the compaction are one pass:
+\cref{alg:c1} reads column $\ell+s$ of the old trailing block and writes the updated column to
+position $\ell+s-1$, which has been read completely in the previous step
+(\cref{fig:dense-delete}). The rows $\ell+1,\dots,t$ of the leading columns are moved up by one
+position, and the activation list and the position map are updated.
+
+\begin{prop}[Cost of a deletion] \label{prop:delete-cost}
+Deleting position $\ell$ costs $2(t-\ell)^2 + O(t)$ arithmetic operations for the rank-one update
+and $O\bigl(\ell\,(t-\ell)\bigr)$ memory moves for the compaction. Deleting the most recent index
+($\ell = t$) costs no arithmetic; deleting the oldest one ($\ell = 1$) costs as much as a full
+rank-one update.
+\end{prop}
+
+\begin{proof}
+The trailing block has $t-\ell$ positions, and \cref{alg:c1} on it costs $2(t-\ell)^2 + O(t-\ell)$
+operations. The block $L_{31}$ has $t-\ell$ rows and $\ell-1$ columns, all of which are moved.
+\end{proof}
+
+The cost of a deletion therefore depends on how long the removed index has been active. In the
+active-set method most removed indices have entered $\Nx$ recently: a released column moves
+away from its bound (\cref{lem:descent}), and the columns that block are typically those with
+small weights, which have been released last. The measurements of
+\cref{sec:results-factorizations} show that a deletion touches about a quarter of the factor on
+average.
+
+\begin{cor}[Expansions preserve the pivot invariant] \label{cor:expand-pivots}
+An expansion of type~(i) or~(iii) of \cref{lem:expand-ordering} does not decrease any pivot of
+an index that stays in $\Nx$. In particular, if the pivot invariant of
+\cref{def:pivot-invariant} holds before such an expansion, it holds after it.
+\end{cor}
+
+\begin{proof}
+In case~(i), the pivots $D_1$ are kept and $\bar D_3$ results from a rank-one update with
+$\varphi = d_\ell>0$, so $\bar D_3\ge D_3$ entrywise by part~(i) of \cref{prop:c1-pivots}; each pivot
+moves with its index to the position one up. In case~(iii), the update $+\hat v_i\hat v_i^\top$ has
+$\varphi = 1>0$. The pivot scales $\lVert u_j\rVert^2$ of the remaining indices do not change, since
+their representatives do not change.
+\end{proof}
+
+In exact arithmetic the same holds for the sparse factorization, whose row deletion is the same
+rank-one update (\cref{sec:ldl-updates}). \Cref{cor:expand-pivots} shows that the pivot
+invariant can only be violated by a reduction, which is where \cref{chap:singular} checks it.
+
+
+\section{Structural Zeros and Refactorization}
+\label{sec:dense-no-zeros}
+
+The dense factor stores exactly the $t(t-1)/2$ entries below the diagonal of the $t\times t$
+array, the $t$ pivots, and the activation list. This is all that it ever stores:
+
+\begin{prop}[No structural zeros] \label{prop:no-zeros}
+After every sequence of appends, deletions and rank-one modifications, the leading
+$t\times t$ block of the stored array is the factor $L$ of the current matrix $\hat H$, and no
+stored entry belongs to a matrix that is no longer current.
+\end{prop}
+
+\begin{proof}
+By induction over the operations. \Cref{thm:append} writes the new last row and pivot and keeps
+the leading block. \Cref{thm:rank-one} overwrites the columns from $j_0$ on and keeps the
+others, without changing the dimension. \Cref{thm:delete} keeps the leading columns, overwrites
+the trailing triangle with $\bar L_{33}$, and moves everything behind position $\ell$ up by one,
+so that the result again occupies exactly the leading $(t-1)\times(t-1)$ block. Entries outside
+the leading block are never read, and the next append overwrites the entries of its row before
+using them.
+\end{proof}
+
+The cost of every operation therefore depends only on the current $t$, and the factor never has
+to be rebuilt to restore its efficiency: there is nothing like the growth of the stored pattern
+of \cref{sec:refactorization}. A refactorization is only needed for numerical reasons, namely
+when a pivot violates the invariant of \cref{def:pivot-invariant} or a downdate fails
+(\cref{alg:singular}). Such a refactorization appends the active indices one by one as in
+\cref{def:refactorization}, at the cost of about $t^3/3$ operations
+(\cref{prop:refactor-cost}); afterwards their activation order is the increasing index order. An
+optional periodic refactorization could be used to bound the accumulation of rounding errors,
+but \cref{sec:results-factorizations} shows that it is not needed in practice.
+
+\begin{remark}[Reset] \label{rem:dense-reset}
+Resetting the factor to the identity only clears the position map of the active indices, in
+$O(t)$. The stored entries need not be zeroed, because every append writes its whole row before
+it is read.
+\end{remark}
+
+
+\section{Comparison with the Sparse Factorization}
+\label{sec:dense-comparison}
+
+\Cref{tab:dense-vs-sparse} compares the operations of the two factorizations. For the sparse
+factorization, the costs are those of a factor without structural zeros, i.e.\ directly after a
+refactorization; between refactorizations they grow with the stored pattern.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{>{\raggedright}p{0.2\textwidth}>{\raggedright}p{0.36\textwidth}>{\raggedright\arraybackslash}p{0.36\textwidth}}
+\toprule
+operation & sparse factor of $\Heff^{\mathrm{emb}}$ (\cref{chap:updates}) & dense factor of $\hat H$ (this chapter) \\
+\midrule
+dimension & $\nmax$, identity outside $\Nx$ & $t = |\Nx|\le m$ \\
+release of a column, (iv) & row addition at index $r$: solve, new column, downdate of the later indices & append: one forward substitution, $t^2$ \\
+removal of a column, (i) & row deletion: rank-one update of the later indices & delete: rank-one update of the later positions, $2(t-\ell)^2$ \\
+surplus, (iii) and (v) & rank-one update or downdate along the elimination tree & \cref{alg:c1} from the first nonzero, at most $2t^2$ \\
+solve & sparse solve on $\reach_L(\Nx)$ & two triangular solves, $2t^2$ \\
+new pivot of a release & $D_{22}'\ge\sigma_r$; later pivots change & $d_{t+1} = \sigma_r$; no other pivot changes \\
+stored entries & grow with every update (\cref{sec:refactorization}) & exactly $t(t-1)/2$ (\cref{prop:no-zeros}) \\
+periodic refactorization & required, every $\tau$ updates & not required \\
+floating-point memory & proportional to the stored pattern & at most $(m+1)^2$ \\
+\bottomrule
+\end{tabular}
+\caption{The two factorizations of the effective reduced Hessian. Costs are arithmetic
+operations; $\ell$ is the position of the removed index.}
+\label{tab:dense-vs-sparse}
+\end{table}
+
+For a dense $\Heff$, both factorizations perform the same arithmetic up to constant factors. The
+dense one does it on contiguous memory with simple loops and triangular solves, without index
+lookups, without an $\nmax$-dimensional embedding and without structural zeros. On the other
+hand, the dense factor costs $(m+1)^2$ floating-point numbers and $O(t^2)$ operations per update
+regardless of the sparsity of $\Heff$. A sparse factor remains preferable when $\Heff$ is
+genuinely sparse, for instance when the blocks have disjoint sets of linking rows, and $m$ is
+large. For the crew scheduling instances of \cref{chap:results}, where $\Heff$ is dense, the
+dense factorization is the better choice, as \cref{sec:results-factorizations} shows.
+
+\medskip
+
+Nothing in \cref{chap:qpas,chap:nullspace,chap:singular} depends on the choice. The
+active-set method, the hot start of \cref{thm:hot-start} and the singularity treatment of
+\cref{alg:singular} only use the operations of the table, so the two factorizations
+produce the same sequence of iterates in exact arithmetic, and \cref{alg:hot-qpas} applies
+unchanged, with the refactorization in its last line triggered only by the pivot invariant.

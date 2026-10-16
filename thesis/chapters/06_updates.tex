@@ -16,8 +16,10 @@ We first introduce a \textbf{fixed-length representation}, in which the factoriz
 fixed dimension and inactive indices are represented by identity rows. We then derive the
 updates for the three ways of \textbf{expanding} the working set and the two ways of
 \textbf{reducing} it, and translate them into row additions, row deletions and rank-one
-modifications of the factorization. Row deletions leave structural zeros in the factor; we
-analyse this effect and the \textbf{periodic refactorization} that controls it.
+modifications of the factorization, which we realize with a sparse direct solver. Its row
+deletions leave structural zeros in the factor; we analyse this effect and the
+\textbf{periodic refactorization} that controls it. \Cref{chap:dense} develops a dense
+alternative that avoids it.
 
 \medskip
 
@@ -319,9 +321,10 @@ last direction of curvature. This is the subject of \cref{chap:singular}.
 
 The updates of \cref{sec:expanding,sec:reducing} are applied to the factorization
 $\Heff^{\mathrm{emb}} = LDL^\top$, with $L$ unit lower triangular and $D$ diagonal, in the
-natural order of the indices. We use the sparse direct solver
+natural order of the indices. In this chapter we use the sparse direct solver
 CHOLMOD~\cite{chen2008cholmod}, which provides the three required modifications
-\cite{davis1999modifying, davis2005row}:
+\cite{davis1999modifying, davis2005row}; \cref{chap:dense} provides the same operations for a
+dense factor of $\Heff$ alone:
 
 \begin{center}
 \renewcommand{\arraystretch}{1.25}
@@ -491,7 +494,8 @@ nothing: the effective factor is almost exactly as dense as a dense factor of $\
 (\cref{sec:results-fill}), because columns of the same block share their representative and
 are therefore strongly coupled. The natural ordering has two advantages: index $j$ of the
 factor is column $j$ of the master problem, and the refactorization of
-\cref{def:refactorization} only appends rows.
+\cref{def:refactorization} only appends rows. The density of the factor is also the starting
+point of \cref{chap:dense}.
 \end{remark}
 
 
@@ -630,5 +634,11 @@ extended ordering and the factorization, is kept from one call to the next.
         \EndIf
     \EndIf
     \State Refactorize if $\tau$ updates have passed since the last refactorization
+           \Comment{sparse factor only}
 \Until{returned}
 \end{algobox}
+
+The algorithm accesses the factorization only through the operations of
+\cref{sec:ldl-updates}: row additions, row deletions, rank-one modifications and solves. It is
+therefore independent of how the factor is stored. With the dense factor of
+\cref{chap:dense}, the periodic refactorization in the last line is dropped.

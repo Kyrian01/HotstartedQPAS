@@ -101,6 +101,14 @@ arithmetic, but it follows directly from the determinant identities of
 previous working set (\cref{def:refactorization}), which also removes any large entries
 created by dividing by a tiny pivot. We use $\varepsilon_{\mathrm{piv}} = 10^{-10}$.
 
+\medskip
+
+For the dense factorization of \cref{chap:dense} the detection is sharper. A released column is
+appended as the last index, all other pivots stay unchanged, and the new pivot is $\sigma_r$
+itself (\cref{cor:append-pivot}). A released surplus is a rank-one downdate, whose pivots stay
+positive if and only if $\omega_i>0$, and whose pivot ratios multiply to $\omega_i$
+(\cref{prop:c1-pivots}).
+
 
 \section{Zero-Curvature Directions}
 \label{sec:zero-curvature}

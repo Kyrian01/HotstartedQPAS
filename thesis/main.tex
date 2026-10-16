@@ -224,20 +224,32 @@ basis. The reduced KKT system decouples: the surplus part of the search directio
 by an explicit formula, and only an \emph{effective reduced Hessian} on the column weights
 has to be factorized. This matrix is the reduced Hessian of the equality rows together with
 the inequality rows whose surplus is fixed at zero. Every change of the working set becomes
-a low-rank modification of a fixed-size $LDL^\top$ factorization, which is updated in place
-with the sparse direct solver CHOLMOD and carried over from one column generation iteration
-to the next. The Lagrange multipliers of the method coincide with the reduced costs of
-column generation and with the dual sign conditions of the inequality rows. Singular reduced
-Hessians are resolved by an exact zero-curvature step, and periodic refactorization controls
-the structural zeros that accumulate in the factor.
+a low-rank modification of an $LDL^\top$ factorization of this matrix, which is updated in
+place and carried over from one column generation iteration to the next. The Lagrange
+multipliers of the method coincide with the reduced costs of column generation and with the
+dual sign conditions of the inequality rows, and singular reduced Hessians are resolved by
+an exact zero-curvature step.
 
 \medskip
 
-On generated airline crew scheduling instances the method reproduces the optimum of the
-full linear program, and it solves the regularized master problems about two to three orders of
-magnitude faster than a general-purpose quadratic programming solver. The complete column
-generation run is also much faster than classical column generation with a linear master
-problem, and on the larger instances faster than solving the full linear program directly.
+Two factorizations are developed. The first is a sparse factorization of fixed dimension,
+updated with the sparse direct solver CHOLMOD, in which periodic refactorization controls the
+structural zeros left by the updates. The second exploits that the effective reduced Hessian
+is small and dense: it is factorized densely in the order in which its indices became active,
+so that a new index is appended and a removed index is deleted by a rank-one update. This
+factor never contains structural zeros, needs no periodic refactorization, and its pivots
+detect singular reduced Hessians exactly.
+
+\medskip
+
+On generated airline crew scheduling instances with up to 960 linking rows the method
+reproduces the optimum of the full linear program, and it solves the regularized master
+problems about three orders of magnitude faster than a general-purpose quadratic programming
+solver. The dense factorization is two to four times faster than the sparse one, with a
+speedup that grows with the number of linking rows, and needs an order of magnitude less
+memory. The complete column generation run is much faster than classical column generation
+with a linear master problem, and, on all but the smallest instance, faster than solving the
+full linear program directly.
 
 
 \cleardoublepage
@@ -253,8 +265,9 @@ problem, and on the larger instances faster than solving the full linear program
 \input{chapters/05_nullspace}
 \input{chapters/06_updates}
 \input{chapters/07_singular}
-\input{chapters/08_results}
-\input{chapters/09_conclusion}
+\input{chapters/08_dense}
+\input{chapters/09_results}
+\input{chapters/10_conclusion}
 
 \backmatter
 \input{chapters/bibliography}

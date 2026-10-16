@@ -37,34 +37,52 @@ the master problem and the pricing test are the same test.
 \medskip
 
 Every change of the working set is a row addition, a row deletion or a rank-one modification
-of a fixed-size $LDL^\top$ factorization (\cref{chap:updates}). A new column or a new
+of an $LDL^\top$ factorization of $\Heff$ (\cref{chap:updates}). A new column or a new
 stability center leaves the factorization unchanged, which gives a hot start of every master
-problem. Structural zeros left by the updates are controlled by periodic refactorization in
-increasing index order. Singular reduced Hessians are resolved by an exact zero-curvature
-step, which removes the dependency and keeps every working-set variable except the released one at its bound, for
+problem. Singular reduced Hessians are resolved by an exact zero-curvature step, which removes
+the dependency and keeps every working-set variable except the released one at its bound, for
 released columns and released surpluses alike (\cref{chap:singular}).
 
 \medskip
 
+The factorization was realized in two ways. A sparse factorization of fixed dimension
+$\nmax$, updated with CHOLMOD, accumulates structural zeros, which periodic refactorization in
+increasing index order controls (\cref{chap:updates}). Since $\Heff$ is small and dense, it can
+instead be factorized densely in the order in which its indices became active
+(\cref{chap:dense}). A released column is then appended, a removed index is deleted by a
+rank-one update of the positions behind it, and the surplus operations are rank-one updates
+and downdates by the method of Gill, Golub, Murray and Saunders. This factor never contains a
+stale entry and needs no periodic refactorization; its new pivot is exactly the Schur
+complement of a released column, its downdates fail exactly when the downdated matrix is
+singular, and removals never decrease a pivot.
+
+\medskip
+
 On generated crew scheduling instances (\cref{chap:results}), the method reproduces the optimum
-of the full linear program and certifies it by the Lagrangian bound. Its master problems cost
-between $0.01$ and $7$\,ms on average. That is two to three orders of magnitude less than a
-general-purpose QP solver on all instances but the smallest, and fast enough to make regularized column generation much faster
-than classical column generation with a warm-started LP master: 7.7\,s instead of 650\,s on
-the largest instance on which both were run. The complete column generation run is even
-faster than solving the full linear program directly, from I4 on with equality rows and on all
-instances with inequality rows. Inequality rows need no new kind of
-linear algebra, keep the time per master problem of the same order, and lead to shorter runs.
+of the full linear program and certifies it by the Lagrangian bound, with both factorizations.
+With the dense factorization, its master problems cost between $0.003$ and $13$\,ms on
+average, almost three orders of magnitude less than a general-purpose QP solver, and fast
+enough to make regularized column generation much faster than classical column generation with
+a warm-started LP master: 3.0\,s instead of 663\,s on the largest instance on which both were
+run. The dense factorization is two to four times faster than the sparse one, with a speedup
+that grows with the number of linking rows, needs an order of magnitude less memory, and is
+just as accurate. The complete column generation run is faster than solving the full linear
+program directly from the second instance on, by a factor of three to four on the larger
+instances, and on the largest ones the direct solve did not finish in the time in which the
+active-set method was done. Inequality rows need no new kind of linear algebra, keep the time
+per master problem of the same order, and lead to shorter runs.
 
 
 \section{Outlook}
 
 The experiments point to four directions for further work.
 \begin{itemize}
-    \item \textbf{Dense factorization for large nullspaces.} The factor of $\Heff$ turned out
-          to be dense. For large $|\Nx|$, a dense $LDL^\top$ (or $QR$) factorization with
-          rank-one updates would avoid the overhead of sparse data structures and would make
-          the periodic refactorization unnecessary.
+    \item \textbf{A cheaper multiplier test.} With the dense factorization, the linear algebra
+          is no longer the dominant cost. The multiplier test, which computes the reduced cost of
+          every working-set column at every subspace minimizer, now costs as much as the
+          direction computation. Since a step changes $\pi$ only by a multiple of $\Abar p$, the
+          reduced costs could be updated incrementally, or the test could be restricted to a
+          candidate list as in partial pricing.
     \item \textbf{Adaptive stabilization in the proximal phase.} The long tail of center-only
           iterations is a property of the proximal point method with a fixed $\delta$
           (\cref{prop:center-only}). Since $\delta$ does not enter the factorization, it can be
