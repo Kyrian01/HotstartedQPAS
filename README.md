@@ -98,7 +98,7 @@ print_details(qpas)
 | 2 | `HighsLPMaster` | LP master with Big-M slacks, persistent HiGHS instance (`addCols`, warm-started simplex) | §2.3, Alg. 2.1 |
 | 3a | `HighsExplicitQPMaster` | stabilized QP that keeps `w`: Hessian `δI` on `w` only, HiGHS QP | §3.2 |
 | 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`: Hessian `(AX)ᵀ(AX)/δ`, HiGHS QP | §3.3 |
-| 4 | `QPASMaster` | the same QP as 3b, solved by the hot-started QPAS of Chapters 4–7 | Alg. 6.1, Alg. 7.1 |
+| 4 | `QPASMaster` | the same QP as 3b, solved by the hot-started QPAS of Chapters 4–8 | Alg. 6.1, 7.1, 8.1 |
 
 All column generation variants share one driver (`solve_column_generation`), one pricing
 oracle (DAG shortest path), one column pool, and one statistics handler (`CGStats`).
@@ -222,7 +222,7 @@ in without touching the driver.
 
 ## Implementation notes for the QPAS
 
-These went beyond the earlier thesis. The new thesis covers them (Chapters 5–7). Each was
+These went beyond the earlier thesis. The new thesis covers them (Chapters 5–8). Each was
 measured or tested. Shorter working notes are in
 [`docs/qpas_mathematical_notes.md`](docs/qpas_mathematical_notes.md).
 
@@ -264,9 +264,9 @@ measured or tested. Shorter working notes are in
    stores only the active `|N| × |N|` block in activation order: a new index is appended (one
    triangular solve), a deleted slot is removed by a rank-one update of the trailing block
    fused with compaction, and slack changes use method C1. It never holds structural zeros, so
-   it needs no periodic refactorization. On I1–I3 the master solve is 2.2–2.9x faster with
-   identical iteration counts and accuracy. Derivations and measurements:
-   [`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md).
+   it needs no periodic refactorization. The master solves are 2.3–4.2x faster than with
+   CHOLMOD (growing with m, up to m = 960), with the same accuracy. Theory: thesis Chapter 8;
+   measurements: thesis §9.8; working notes: [`docs/dense_ldlt_backend.md`](docs/dense_ldlt_backend.md).
 
 ### On iteration counts of the stabilized methods
 
