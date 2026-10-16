@@ -2,9 +2,31 @@
 
 Column generation for the multi-pilot crew scheduling LP, with quadratic proximal
 stabilization and a **hot-started nullspace active-set QP solver (QPAS)** whose reduced-Hessian
-LDLᵀ factorization is updated in place with CHOLMOD. This is the code for the master's
-thesis *"Hot-Started Active-Set Method for Regularized Column Generation"* (K. Bäumer,
-[`docs/Masterthesis_Kyrian_Baumer.pdf`](docs/Masterthesis_Kyrian_Baumer.pdf)).
+LDLᵀ factorization is updated in place with CHOLMOD.
+
+## The thesis
+
+[`thesis/main.pdf`](thesis/main.pdf), *"A Hot-Started Nullspace Active-Set Method for
+Regularized Column Generation with Equality and Inequality Linking Constraints"*
+(K. Bäumer), covers the math and theory behind everything in this branch. It includes
+the derivations and proofs for the method as implemented here, inequality linking rows
+included:
+
+| chapter | contents |
+|---|---|
+| 2 Problem Formulation | multi-block LPs with mixed `=`/`≥`/`≤` linking rows, Dantzig–Wolfe, column generation, surplus variables |
+| 3 Regularization | proximal stabilization, explicit and eliminated regularized master, center updates, exact termination, Lagrangian bound |
+| 4 Active-Set Method | optimality conditions, primal active-set method, the reordering theorem |
+| 5 Nullspace Method | explicit sparse nullspace basis, decoupled reduced KKT system, effective reduced Hessian, multipliers = reduced costs |
+| 6 Efficient Updates | fixed-size `n_max` factor, expand/reduce, CHOLMOD `rowadd`/`rowdel`/`updown`, sparse solves, refactorization, hot start |
+| 7 Singular Reduced Hessians | detection and the zero-curvature step |
+| 8 Computational Results | crew scheduling instances, correctness, timings, inequality rows, fill-in |
+
+The LaTeX source is in `thesis/` (`pdflatex main`, twice). The figures are drawn by pgfplots
+from `thesis/data/`, which `thesis/scripts/generate_data.jl` and `make_plot_data.jl`
+produce. The earlier version of the thesis, which covers equality rows only and uses
+different numbering, is [`docs/Masterthesis_Kyrian_Baumer.pdf`](docs/Masterthesis_Kyrian_Baumer.pdf).
+Unless stated otherwise, thesis references below point to the new thesis.
 
 ## Quick start
 
@@ -69,11 +91,11 @@ print_details(qpas)
 
 | # | solver | restricted master problem | thesis |
 |---|--------|---------------------------|--------|
-| 1 | `solve_exact` | — : the edge-based LP with all coupling and flow rows stacked in one matrix, HiGHS | eq. 5.2 |
-| 2 | `HighsLPMaster` | LP master with Big-M slacks, persistent HiGHS instance (`addCols`, warm-started simplex) | eq. 1.23, Alg. 5.1 |
-| 3a | `HighsExplicitQPMaster` | stabilized QP that keeps `w`: Hessian `δI` on `w` only, HiGHS QP | eq. 4.3 |
-| 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`: Hessian `(AX)ᵀ(AX)/δ`, HiGHS QP | eq. 4.5/4.6 |
-| 4 | `QPASMaster` | the same QP as 3b, solved by the hot-started QPAS of Chapter 4 | Alg. 4.3, §4.5 |
+| 1 | `solve_exact` | — : the edge-based LP with all coupling and flow rows stacked in one matrix, HiGHS | §2.1, §8.1 |
+| 2 | `HighsLPMaster` | LP master with Big-M slacks, persistent HiGHS instance (`addCols`, warm-started simplex) | §2.3, Alg. 2.1 |
+| 3a | `HighsExplicitQPMaster` | stabilized QP that keeps `w`: Hessian `δI` on `w` only, HiGHS QP | §3.2 |
+| 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`: Hessian `(AX)ᵀ(AX)/δ`, HiGHS QP | §3.3 |
+| 4 | `QPASMaster` | the same QP as 3b, solved by the hot-started QPAS of Chapters 4–7 | Alg. 6.1, Alg. 7.1 |
 
 All column generation variants share one driver (`solve_column_generation`), one pricing
 oracle (DAG shortest path), one column pool, and one statistics handler (`CGStats`).
@@ -87,8 +109,9 @@ stability center to have converged (`π = π̂`, equivalently `AXλ = b`). There
 
 ## Results
 
-Instance I3 (sizes as in thesis Table 5.1), δ = 1, Apple M-series, Julia 1.13, single thread,
-600 s time limit per method. "gap" is `objective − exact optimum`.
+For the full results (all instances, equality and inequality variants, fill-in and
+refactorization) see thesis Chapter 8. Below is one sample run on instance I3: δ = 1,
+Apple M-series, Julia 1.13, single thread, 600 s time limit per method. "gap" is `objective − exact optimum`.
 
 ```
 I3: |V|=175, |E|=1546, pilots=10, tasks=360
@@ -131,7 +154,7 @@ src/
 │   ├── nullspace.jl             implicit nullspace basis Z (explicit forms for debugging)
 │   ├── kkt_system.jl            KKTSystem: ordering + LDLᵀ factor of the reduced Hessian
 │   ├── hotstart_state.jl        QPASState: everything carried between CG iterations
-│   └── solver.jl                Alg. 4.3: direction, ratio test, expand / reduce, singular steps
+│   └── solver.jl                Alg. 6.1 / 7.1: direction, ratio test, expand / reduce, singular steps
 ├── cg/                          CGOptions, CGResult, the column generation driver
 ├── experiments/                 experiment config files and runner
 └── stats/                       CGStats / ExactStats, comparison tables, CSV traces
@@ -141,7 +164,8 @@ scripts/quickstart.jl            API tour
 experiments.toml                 the experiment definitions (all parameters documented)
 run.jl                           entry point: julia --project run.jl [config] [--only …]
 claude_context/                  context for Claude: original sketches and the earlier thesis (not used by the code)
-docs/                            the thesis
+thesis/                          the thesis: LaTeX source, main.pdf, data/ and the scripts that generate it
+docs/                            the earlier thesis PDF and markdown notes on the QPAS
 ```
 
 ## Architecture
@@ -172,23 +196,28 @@ in without touching the driver.
 
 | thesis | code |
 |--------|------|
-| multi-block DW master, convexity matrix `C` (§1.4) | `ColumnPool.block`, convexity rows in the HiGHS masters |
-| regularized master, explicit / eliminated (eq. 4.3 / 4.5–4.6) | `HighsExplicitQPMaster` / `HighsEliminatedQPMaster`, `QPASMaster` |
-| `π = π̂ + (b − AXλ)/δ` (eq. 4.4) | `QPASState.π`, `refresh_duals!`, `take_step!` |
-| reordering theorem `[S, W, N]` (Thm 4.2.3) | `ColumnOrdering` (`rep`, `W`, `N`, `set_of`) |
-| nullspace basis `zⱼ = eⱼ − e_rep(j)` (Cor. 4.3.4) | implicit; `nullspace_basis` builds it for debugging |
-| reduced system `Hy = −δZᵀg` (eq. 4.32) | `compute_direction!` |
-| multipliers `μ = h_S`, `λ = h_W − C_Wᵀμ` (Thm 4.3.5) | `update_convexity_duals!`, `most_negative_multiplier` |
-| expanding the working set (§4.4.1, Thm 4.4.2/4.4.4) | `expand_working_set!`, `_swap_representative!` |
-| reducing the working set (§4.4.2, Thm 4.4.5) | `reduce_working_set!`, `hessian_column!`, `insert_column!` |
-| CHOLMOD `rowadd` / `rowdel` (§4.4.3) | `Cholmod.rowadd!` / `Cholmod.rowdel!` |
-| singular reduced Hessian (§4.4.5) | `reduce_working_set!` + `_singular_step!` |
-| fixed size `n_max` (§4.5.1) | `CGOptions.max_columns` → pool / factor capacity |
-| hot start (§4.5.2) | `register_columns!` (new column ⇒ W, factor unchanged) |
+| multi-block DW master, convexity matrix `C` (§2.2) | `ColumnPool.block`, convexity rows in the HiGHS masters |
+| surplus variables for `≥` / `≤` rows (§2.4) | inequality slacks in `QPASState`, row bounds in the HiGHS masters |
+| regularized master, explicit / eliminated (§3.2 / §3.3) | `HighsExplicitQPMaster` / `HighsEliminatedQPMaster`, `QPASMaster` |
+| `π = π̂ + (b − AXλ)/δ` (§3.3.1) | `QPASState.π`, `refresh_duals!`, `take_step!` |
+| center updates, exact termination, Lagrangian bound (§3.4) | `src/cg/`, `CGOptions.center_tolerance` |
+| reordering theorem `[S, W, N]` (§4.4) | `ColumnOrdering` (`rep`, `W`, `N`, `set_of`) |
+| nullspace basis `zⱼ = eⱼ − e_rep(j)` (§5.1) | implicit; `nullspace_basis` builds it for debugging |
+| reduced system, effective reduced Hessian `H_eff` (§5.2) | `compute_direction!`, `KKTSystem` |
+| implicit evaluation of `Z` and `AZ` (§5.2.5) | `hessian_column!`, gradient from `π` |
+| multipliers `μ = h_S`, `λ = h_W − C_Wᵀμ` (§5.3) | `update_convexity_duals!`, `most_negative_multiplier` |
+| fixed size `n_max` (§6.1) | `CGOptions.max_columns` → pool / factor capacity |
+| expanding the working set (§6.2) | `expand_working_set!`, `_swap_representative!` |
+| reducing the working set (§6.3) | `reduce_working_set!`, `hessian_column!`, `insert_column!` |
+| CHOLMOD `rowadd` / `rowdel` / `updown`, sparse solves (§6.4) | `Cholmod.rowadd!` / `Cholmod.rowdel!`, `cholmod_l_updown`, `Bset` solves |
+| structural zeros, periodic refactorization (§6.5) | `QPASOptions(refactor_interval = …)` |
+| hot start, center-only iterations (§6.6) | `register_columns!` (new column ⇒ W, factor unchanged) |
+| singular reduced Hessian, zero-curvature step (Ch. 7) | `reduce_working_set!` + `_singular_step!` |
 
 ## Implementation notes for the QPAS
 
-These go beyond the thesis text. Each was measured or tested. Derivations and proofs are in
+These went beyond the earlier thesis. The new thesis covers them (Chapters 5–7). Each was
+measured or tested. Shorter working notes are in
 [`docs/qpas_mathematical_notes.md`](docs/qpas_mathematical_notes.md).
 
 1. **The gradient is never stored.** With `π = π̂ + (b − Ax)/δ` the gradient of the eliminated QP is
@@ -205,7 +234,7 @@ These go beyond the thesis text. Each was measured or tested. Derivations and pr
 4. **Singular reduced Hessian.** A dependent new column is detected from the LDLᵀ pivots
    right after the `rowadd`, which saves one solve per reduction compared with checking
    the Schur complement first. The rare dependent case is undone. Then, instead of moving
-   `argmax|tₖ|` into W (thesis §4.4.5, which can leave a positive variable in W), the solver
+   `argmax|tₖ|` into W (earlier thesis §4.4.5, which can leave a positive variable in W), the solver
    takes the zero-curvature descent step `d = z_r − Σ tₖzₖ` (`Ad = 0`, `gᵀd = λ_r < 0`) up to
    the first blocking variable. That variable joins W, the dependency disappears, and
    `x_W = 0` holds throughout. Tested by `test/test_qpas.jl`, including the case where the
@@ -227,10 +256,11 @@ These go beyond the thesis text. Each was measured or tested. Derivations and pr
 
 With exact termination, the stabilized runs add far fewer *columns* than LP CG (I2: ~920 vs
 ~2400). However, they continue with "center-only" iterations after pricing stops finding
-columns, until `π = π̂`, which is a proximal-point tail on the restricted model. The thesis
-runs stopped after five non-improving iterations, which cuts this tail at the price of a
-larger gap (thesis Table 5.5). For the QPAS these iterations are cheap (hot start, no new
-column). `CGOptions.center_tolerance` controls how far the tail is followed.
+columns, until `π = π̂`, which is a proximal-point tail on the restricted model (thesis
+§6.6.1 and §8.4). The runs in the earlier thesis stopped after five non-improving
+iterations, which cuts this tail at the price of a larger gap (earlier thesis, Table 5.5).
+For the QPAS these iterations are cheap (hot start, no new column).
+`CGOptions.center_tolerance` controls how far the tail is followed.
 
 ## Statistics
 
@@ -263,7 +293,8 @@ whose slack is in `W_s`, so the factor stays `n_max × n_max`. A slack entering 
 rank-one update `H_eff + vvᵀ`, a slack leaving it a downdate `H_eff − vvᵀ`
 (`cholmod_l_updown`), with `v` the row of `AZ` of that inequality. The multiplier of a slack in
 `W_s` is the dual of its row (signed), so the optimality test also checks the dual sign
-conditions. Theory: [`docs/qpas_inequality_extension.md`](docs/qpas_inequality_extension.md).
+conditions. Theory: thesis §2.4, §5.2–5.3 and §6.4.2. Working notes:
+[`docs/qpas_inequality_extension.md`](docs/qpas_inequality_extension.md).
 
 ## Reproducing the benchmarks
 
