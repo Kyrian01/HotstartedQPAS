@@ -31,6 +31,20 @@ produce. The earlier version of the thesis, which covers equality rows only and 
 different numbering, is [`docs/Masterthesis_Kyrian_Baumer.pdf`](docs/Masterthesis_Kyrian_Baumer.pdf).
 Unless stated otherwise, thesis references below point to the new thesis.
 
+**Notation, code ↔ thesis.** The code predates the thesis notation in a few places:
+
+| code | thesis | meaning |
+|---|---|---|
+| `λ` (`MasterSolution.weights`, `CGResult`), `AXλ` | `λ` (Ch. 2–3), `x` (Ch. 4–8), `Aλ` | column weights, linking-row activity |
+| `QPASState.x`, `QPASState.s` | `x`, `s` (`y = [x; s]`) | column weights and surpluses/slacks inside the QPAS |
+| `λⱼ`, `λσ` in `src/qpas/` (`most_negative_multiplier`) | `ν_x`, `ν_s` | multipliers of the working-set bounds `x_j ≥ 0`, `s_i ≥ 0` |
+| slack index `σ`, sign `κσ` (`slack_signs`) | row `i ∈ I`, `κ_i` (Rem. 2.4.4) | one slack per inequality row; `κ = −1` for `≥`, `+1` for `≤` |
+| `p` in complexity bounds, `n_pilots`, `n_blocks`, `P` | `K` | number of blocks (pilots) |
+| `N`, `W`, `S` / `rep`; `N_s`, `W_s` | `N_x`, `W_x`, `𝒮` / `rep`; `N_s`, `W_s` | the extended ordering (Def. 4.4.4) |
+| `p` (direction), `y` in `compute_direction!` | `p`, `η_x` | search direction and its reduced coordinates |
+| `u_j = a_j − a_rep(j)`, `t` in the singular steps | `A z_j`, `β` | nullspace column images, coefficients of Thm. 7.3.1 / 7.3.2 |
+| `xₖ` (edge vector of pilot `k`, `src/problem/`) | `ξ_k` | edge flows of the crew scheduling LP (eq. 9.1) |
+
 ## Quick start
 
 ```bash
@@ -107,7 +121,9 @@ edge flows (`edge_flows`), active schedules (`active_columns`) and full per-iter
 
 **Termination is exact.** CG stops when a complete pricing round over all pilots finds no
 column with reduced cost below `-reduced_cost_tolerance`. Stabilized runs also require the
-stability center to have converged (`π = π̂`, equivalently `AXλ = b`). There is no
+stability center to have converged (`π = π̂`, equivalently `Āy = b` with `y = (λ, s)`: the
+equality rows hold, `A_E λ = b_E`, and the inequality rows hold with their surpluses,
+`A_I λ − s = b_I` with `s ≥ 0`, i.e. `A_I λ ≥ b_I`; thesis Prop. 3.3.5). There is no
 "k iterations without improvement" heuristic.
 
 ## Results
@@ -203,7 +219,7 @@ in without touching the driver.
 | multi-block DW master, convexity matrix `C` (§2.2) | `ColumnPool.block`, convexity rows in the HiGHS masters |
 | surplus variables for `≥` / `≤` rows (§2.4) | inequality slacks in `QPASState`, row bounds in the HiGHS masters |
 | regularized master, explicit / eliminated (§3.2 / §3.3) | `HighsExplicitQPMaster` / `HighsEliminatedQPMaster`, `QPASMaster` |
-| `π = π̂ + (b − AXλ)/δ` (§3.3.1) | `QPASState.π`, `refresh_duals!`, `take_step!` |
+| `π = π̂ + (b − Āy)/δ`, `y = (λ, s)` (§3.3.1, eq. 3.9) | `QPASState.π`, `refresh_duals!`, `take_step!` |
 | center updates, exact termination, Lagrangian bound (§3.4) | `src/cg/`, `CGOptions.center_tolerance` |
 | reordering theorem `[S, W, N]` (§4.4) | `ColumnOrdering` (`rep`, `W`, `N`, `set_of`) |
 | nullspace basis `zⱼ = eⱼ − e_rep(j)` (§5.1) | implicit; `nullspace_basis` builds it for debugging |
@@ -226,8 +242,8 @@ These went beyond the earlier thesis. The new thesis covers them (Chapters 5–8
 measured or tested. Shorter working notes are in
 [`docs/qpas_mathematical_notes.md`](docs/qpas_mathematical_notes.md).
 
-1. **The gradient is never stored.** With `π = π̂ + (b − Ax)/δ` the gradient of the eliminated QP is
-   `g = c − Aᵀπ`. So `gⱼ` is the reduced cost of column `j` without the convexity dual.
+1. **The gradient is never stored.** With `π = π̂ + (b − Āy)/δ` the gradient of the eliminated
+   QP is `g = c − Aᵀπ` on the columns (and `−κᵢπᵢ` on the slacks). So `gⱼ` is the reduced cost of column `j` without the convexity dual.
    The solver maintains the m-vector `π` (updated by `π −= (α/δ)·Ap` after each step) and
    evaluates `gⱼ` only where needed: on `N ∪ S` for the right-hand side, and on `W` only
    at a subspace minimizer. A primal step costs `O((|N| + p)·nnz)`, independent of the
@@ -308,7 +324,8 @@ slack sign instead keeps the columns unchanged). The slacks belong to no convexi
 are split into a working set `W_s` (`sᵢ = 0`, the row acts as an equality) and a free set
 `N_s`. The factorized matrix is the **effective reduced Hessian**
 `H_eff = (A_eff Z)ᵀ(A_eff Z)`, where `A_eff` keeps the equality rows and the inequality rows
-whose slack is in `W_s`, so the factor stays `n_max × n_max`. A slack entering `W_s` is a
+whose slack is in `W_s`, so the factor stays `n_max × n_max` (CHOLMOD backend; the dense
+backend stores only `|N| × |N|`). A slack entering `W_s` is a
 rank-one update `H_eff + vvᵀ`, a slack leaving it a downdate `H_eff − vvᵀ`
 (`cholmod_l_updown`), with `v` the row of `AZ` of that inequality. The multiplier of a slack in
 `W_s` is the dual of its row (signed), so the optimality test also checks the dual sign

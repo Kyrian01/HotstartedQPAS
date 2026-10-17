@@ -5,6 +5,14 @@ Generation". Sections 1–5 below follow Sections 4.1–4.5 of the thesis one to
 of the form "Theorem 4.2.3" or "(4.17)" point to the thesis; numbers of the form
 "Theorem 2.3" or "(2.5)" point to this document.*
 
+> **Note.** Thesis numbers in this document refer to the earlier thesis version
+> ([`Masterthesis_Kyrian_Baumer.pdf`](Masterthesis_Kyrian_Baumer.pdf)). The current thesis
+> ([`thesis/`](../thesis/main.pdf)) covers this material, inequality rows included, in §2.4
+> (surplus variables, unified formulation), §3.3 (eliminated master with surpluses), Chapter 4
+> (optimality conditions, reordering theorem), Chapter 5 (nullspace method, effective reduced
+> Hessian), §6.2–6.3 (expanding / reducing the working set, rank-one updates), Chapter 7
+> (singular reduced Hessians) and §6.6 (hot start).
+
 In Chapter 4 all linking constraints are equalities, $AX\lambda = b$. In many applications some
 of them are inequalities. In crew scheduling, for example, a task may be covered *at least* once,
 with deadheading allowed. This chapter extends the regularized column generation framework
@@ -776,7 +784,8 @@ the working set, and the reduction is retried.
 
 The column weights use the fixed dimension $n_{\max}$ of Section 4.5.1. The surpluses add a
 fixed block of dimension $m_I$, which is known from the start and never changes. The
-factorization of $H_{\mathrm{eff}}$ keeps the dimension $n_{\max}$ (Section 4.3), so the
+factorization of $H_{\mathrm{eff}}$ keeps the dimension $n_{\max}$ (Section 4.3; CHOLMOD
+backend, the dense backend stores only $|N|\times|N|$), so the
 fixed-size $LDL^\top$ object of Chapter 4 can be reused without modification.
 
 ### 5.2 Initial iterate

@@ -4,6 +4,16 @@
 `src/backends/cholmod/` solves the LP relaxation of the multi-pilot crew scheduling problem,
 step by step and with every formula that is evaluated.*
 
+> **Note.** Thesis numbers in this document refer to the earlier thesis version
+> ([`Masterthesis_Kyrian_Baumer.pdf`](Masterthesis_Kyrian_Baumer.pdf)). The current thesis
+> ([`thesis/`](../thesis/main.pdf)) covers this material in: Chapter 2 (sections 2–3 below:
+> Dantzig–Wolfe master, pricing, Lagrangian bound), Chapter 3 (section 4: explicit and
+> eliminated regularized master; sections 10–12: center updates, exact termination, §3.4),
+> Chapters 4–5 (sections 5–6: optimality conditions, ordering, nullspace basis, reduced system,
+> multipliers), Chapters 5–7 (section 7: direction, expansion §6.2, reduction §6.3, singular
+> case Ch. 7), §6.1 and §6.4–6.5 (section 8: the fixed-size factor and its updates), §6.6
+> (sections 9 and 11: hot start, center-only iterations) and Alg. 6.1 (section 13).
+
 This document follows one run from start to finish. Pricing proposes columns, the proximal
 master is solved by the active-set method, the reduced-Hessian factor is updated in place,
 the state is carried into the next iteration, and the run stops through the center-only
@@ -602,15 +612,18 @@ $$
 $$
 
 shows that $H^+$ is singular exactly when $s = 0$, i.e. when
-$u_r\in\operatorname{span}\{u_k: k\in N\}$. The solver keeps every pivot of the factor above
-`singular_tolerance`$\cdot H_{kk}$, so a vanishing $s$ shows up as a small pivot right after
-the update. The code checks
+$u_r\in\operatorname{span}\{u_k: k\in N\}$. The solver keeps every scaled pivot
+$D_{kk}/\lVert u_k\rVert^2$ of the factor above `singular_tolerance`, so a vanishing $s$ shows
+up as a small pivot right after the update. The code checks
 
 $$
-\min_{k\in N\cup\{r\}} \frac{D_{kk}}{H_{kk}} > 10^{-10}
+\min_{k\in N\cup\{r\}} \frac{D_{kk}}{\lVert a_k - a_{\mathrm{rep}(k)}\rVert^2} > 10^{-10}
 $$
 
-(`min_pivot_ratio`, with $H_{kk}$ stored in `hdiag` at activation).
+(`min_pivot_ratio`, with the scale $\lVert u_k\rVert^2$ stored in `hdiag` at activation). With
+equality rows only this scale is $H_{kk}$; with inequality rows it is the norm over all rows,
+not the diagonal of $H_{\mathrm{eff}}$, so that a column whose masked part vanishes is still
+detected.
 
 * **Independent (the normal case):** the reduction is complete, and the next iteration
   computes a direction. Because $\lambda_r<0$, the new direction has $p_r > 0$ (thesis
@@ -753,7 +766,7 @@ Between operations the solver maintains:
 
 $$
 \bar H = L D L^\top \text{ on } N,\qquad
-D_{kk} > 10^{-10} H_{kk}\;\;(k\in N),\qquad
+D_{kk} > 10^{-10}\,\lVert a_k - a_{\mathrm{rep}(k)}\rVert^2\;\;(k\in N),\qquad
 L_{k,:} = e_k^\top,\; D_{kk} = 1\;\;(k\notin N).
 $$
 
@@ -1065,7 +1078,7 @@ loop
             u ← a_r − a_rep(r)
             h_k ← (a_k − a_rep(k))ᵀu  (k ∈ N),  h_rr ← ‖u‖²
             rowadd(r, h);  N ← N ∪ {r}
-            if min_{k∈N} D_kk / H_kk ≤ 1e−10:                 ← u dependent on AZ
+            if min_{k∈N} D_kk / ‖u_k‖² ≤ 1e−10:               ← u dependent on AZ
                 W ← W ∪ {r}; refactor
                 t ← H⁻¹h;  d ← z_r − Σ_k t_k z_k              Ad = 0, gᵀd = λ_r < 0
                 α, q ← ratio test along d (α_max = ∞);  x += αd

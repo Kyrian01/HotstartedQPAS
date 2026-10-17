@@ -143,9 +143,13 @@ $$
 d_{k+1} = \|u_j\|^2 - u_j^\top U (U^\top U)^{-1}U^\top u_j = \|(I - \Pi_U)\,u_j\|^2,
 $$
 
-the squared distance of $u_j$ from the span of the active columns. The scaled pivot
-$d_{k+1}/\|u_j\|^2 = \sin^2\theta$ ($\theta$ = angle between $u_j$ and that span) is therefore
-exactly the quantity that `reduce_working_set!` compares with `singular_tolerance`. CHOLMOD
+the squared distance of $u_j$ from the span of the active columns. Here $u_j$ and $U$ are the
+*masked* vectors ($A_{\mathrm{eff}}z$, rows of free surpluses removed), while the pivot scale
+is the unmasked $\|a_j - a_{\mathrm{rep}(j)}\|^2$. The scaled pivot that `reduce_working_set!`
+compares with `singular_tolerance` is therefore $\rho_j\sin^2\theta$ ($\theta$ = angle between
+$u_j$ and that span, $\rho_j \le 1$ = share of $\|a_j - a_{\mathrm{rep}(j)}\|^2$ in the unmasked
+rows), and exactly $\sin^2\theta$ when no row is masked (thesis, lemma "The scaled new pivot is
+an angle", Chapter 8). CHOLMOD
 inserts $j$ at its index position instead, and then also has to downdate the trailing
 columns. Its smallest pivot detects the same singularity, but indirectly.
 
@@ -188,9 +192,10 @@ update, which is the same as `cholmod_rowdel` deleting the first index. The benc
 records the mean relative position $(k-p)/k$ (`mean_trailing_fraction`).
 
 **Deletion never decreases a pivot.** With $\alpha > 0$, C1 produces
-$\bar d_j = d_j + a\,p_j^2 \ge d_j$, and $a$ stays positive. An expansion therefore cannot
-create a small pivot: the invariant "all pivots of $N$ above `singular_tolerance`" carries
-over from the reduction that established it.
+$\bar d_j = d_j + a\,p_j^2 \ge d_j$, and $a$ stays positive. A deletion or a slack activation
+therefore cannot create a small pivot. A representative swap can: it re-appends rows with new
+vectors and new pivot scales, so the solver checks the pivots after every expansion
+(`_check_factor!`).
 
 ### 3.3 Rank-one update and downdate (`updown!`): method C1
 
@@ -225,7 +230,8 @@ that first slot.
   This is the stable case, and it also covers every deletion (§3.2).
 - *Downdate* ($\alpha < 0$): $\bar d_j = d_j - |a|\,p_j^2$ can cancel. If some
   $\bar d_j \le 0$, the downdated matrix is not positive definite: `updown!` returns `false`
-  and the caller rebuilds the factor. This mirrors CHOLMOD's `CHOLMOD_NOT_POSDEF`.
+  and the caller rebuilds the factor. CHOLMOD's `updown` does not detect this (it returns a
+  negative pivot with success); there the pivot test below catches it.
   A singular but representable downdate shows up as a tiny pivot, which `reduce_surplus!`
   catches through `min_pivot_ratio` (`qpas_inequality_extension.md` §4.5).
 

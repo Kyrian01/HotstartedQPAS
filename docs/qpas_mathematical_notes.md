@@ -2,6 +2,12 @@
 
 *A companion to Chapter 4 of "Hot-Started Active-Set Method for Regularized Column Generation"*
 
+> **Note.** Thesis numbers in this document refer to the earlier thesis version
+> ([`Masterthesis_Kyrian_Baumer.pdf`](Masterthesis_Kyrian_Baumer.pdf)). The current thesis
+> ([`thesis/`](../thesis/main.pdf)) covers this material in Chapters 5–7 (nullspace method,
+> efficient updates, singular reduced Hessians), with the column generation level in §3.4 and
+> the hot start in §6.6.
+
 These notes record the mathematics behind the implementation in `src/qpas/` and
 `src/backends/cholmod/`. Where the code departs from the thesis text or adds to it, the
 argument for the choice is given here. Each section names the code that realises it.
@@ -284,9 +290,9 @@ and $s = 0 \iff u_r \in \operatorname{span}\{u_k : k\in N\}$.
 ### 5.1 Detection after the update instead of before
 
 Testing $s$ before the `rowadd` costs one extra solve per reduction. The code instead performs
-the `rowadd` and then inspects the relative pivots $D_{kk}/H_{kk}$ on $N\cup\{r\}$. The solver
-maintains the invariant that every pivot of the factor exceeds `singular_tolerance`
-($10^{-10}$). The product of the pivots equals $\det H^+ = \det H\cdot s$, so a vanishing $s$
+the `rowadd` and then inspects the scaled pivots $D_{kk}/\lVert a_k - a_{\mathrm{rep}(k)}\rVert^2$
+(norm over all rows, also with inequality rows) on $N\cup\{r\}$. The solver maintains the
+invariant that every scaled pivot of the factor exceeds `singular_tolerance` ($10^{-10}$). The product of the pivots equals $\det H^+ = \det H\cdot s$, so a vanishing $s$
 must show up as a small (or non-positive) pivot. Because of the invariant, that pivot can only
 be due to $r$. This detection is a numerical heuristic, not a theorem about floating-point
 $LDL^\top$, but it is consistent with the determinant identity, and the debug-mode tests
