@@ -56,6 +56,17 @@ diagnostics_residual   = false              # diagnostics also record ‖LDLᵀ 
 [defaults.stabilization]
 delta         = 1.0                 # proximal parameter δ (larger = stronger stabilization)
 center_update = "every_iteration"   # "every_iteration" (proximal point) or "best_bound" (bundle)
+delta_update  = "fixed"             # "fixed": δ = delta throughout (thesis)
+                                    # "geometric": δ ← delta_decrease·δ after a center-only iteration,
+                                    #   δ ← min(delta, delta_increase·δ) after an iteration that adds
+                                    #   a column; qpas only (the HiGHS QP masters are skipped)
+                                    #   docs/adaptive_stabilization.md
+                                    # fastest measured: "geometric" with delta = 1 for "all_blocks"
+                                    #   pricing (1.2–2.5x faster than "fixed" on I2–I4), delta = 3
+                                    #   for "first_improving" (1.3–1.8x)
+delta_decrease = 0.5                # geometric only: factor per center-only iteration
+delta_increase = 2.0                # geometric only: factor per column iteration; inf = reset to delta
+delta_min      = 1e-6               # geometric only: lower limit for δ
 
 # ── QPAS solver ──────────────────────────────────────────────────────────────────────────
 [defaults.qpas]
@@ -96,7 +107,7 @@ save_instance = false         # also save the generated instance (instance.jls)
 #     (I3: 4.4 s vs 1.4 s; L2: 76 s vs 23 s)
 #  C  pricing rule (vs I3)                                  I3_first_improving         ~10 s
 #  D  stabilization: δ and center update (vs I3)            I3_delta0.3 I3_delta3      ~30 s
-#                                                           I3_bundle
+#                                                           I3_bundle I3_geometric
 #  E  larger instances (no exact LP, no HiGHS masters)      L1 L2 L3 L2_ineq           ~1 min
 #  F  diagnostics: memory, factor contents, residual         I3_diag                    ~5 s
 #
@@ -275,6 +286,20 @@ explicit_qp   = false
 eliminated_qp = false
 [experiment.stabilization]
 center_update = "best_bound"
+
+[[experiment]]
+name = "I3_geometric"         # adaptive δ: halve per center-only iteration, double per column
+[experiment.instance]
+n_nodes          = 175
+edge_probability = 0.091
+n_tasks          = 390
+n_pilots         = 10
+[experiment.solvers]
+lp            = false
+explicit_qp   = false
+eliminated_qp = false
+[experiment.stabilization]
+delta_update = "geometric"
 
 # ── E: larger instances (QPAS only; no exact reference) ──────────────────────────────────
 

@@ -13,12 +13,28 @@ Quadratic proximal stabilization (thesis Chapter 3: §3.1 Proximal Stabilization
     pilots are priced every iteration. In iterations without a new column the center always
     moves (center-only iteration, as in thesis Alg. 3.1), unless the run has converged.
 - `initial_center`: starting `π̂` (`nothing` = zero vector)
+
+Adaptive stabilization (QPAS master only; thesis §3.5, Def. 3.5.3, Geometric stabilization
+parameter; `docs/adaptive_stabilization.md`). `delta` is then the base value `δ₀` and the
+largest δ used:
+- `delta_update`:
+  - `:fixed`: δ stays `delta` (thesis behaviour)
+  - `:geometric`: `δ ← max(delta_min, delta_decrease·δ)` after every center-only iteration,
+    `δ ← min(δ₀, delta_increase·δ)` after every iteration that adds a column
+    (default: double; `delta_increase = Inf`: reset to `δ₀`)
 """
 Base.@kwdef struct StabilizationOptions
     delta::Float64 = 1.0
     center_update::Symbol = :every_iteration
     initial_center::Union{Nothing,Vector{Float64}} = nothing
+    delta_update::Symbol = :fixed
+    delta_decrease::Float64 = 0.5
+    delta_increase::Float64 = 2.0
+    delta_min::Float64 = 1e-6
 end
+
+"True if δ follows an adaptive rule (needs `supports_delta_update`)."
+is_adaptive(s::StabilizationOptions) = s.delta_update !== :fixed
 
 """
     CGOptions(; kwargs...)
@@ -70,7 +86,13 @@ function validate(opts::CGOptions)
         throw(ArgumentError("pricing must be :first_improving or :all_blocks"))
     opts.stabilization.center_update in (:every_iteration, :best_bound) ||
         throw(ArgumentError("center_update must be :every_iteration or :best_bound"))
-    opts.stabilization.delta > 0 || throw(ArgumentError("δ must be positive"))
+    s = opts.stabilization
+    s.delta > 0 || throw(ArgumentError("δ must be positive"))
+    s.delta_update in (:fixed, :geometric) ||
+        throw(ArgumentError("delta_update must be :fixed or :geometric"))
+    0 < s.delta_decrease <= 1 || throw(ArgumentError("delta_decrease must lie in (0, 1]"))
+    s.delta_increase >= 1 || throw(ArgumentError("delta_increase must be ≥ 1"))
+    0 < s.delta_min <= s.delta || throw(ArgumentError("delta_min must lie in (0, delta]"))
     opts.diagnostics_every >= 0 || throw(ArgumentError("diagnostics_every must be ≥ 0"))
     opts.max_columns >= 1 || throw(ArgumentError("max_columns must be positive"))
     return opts

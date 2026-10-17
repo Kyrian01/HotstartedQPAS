@@ -4,7 +4,9 @@ Column generation for the multi-pilot crew scheduling LP, with quadratic proxima
 stabilization and a **hot-started nullspace active-set QP solver (QPAS)** whose reduced-Hessian
 LDLᵀ factorization is updated in place, either as a sparse fixed-size factor with CHOLMOD or
 as a dense factor of the active block (`factorization = "dense"`, 2–4x faster master solves;
-thesis Chapter 8).
+thesis Chapter 8). The stabilization parameter δ can be fixed (thesis) or adapted during the
+run (`delta_update = "geometric"`, which removes the long tail of center-only iterations;
+[`docs/adaptive_stabilization.md`](docs/adaptive_stabilization.md)).
 
 ## The thesis
 
@@ -17,13 +19,13 @@ included:
 | chapter | contents |
 |---|---|
 | 2 Problem Formulation | multi-block LPs with mixed `=`/`≥`/`≤` linking rows, Dantzig–Wolfe, column generation, surplus variables |
-| 3 Regularization | proximal stabilization, explicit and eliminated regularized master, center updates, exact termination, Lagrangian bound |
+| 3 Regularization | proximal stabilization, explicit and eliminated regularized master, center updates, exact termination, Lagrangian bound, adaptive (geometric) δ |
 | 4 Active-Set Method | optimality conditions, primal active-set method, the reordering theorem |
 | 5 Nullspace Method | explicit sparse nullspace basis, decoupled reduced KKT system, effective reduced Hessian, multipliers = reduced costs |
 | 6 Efficient Updates | fixed-size `n_max` factor, expand/reduce, CHOLMOD `rowadd`/`rowdel`/`updown`, sparse solves, refactorization, hot start |
 | 7 Singular Reduced Hessians | detection and the zero-curvature step |
 | 8 Dense Factorization | compact factor in activation order: append, delete by rank-one update, method C1, no structural zeros |
-| 9 Computational Results | crew scheduling instances up to m = 960, correctness, timings, inequality rows, fill-in, sparse vs dense factor |
+| 9 Computational Results | crew scheduling instances up to m = 960, correctness, timings, inequality rows, fill-in, sparse vs dense factor, adaptive δ |
 
 The LaTeX source is in `thesis/` (`pdflatex main`, twice). The figures are drawn by pgfplots
 from `thesis/data/`, which `thesis/scripts/generate_data.jl` and `make_plot_data.jl`
@@ -80,7 +82,7 @@ eliminated_qp = false
 | `[solvers]` | `exact`, `lp`, `explicit_qp`, `eliminated_qp`, `qpas` (true/false) |
 | `[instance]` | instance generator: nodes, edge probability, tasks, pilots, inequality fraction, seed, … |
 | `[column_generation]` | iteration/column/time limits, pricing rule, tolerances, verbosity |
-| `[stabilization]` | `delta`, `center_update` |
+| `[stabilization]` | `delta`, `center_update`, `delta_update` (`fixed` / `geometric`) with `delta_decrease`, `delta_increase`, `delta_min` |
 | `[qpas]` | QPAS tolerances, factorization backend (`cholmod` / `dense`), refactorization interval, sparse solves, debug |
 | `[lp]` | `big_m` |
 | `[output]` | output directory, per-iteration traces, saving the instance |
@@ -180,11 +182,13 @@ test/                            unit + integration tests (CHOLMOD, dense factor
 src/experiments/                 TOML config loading (config.jl) and the experiment runner (runner.jl)
 scripts/quickstart.jl            API tour
 scripts/benchmark_factorization.jl  CHOLMOD vs dense factor: CG runs, diagnostics, micro benchmark
+scripts/benchmark_adaptive_stabilization.jl  adaptive δ rules vs fixed δ on I1–I4 (docs/adaptive_stabilization.md)
 experiments.toml                 the experiment definitions (all parameters documented)
 run.jl                           entry point: julia --project run.jl [config] [--only …]
 claude_context/                  context for Claude: original sketches and the earlier thesis (not used by the code)
 thesis/                          the thesis: LaTeX source, main.pdf, data/ and the scripts that generate it
-docs/                            the earlier thesis PDF and notes on the QPAS, inequality rows and the dense factor
+docs/                            the earlier thesis PDF and notes on the QPAS, inequality rows, the dense factor
+                                 and adaptive stabilization
 ```
 
 ## Architecture
@@ -294,6 +298,15 @@ iterations, which cuts this tail at the price of a larger gap (earlier thesis, T
 For the QPAS these iterations are cheap (hot start, no new column).
 `CGOptions.center_tolerance` controls how far the tail is followed.
 
+The tail is a property of a fixed δ: every center-only iteration is a proximal step of
+length 1/δ. `delta_update = "geometric"` halves δ after every center-only iteration and
+doubles it (up to `delta`) after every iteration that adds a column, which is free for the
+QPAS because δ does not enter its factor. This cuts the center-only iterations on I2 from
+about 11,000 to about 300, makes the runs 1.2–2.5x faster on I2–I4 (all-blocks pricing,
+`delta = 1`) and the final solution exact to machine precision. With first-improving pricing
+`delta = 3` is the better base value. Theory: thesis §3.5; measurements: thesis §9.9 and
+[`docs/adaptive_stabilization.md`](docs/adaptive_stabilization.md); experiment `I3_geometric`.
+
 ## Statistics
 
 `CGStats` records per iteration: master time, pricing time, master objective, operational cost
@@ -344,3 +357,7 @@ I3; set them to `true` in `experiments.toml` to include them (~10 min each).
 
 CHOLMOD vs dense factor: `julia --project scripts/benchmark_factorization.jl` (`--suite
 small|large|micro|report`, `--reps`, `--only`). Writes `results/factorization/report.md`.
+
+Fixed vs geometric δ: `julia --project scripts/benchmark_adaptive_stabilization.jl`
+(first-improving pricing; `HQ_PRICING=all_blocks` for all-blocks pricing). Writes
+`results/adaptive_stabilization/<pricing>/summary.csv`.

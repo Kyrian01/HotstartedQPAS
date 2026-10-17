@@ -16,6 +16,12 @@
 #
 #   set_center!(m, center)         set the stability center π̂
 #
+# Stabilized masters that support adaptive stabilization (docs/adaptive_stabilization.md)
+# also implement
+#
+#   supports_delta_update(m)       -> Bool    (true: set_delta! is available)
+#   set_delta!(m, δ)               set the stabilization parameter of the next solve
+#
 # Optional:
 #
 #   solver_details(m)              -> Vector{Pair{String,Any}} of solver-specific statistics
@@ -89,6 +95,10 @@ diagnostics(::AbstractMasterSolver; residual::Bool = false) = nothing
 
 set_center!(m::AbstractMasterSolver, ::AbstractVector) =
     throw(ArgumentError("$(method_name(m)) is not a stabilized master"))
+
+supports_delta_update(::AbstractMasterSolver) = false
+set_delta!(m::AbstractMasterSolver, ::Real) =
+    throw(ArgumentError("$(method_name(m)) does not support changing δ"))
 
 """
 Stabilized objective `cᵀλ + δ/2‖π‖² - δ/2‖π̂‖²` given the dual estimate `π = π̂ + (b - Āy)/δ`

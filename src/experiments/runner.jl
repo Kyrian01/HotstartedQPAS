@@ -18,8 +18,8 @@ and write the outputs to `<output.directory>/<name>/`:
 - `<solver>.csv`: per-iteration traces of every column generation run (if `write_traces`)
 - `instance.jls`: the generated instance (if `save_instance`)
 
-Solvers that cannot handle the instance (e.g. inequality rows for the eliminated QP and the
-QPAS) are skipped with a message. Returns the list of results.
+Solvers that cannot handle the instance (inequality rows for the eliminated QP) or the
+settings (a geometric δ for the HiGHS QP masters) are skipped with a message. Returns the list of results.
 """
 function run_experiment(e::Experiment; io::IO = stdout)
     dir = joinpath(e.output_dir, e.name)
@@ -46,6 +46,13 @@ function run_experiment(e::Experiment; io::IO = stdout)
         # the eliminated HiGHS QP needs equality rows to eliminate w
         if has_inequalities(inst) && !supports_inequalities(master)
             println(io, "  skipping ", solver, ": inequality rows not supported")
+            continue
+        end
+        # a geometric δ is only free for the QPAS (δ does not enter its factor)
+        if is_stabilized(master) && is_adaptive(e.cg_options.stabilization) &&
+           !supports_delta_update(master)
+            println(io, "  skipping ", solver, ": delta_update = \"",
+                    e.cg_options.stabilization.delta_update, "\" needs the QPAS master")
             continue
         end
         print(io, "  running ", solver, " … ")

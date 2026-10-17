@@ -978,7 +978,10 @@ happens:
 This explains the long tail. The proximal point method on a polyhedral function advances
 with step $\lVert r\rVert/\delta$ along each face. When $r$ is already small, many
 iterations are needed to cross a face. A smaller $\delta$ would take larger steps in this
-phase, and by §9.3 changing it costs the QPAS no factorization work.
+phase, and by §9.3 changing it costs the QPAS no factorization work. This is implemented
+as `delta_update = "geometric"` (δ halves after every center-only iteration and doubles
+after every column); theory and measurements in
+[`adaptive_stabilization.md`](adaptive_stabilization.md).
 
 ### 11.3 Cost of a center-only iteration
 

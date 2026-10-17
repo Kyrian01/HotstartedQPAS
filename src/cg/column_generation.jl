@@ -35,6 +35,10 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     stabilized = is_stabilized(master)
     full_pricing = options.pricing === :all_blocks || options.compute_bound ||
                    (stabilized && stab.center_update === :best_bound)
+    adaptive = stabilized && is_adaptive(stab)
+    if adaptive && !supports_delta_update(master)
+        throw(ArgumentError("$(method_name(master)) does not support adaptive stabilization"))
+    end
 
     stats = CGStats(method_name(master))
     pool = ColumnPool(T, P, options.max_columns)
@@ -57,6 +61,7 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     center = stab.initial_center === nothing ? zeros(T) : copy(stab.initial_center)
     length(center) == T || throw(DimensionMismatch("initial_center must have length $T"))
     center_value = -Inf
+    δ = stab.delta                              # δ of the next master solve
     if stabilized
         set_center!(master, center)
         if stab.center_update === :best_bound
@@ -141,9 +146,14 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
         end
         # hand the changes to the master; nothing is solved until the next iteration
         n_new > 0 && add_columns!(master, pool, (n_master + 1):pool.n)
+        δ_solved = δ
         if center_moved
             copyto!(center, sol.π)
             set_center!(master, center)
+            if adaptive
+                δ = _next_delta(stab, δ, n_new == 0)
+                δ != δ_solved && set_delta!(master, δ)
+            end
         end
 
         # ── statistics ───────────────────────────────────────────────────────────────────
@@ -156,7 +166,8 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
                           infeasibility = infeas, lower_bound = bound,
                           dual_change = iter == 1 ? NaN : _maxabsdiff(sol.π, prev_π),
                           n_columns = pool.n, inner_iterations = sol.inner_iterations,
-                          columns_added = n_new, center_updated = center_moved)
+                          columns_added = n_new, center_updated = center_moved,
+                          delta = stabilized ? δ_solved : NaN)
         copyto!(prev_π, sol.π)
         if options.diagnostics_every > 0 && iter % options.diagnostics_every == 0
             _record_diagnostics!(stats, master, pool, iter, (time_ns() - t_start) * 1e-9,
@@ -202,6 +213,19 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
 end
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────────
+
+"""
+    _next_delta(stab, δ, center_only) -> δ_new
+
+δ of the next master solve under the geometric rule (thesis Def. 3.5.3, eq. 3.12), called
+when the center moves: δ shrinks by `delta_decrease` (down to `delta_min`) after a center-only
+iteration and grows by `delta_increase` (up to the base value `delta`) after an iteration that
+adds a column. Changing δ is free for the QPAS master (thesis Rem. 5.2.8).
+"""
+function _next_delta(stab::StabilizationOptions, δ::Float64, center_only::Bool)
+    return center_only ? max(stab.delta_min, stab.delta_decrease * δ) :
+                         min(stab.delta, stab.delta_increase * δ)
+end
 
 # Snapshot of memory use and solver internals (`CGOptions(diagnostics_every = k)`).
 function _record_diagnostics!(stats::CGStats, master::AbstractMasterSolver, pool::ColumnPool,

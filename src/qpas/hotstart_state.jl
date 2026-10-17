@@ -130,6 +130,20 @@ end
 "Set the stability center π̂ used by the next solve."
 set_center!(st::QPASState, center::AbstractVector{Float64}) = (copyto!(st.center, center); st)
 
+"""
+    set_delta!(state, δ)
+
+Set the stabilization parameter of the next solve. The ordering and the factor of
+`H_eff = (A_eff Z)ᵀ(A_eff Z)` do not depend on δ (thesis Rem. 5.2.8); δ only scales the
+right-hand side `-δ Zᵀg` and the dual estimate `π = π̂ + (b - Āy)/δ`, which the next solve
+recomputes. The iterate stays feasible.
+"""
+function set_delta!(st::QPASState, δ::Real)
+    δ > 0 && isfinite(δ) || throw(ArgumentError("δ must be positive and finite"))
+    st.delta = Float64(δ)
+    return st
+end
+
 "Recompute `π = π̂ + (b - Ax - Ks)/δ` from scratch."
 function refresh_duals!(st::QPASState)
     # Āy = Ax + Σσ κσ sσ e_row(σ)

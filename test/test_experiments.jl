@@ -31,6 +31,37 @@ end
         end
         @test byname["I3_first_improving"].cg_options.pricing === :first_improving
         @test byname["I3_diag"].cg_options.diagnostics_residual
+        # δ update toggle: fixed by default, geometric in I3_geometric
+        @test i3.cg_options.stabilization.delta_update === :fixed
+        geo = byname["I3_geometric"].cg_options.stabilization
+        @test geo.delta_update === :geometric && geo.delta == 1.0 && geo.delta_increase == 2.0
+    end
+
+    @testset "geometric δ: HiGHS QP masters are skipped" begin
+        out = mktempdir()
+        path = _write_config("""
+            [defaults.solvers]
+            exact = true
+            explicit_qp = true
+            qpas = true
+            [defaults.instance]
+            n_nodes = 20
+            edge_probability = 0.2
+            n_tasks = 12
+            n_pilots = 3
+            [defaults.stabilization]
+            delta_update = "geometric"
+            [defaults.output]
+            directory = "$(escape_string(out))"
+            [[experiment]]
+            name = "tiny_geo"
+            """)
+        io = IOBuffer()
+        res = run_experiments(path; io, warmup = false)["tiny_geo"]
+        @test length(res) == 2                               # exact + qpas
+        @test res[2].objective ≈ res[1].objective rtol = 1e-6
+        @test minimum(res[2].stats.delta) < 1.0
+        @test occursin("skipping explicit_qp", String(take!(io)))
     end
 
     @testset "factorization backend" begin

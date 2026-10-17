@@ -20,5 +20,6 @@ test_instance(size::Symbol; kwargs...) =
     include("test_problem.jl")
     include("test_qpas.jl")
     include("test_solvers.jl")
+    include("test_adaptive.jl")
     include("test_experiments.jl")
 end

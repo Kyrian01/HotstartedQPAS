@@ -97,6 +97,10 @@ end
 
 set_center!(m::QPASMaster, center::AbstractVector{Float64}) = (set_center!(m.state, center); m)
 
+# δ enters neither the ordering nor the factor (thesis Rem. 5.2.8), so changing it is free
+supports_delta_update(::QPASMaster) = true
+set_delta!(m::QPASMaster, δ::Real) = (set_delta!(m.state, δ); m)
+
 function solve!(m::QPASMaster)
     st = m.state
     sol = m.solution

@@ -18,6 +18,7 @@ Per-iteration traces (all of equal length `iterations`):
 | `inner_iterations` | simplex / QP / active-set iterations of the master solve                |
 | `columns_added`    | columns added by the pricing round                                      |
 | `center_updated`   | stabilised runs: whether the stability center moved                     |
+| `delta`            | stabilised runs: δ of the master solve (NaN otherwise)                  |
 
 `diagnostics` holds sampled snapshots (one `NamedTuple` per sample, see
 `CGOptions(diagnostics_every = k)`): memory use and solver internals such as the factor
@@ -42,6 +43,7 @@ mutable struct CGStats
     inner_iterations::Vector{Int}
     columns_added::Vector{Int}
     center_updated::Vector{Bool}
+    delta::Vector{Float64}
     diagnostics::Vector{NamedTuple}
     details::Vector{Pair{String,Any}}
 end
@@ -49,12 +51,13 @@ end
 CGStats(method::AbstractString) =
     CGStats(String(method), :not_started, 0, 0.0, 0.0, 0,
             Float64[], Float64[], Float64[], Float64[], Float64[], Float64[], Float64[],
-            Int[], Int[], Int[], Bool[], NamedTuple[], Pair{String,Any}[])
+            Int[], Int[], Int[], Bool[], Float64[], NamedTuple[], Pair{String,Any}[])
 
 "Append one CG iteration to the traces."
 function record_iteration!(s::CGStats; master_time, pricing_time, master_objective,
                            operational_cost, infeasibility, lower_bound, dual_change,
-                           n_columns, inner_iterations, columns_added, center_updated)
+                           n_columns, inner_iterations, columns_added, center_updated,
+                           delta = NaN)
     s.iterations += 1
     push!(s.master_time, master_time)
     push!(s.pricing_time, pricing_time)
@@ -67,6 +70,7 @@ function record_iteration!(s::CGStats; master_time, pricing_time, master_objecti
     push!(s.inner_iterations, inner_iterations)
     push!(s.columns_added, columns_added)
     push!(s.center_updated, center_updated)
+    push!(s.delta, delta)
     return s
 end
 
@@ -131,13 +135,13 @@ function write_trace_csv(path::AbstractString, s::CGStats)
     open(path, "w") do io
         println(io, "iteration,master_time,pricing_time,master_objective,operational_cost,",
                 "infeasibility,lower_bound,dual_change,n_columns,inner_iterations,",
-                "columns_added,center_updated")
+                "columns_added,center_updated,delta")
         for k in 1:s.iterations
             println(io, k, ',', s.master_time[k], ',', s.pricing_time[k], ',',
                     s.master_objective[k], ',', s.operational_cost[k], ',',
                     s.infeasibility[k], ',', s.lower_bound[k], ',', s.dual_change[k], ',',
                     s.n_columns[k], ',', s.inner_iterations[k], ',', s.columns_added[k], ',',
-                    Int(s.center_updated[k]))
+                    Int(s.center_updated[k]), ',', s.delta[k])
         end
     end
     return path
