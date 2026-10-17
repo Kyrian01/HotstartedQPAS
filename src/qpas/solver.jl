@@ -194,7 +194,8 @@ end
 Largest `α ≤ αmax` keeping `x + αp ≥ 0` and `0 ≤ s + αp_s ≤ U` over the support of the
 direction (`N ∪ S`, the free slacks `N_s`, plus column `extra` / slack `extra_s` if nonzero).
 `q` is the blocking index (a column, or a slack if `q_is_slack`), or 0 if `α = αmax` is not
-blocked. `q_at_upper` is `true` if slack `q` blocks at its upper bound (range rows only).
+blocked. `q_at_upper` is `true` if slack `q` blocks at its upper bound (range rows only;
+thesis Prop. 6.8.2, Ratio test with upper bounds).
 """
 function ratio_test(st::QPASState, αmax::Float64, extra::Int, extra_s::Int)
     ord = st.kkt.ordering

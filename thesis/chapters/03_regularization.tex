@@ -417,6 +417,12 @@ For problems with equality rows only, $\pi^+ = \pi$. At an exact optimum of the 
 $\pi_I\ge0$ (\cref{thm:kkt-master}~\ref{thm:kkt-master:ii}), so $\pi^+ = \pi$ and the pricing test of
 \cref{alg:rcg} is condition~\ref{thm:exact-termination:ii} of \cref{thm:exact-termination}.
 
+With ``$\le$'' rows and range rows (\cref{rem:kappa,sec:range}), the bound is the one of
+\cref{prop:lagrangian-general}, and the projection is applied row by row:
+$\pi^+_i = \max(\pi_i,0)$ on ``$\ge$'' rows, $\pi^+_i = \min(\pi_i,0)$ on ``$\le$'' rows, and
+$\pi^+_i = \pi_i$ on equality and range rows, whose term $\phi_i$ is finite for either sign.
+\Cref{thm:exact-termination} carries over to these rows (\cref{cor:range-termination}).
+
 \subsection{The algorithm}
 
 \Cref{alg:rcg} collects the steps of this section. The first line of the loop, the solution

@@ -9,6 +9,7 @@
 #           D scaling to larger instances (S5, S6)
 #           E cost of the individual factor operations against the active size
 #           F adaptive stabilization: fixed and geometric δ, both pricing rules (I1–I4)
+#           G range rows: the inequality rows of I1–I4 bounded by 2, one slack vs two rows
 #
 # Output: thesis/data/raw/*.csv. The plotting tables are derived from these files by
 # thesis/scripts/make_plot_data.jl, so plots can be changed without rerunning experiments.
@@ -23,7 +24,7 @@ BLAS.set_num_threads(1)              # all experiments single-threaded
 const SMOKE = get(ENV, "HQ_SMOKE", "")
 const RAW = isempty(SMOKE) ? joinpath(@__DIR__, "..", "data", "raw") : SMOKE
 mkpath(RAW)
-const SECTIONS = isempty(ARGS) ? ["A", "B", "C", "D", "E", "F"] : uppercase.(ARGS)
+const SECTIONS = isempty(ARGS) ? ["A", "B", "C", "D", "E", "F", "G"] : uppercase.(ARGS)
 
 #              name  |V|   p      tasks pilots
 const SIZES = isempty(SMOKE) ?
@@ -392,6 +393,65 @@ if "F" in SECTIONS
                 write_trace_csv(joinpath(RAW, "trace_$(t)_adapt_$(pricing)_$(label).csv"), st)
             println("$t $pricing $label: $(best.status) $(st.iterations) it ",
                     "$(round(st.total_time; digits = 3)) s")
+            flush(stdout)
+        end
+    end
+end
+
+# ── G. range rows: "1 ≤ cover ≤ 2" on the inequality rows of the 30 % variant ────────────
+# `range`: one slack with upper bound 1 per range row (thesis §2.4.1, §6.8); `split`: every
+# range row replaced by a "≥ 1" row and a "≤ 2" row with identical coefficients.
+const RANGE_UPPER = 2.0
+function with_range_rows(inst, upper)
+    hi = copy(inst.task_upper)
+    hi[isinf.(hi)] .= upper
+    return CrewSchedulingInstance(inst.network, inst.edge_costs, inst.task_matrix,
+                                  copy(inst.task_lower), hi, inst.name * "_range")
+end
+function split_range_rows(inst)
+    lo, hi = inst.task_lower, inst.task_upper
+    R = findall(i -> isfinite(lo[i]) && isfinite(hi[i]) && lo[i] < hi[i], eachindex(lo))
+    lo2 = vcat(lo, fill(-Inf, length(R)))
+    hi2 = vcat(hi, hi[R])
+    hi2[R] .= Inf
+    return CrewSchedulingInstance(inst.network, inst.edge_costs,
+                                  vcat(inst.task_matrix, inst.task_matrix[R, :]), lo2, hi2,
+                                  inst.name * "_split")
+end
+if "G" in SECTIONS
+    RANGE = joinpath(RAW, "range.csv")
+    isfile(RANGE) && rm(RANGE)
+    let w = with_range_rows(instance("W", 20, 0.2, 12, 3, 0.5), RANGE_UPPER)   # compile
+        solve_column_generation(w, QPASMaster(factorization = :dense))
+        solve_column_generation(split_range_rows(w), QPASMaster(factorization = :dense))
+    end
+    for (name, V, p, T, P) in SIZES
+        base = instance(name, V, p, T, P, 0.3)
+        rinst = with_range_rows(base, RANGE_UPPER)
+        nR = count(isfinite, rinst.task_upper) - count(rinst.task_lower .== rinst.task_upper)
+        ex = solve_exact(rinst)
+        for (variant, inst) in (("range", rinst), ("split", split_range_rows(rinst)))
+            best = nothing
+            for _ in 1:2
+                GC.gc()
+                r = solve_column_generation(inst, QPASMaster(factorization = :dense))
+                (best === nothing || r.stats.total_time < best.stats.total_time) && (best = r)
+            end
+            st = best.stats
+            d = Dict(strip(k) => v for (k, v) in st.details)
+            append_row(RANGE,
+                       "instance,variant,m,range_rows,status,iterations,column_iterations," *
+                       "columns,total_s,master_s,inner,bound_flips,objective,bound," *
+                       "infeasibility,exact_objective,exact_s",
+                       [name, variant, n_tasks(inst), nR, best.status, st.iterations,
+                        count(>(0), st.columns_added), length(best.weights),
+                        @sprintf("%.4f", st.total_time), @sprintf("%.4f", sum(st.master_time)),
+                        sum(st.inner_iterations), get(d, "bound flips (range rows)", 0),
+                        @sprintf("%.10f", best.objective), @sprintf("%.10f", best.lower_bound),
+                        @sprintf("%.3e", best.infeasibility), @sprintf("%.10f", ex.objective),
+                        @sprintf("%.4f", ex.stats.solve_time)])
+            println("$(name) $variant: $(best.status) $(st.iterations) it ",
+                    "$(round(st.total_time; digits = 3)) s, flips $(get(d, "bound flips (range rows)", 0))")
             flush(stdout)
         end
     end

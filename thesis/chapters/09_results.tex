@@ -24,7 +24,8 @@ instances with almost a thousand linking rows.
 The last sections look inside the method. We follow the sizes of the nullspace sets over a run
 with inequality rows, measure the \textbf{contents of the sparse factorization} and the value
 of periodic refactorization, and compare the \textbf{two factorizations} operation by
-operation, in memory and in accuracy. The last section replaces the fixed stabilization
+operation, in memory and in accuracy. The inequality rows are also tested as range rows with
+two finite bounds. The last section replaces the fixed stabilization
 parameter by the \textbf{adaptive} rule of \cref{sec:adaptive}.
 
 \vspace*{\fill}
@@ -628,6 +629,52 @@ center-only iterations (\cref{tab:phases}), which raises its average. Singular r
 Hessians, of columns or surpluses, occurred at most six times per run on I1--I4. The singular
 surplus release of \cref{thm:zc-surplus} is exercised by the test suite of the implementation
 on constructed instances.
+
+\subsection{Range rows}
+\label{sec:results-range}
+
+To test the range rows of \cref{sec:range,sec:range-qpas}, the inequality rows of the
+30\% variant are given the upper bound $2$: a flight must be operated at least once and may
+carry at most one pilot as a passenger. Every such row becomes a range row
+$1\le A_{i,:}\lambda\le 2$ with a single slack $0\le s_i\le 1$. For comparison, the same
+instances are solved with every range row split into a ``$\ge 1$'' row and a ``$\le 2$'' row
+(\cref{rem:range-split}), which adds one linking row per range row. Both use the dense
+factorization and the settings of \cref{sec:setup}.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+ & & \multicolumn{2}{c}{$z^\star$} & \multicolumn{4}{c}{one slack per range row} &
+   \multicolumn{3}{c}{two rows per range row} & \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-8}\cmidrule(lr){9-11}
+instance & range rows & ``$\ge 1$'' & $[1,2]$ & $m$ & CG iter. & flips & time [s]
+         & $m$ & CG iter. & time [s] & cost error \\
+\midrule
+\tabinput{data/tab_range.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Range rows $1\le A_{i,:}\lambda\le 2$ on the inequality rows of the 30\% variant.
+$z^\star$: optimum of the full linear program with the rows ``$\ge 1$'' and with the range rows.
+CG iterations with the column-adding iterations in parentheses; flips: bound flips
+(\cref{thm:flip-expand}); cost error of the single-slack run.}
+\label{tab:range}
+\end{table}
+
+\Cref{tab:range} shows the results. The upper bound is binding: the optimum rises on every
+instance, from $1104.25$ to $1104.59$ on I2. All runs end optimal, reproduce $z^\star$ with the
+accuracy of \cref{sec:results-correctness}, and the Lagrangian bound of
+\cref{prop:lagrangian-general} certifies them. The slacks reach their upper bound often:
+there are between 17 (I1) and 1\,561 (I4) bound flips per run, each of them a rank-one update
+of the factorization like any other surplus expansion (\cref{thm:flip-expand}). Compared with
+the split formulation, the single slack keeps the number of linking rows at $m$ instead of
+$m + |R|$, needs a similar number of iterations (between 6\% more on I3 and 14\% fewer on
+I4), and is 1.2 to 1.3 times faster on I2--I4.
 
 
 \section{Fill-In and Refactorization of the Sparse Factor}

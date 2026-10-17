@@ -166,7 +166,7 @@ Range-row slack `σ` (free, at its upper bound `Uσ`): substitute `s̄σ = Uσ -
 so `κσ ← -κσ`, `bᵢ ← bᵢ - κσ Uσ` and `sσ ← Uσ - sσ` (≈ 0). The row switches between its `≥`
 form (`bᵢ = ℓᵢ`) and its `≤` form (`bᵢ = uᵢ`). `Āy - b`, and with it `π`, the objective and the
 row's contribution to `H_eff`, are unchanged; the caller then fixes `s̄σ = 0` like any slack
-that reaches zero.
+that reaches zero (thesis eq. 2.7, Lemma 2.4.6; Thm. 6.8.3, The bound flip is an expansion).
 """
 function flip_bound!(st::QPASState, σ::Integer)
     sp = st.kkt.surplus

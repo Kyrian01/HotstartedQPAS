@@ -12,7 +12,8 @@ Coupling rows may be equalities, `≥` rows, `≤` rows or range rows `ℓᵢ �
 inequality row gets a slack variable, `aᵢᵀλ - sᵢ = ℓᵢ` or `aᵢᵀλ + sᵢ = uᵢ`, which makes the
 eliminated form valid again (thesis §2.4, Surplus Variables and the Unified Formulation;
 Rem. 2.4.4 for `≤` rows). The slack of a range row has the upper bound `uᵢ - ℓᵢ`; when it is
-reached, the row switches to its `≤` form (bound flip, thesis Rem. 2.4.5, Range rows).
+reached, the row switches to its `≤` form (bound flip, thesis §2.4.1, Def. 2.4.5, The two
+forms of a range row; Thm. 6.8.3, The bound flip is an expansion).
 
 Keyword arguments are forwarded to [`QPASOptions`](@ref).
 """

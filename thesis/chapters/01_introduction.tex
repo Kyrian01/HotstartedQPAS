@@ -84,7 +84,10 @@ The main results of this work are the following.
     \item \textbf{A unified formulation for mixed linking constraints.} Equality rows and
           inequality rows of both directions are written as equalities with surplus
           variables. The regularized master problem then has a single form for all cases
-          (\cref{chap:formulation,chap:regularization}).
+          (\cref{chap:formulation,chap:regularization}). A range row with two finite bounds gets a
+          single slack with an upper bound; when the slack reaches it, the row switches
+          to its other one-sided form, which is an ordinary expansion of the working set
+          (\cref{chap:formulation,chap:updates}).
 
     \item \textbf{A five-set column ordering and an explicit nullspace basis.} The convexity
           constraints of the blocks, together with the surplus variables, admit an ordering
@@ -132,7 +135,7 @@ The main results of this work are the following.
     \item \textbf{A computational study} on generated crew scheduling instances with equality
           and inequality coverage rows: correctness against the full linear program, timing,
           the two phases of convergence, the fill of the sparse factor and its refactorization,
-          a comparison of the sparse and the dense factorization, and the adaptive
+          range rows, a comparison of the sparse and the dense factorization, and the adaptive
           stabilization parameter (\cref{chap:results}).
 \end{itemize}
 

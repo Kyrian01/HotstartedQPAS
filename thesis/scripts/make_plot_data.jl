@@ -558,4 +558,28 @@ if isfile(ADAPT_FILE)
     end
 end
 
+# ── 11. range rows (section G of generate_data.jl) ─────────────────────────────────────
+const RANGE_FILE = joinpath(RAW, "range.csv")
+if isfile(RANGE_FILE)
+    _, rng = readcsv(RANGE_FILE)
+    rrow(name, variant) = begin
+        rs = [r for r in rng if r["instance"] == name && r["variant"] == variant]
+        isempty(rs) ? nothing : rs[1]
+    end
+    open(joinpath(DATA, "tab_range.tex"), "w") do io
+        for n in MAIN_INSTANCES
+            r, q = rrow(n, "range"), rrow(n, "split")
+            (r === nothing || q === nothing) && continue
+            zge = crow(n, 0.3, "exact") === nothing ? NaN : num(crow(n, 0.3, "exact")["exact_objective"])
+            zr = num(r["exact_objective"])
+            it(x) = tex_int(num(x["iterations"])) * " (" * tex_int(num(x["column_iterations"])) * ")"
+            println(io, join([n, tex_int(num(r["range_rows"])), tex_num(zge), tex_num(zr),
+                              tex_int(num(r["m"])), it(r), tex_int(num(r["bound_flips"])),
+                              tex_time(num(r["total_s"])),
+                              tex_int(num(q["m"])), it(q), tex_time(num(q["total_s"])),
+                              tex_sci(abs(num(r["objective"]) - zr) / abs(zr))], " & "), " \\\\")
+        end
+    end
+end
+
 println("plot data written to ", DATA)

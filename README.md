@@ -346,8 +346,8 @@ conditions. A range row `ℓᵢ ≤ aᵢᵀλ ≤ uᵢ` gets one slack `0 ≤ s�
 `≥` form (`aᵢᵀλ − sᵢ = ℓᵢ`). When the free slack reaches its upper bound, the solver substitutes
 `s̄ᵢ = (uᵢ − ℓᵢ) − sᵢ`, which turns the row into its `≤` form `aᵢᵀλ + s̄ᵢ = uᵢ` (`flip_bound!`:
 only `κᵢ` and `bᵢ` change), and fixes `s̄ᵢ = 0` with the same rank-one update as any other slack.
-`π`, the objective and `H_eff` are unchanged by the flip. Theory: thesis §2.4 (Rem. 2.4.5),
-§5.2–5.3 and §6.4.2. Working notes:
+`π`, the objective and `H_eff` are unchanged by the flip. Theory: thesis §2.4 (range rows:
+§2.4.1), §5.2–5.3, §6.4.2 and §6.8 (range rows in the active-set method); results: §9.6.1. Working notes:
 [`docs/qpas_inequality_extension.md`](docs/qpas_inequality_extension.md).
 
 ## Reproducing the benchmarks

@@ -219,8 +219,9 @@ quadratic program, which is considerably more expensive to solve than a linear p
 
 This work develops a \textbf{hot-started nullspace active-set method} for these quadratic
 master problems, for multi-block problems whose linking constraints may be equalities,
-``$\ge$'' inequalities or ``$\le$'' inequalities. Surplus variables bring all linking rows
-into one equality form. The convexity constraints of the blocks then admit a
+``$\ge$'' inequalities, ``$\le$'' inequalities or range constraints with two finite bounds.
+Surplus variables bring all linking rows into one equality form; the surplus of a range row
+has an upper bound, and reaching it switches the row to its other one-sided form. The convexity constraints of the blocks then admit a
 reordering of the variables into five sets, which yields an explicit and sparse nullspace
 basis. The reduced KKT system decouples: the surplus part of the search direction is given
 by an explicit formula, and only an \emph{effective reduced Hessian} on the column weights

@@ -26,7 +26,9 @@ alternative that avoids it.
 Finally, we show that the state of the method can be carried over from one column generation
 iteration to the next. A new column and a new stability center leave the factorization
 unchanged, which gives a \textbf{hot start} of every master problem. We also analyse the
-center-only iterations of \cref{sec:center-update} in this light.
+center-only iterations of \cref{sec:center-update} in this light. The chapter ends with
+\textbf{range rows}, whose slacks have an upper bound: reaching it is turned into an ordinary
+expansion by a change of the form of the row.
 
 \vspace*{\fill}
 
@@ -635,11 +637,13 @@ extended ordering and the factorization, is kept from one call to the next.
         \If{$\nu_x\ge-\varepsilon$ and $\nu_s\ge-\varepsilon$} \textbf{return} $y$, $\pi$, $\mu$ \EndIf
         \State Release the index $\rho$ with the most negative multiplier by \cref{alg:singular}
     \Else
-        \State Ratio test over $\Sset\cup\Nx\cup\Ns$; $y\gets y + \alpha p$;
+        \State Ratio test over $\Sset\cup\Nx\cup\Ns$, with the upper bounds of free range
+               slacks (\cref{prop:range-ratio}); $y\gets y + \alpha p$;
                $\pi\gets\pi - \frac{\alpha}{\delta}\Abar p$
         \If{blocked by $q$}
             \State Expand: \code{rowdel} ($q\in\Nx$), representative swap ($q\in\Sset$), or
-                   update ($q\in\Ns$)
+                   update ($q\in\Ns$, after a bound flip if $q$ reached its upper bound,
+                   \cref{thm:flip-expand})
         \EndIf
     \EndIf
     \State Refactorize if $\tau$ updates have passed since the last refactorization
@@ -652,3 +656,155 @@ The algorithm accesses the factorization only through the operations of
 therefore independent of how the factor is stored. With the dense factor of
 \cref{chap:dense}, the periodic refactorization in the last line is dropped, and only the
 pivot test remains (\cref{cor:expand-pivots} and the remark after it).
+
+
+\section{Range Rows in the Active-Set Method}
+\label{sec:range-qpas}
+
+This section extends the method to the range rows of \cref{sec:range}. Let $R$ be the set of
+inequality rows that are range rows. The slack of a row $i\in R$ has the bounds
+$0\le s_i\le U_i$, and the row is in its lower or its upper form, indicated by $\kappa_i$.
+The regularized master problem~\eqref{eq:qp} then has the additional bounds
+\begin{equation} \label{eq:range-bounds}
+s_i\le U_i,\qquad i\in R,
+\end{equation}
+and all formulas involving surpluses carry the factor $\kappa_i$ of \cref{rem:kappa-summary}.
+We show that the method needs only two additions, a longer ratio test and the bound flip, and
+that the flip is an ordinary expansion of the working set.
+
+\begin{theorem}[Optimality conditions with range rows] \label{thm:kkt-range}
+A feasible point $y = [x;s]$ of~\eqref{eq:qp} with the bounds~\eqref{eq:range-bounds} is
+optimal if and only if there is a $\mu\in\R^K$ such that condition~\ref{thm:kkt-master:i} of
+\cref{thm:kkt-master} holds, conditions~\ref{thm:kkt-master:ii}--\ref{thm:kkt-master:iii} hold
+in the form $-\kappa_i\pi_i\ge0$, with equality if $s_i>0$, for every one-sided inequality
+row, and for every range row $i\in R$
+\[
+-\kappa_i\pi_i\ge0 \;\text{ if } s_i = 0,\qquad
+\pi_i = 0 \;\text{ if } 0<s_i<U_i,\qquad
+-\kappa_i\pi_i\le0 \;\text{ if } s_i = U_i .
+\]
+\end{theorem}
+
+\begin{proof}
+The problem is a convex quadratic program with linear constraints, so the KKT conditions are
+necessary and sufficient. They are those of \cref{thm:kkt-master} with an additional
+multiplier $\omega_i\ge0$ for each upper bound $s_i\le U_i$, with $\omega_i = 0$ if $s_i<U_i$.
+The stationarity condition of slack $i\in R$ reads $g_{n+i} = \nu_{n+i} - \omega_i$, where
+$g_{n+i} = -\kappa_i\pi_i$ (\cref{rem:kappa-summary}) and $\nu_{n+i}\ge0$ vanishes if $s_i>0$.
+For $s_i = 0$ this is $-\kappa_i\pi_i = \nu_{n+i}\ge0$, for $0<s_i<U_i$ it is $-\kappa_i\pi_i = 0$,
+and for $s_i = U_i>0$ it is $-\kappa_i\pi_i = -\omega_i\le0$.
+\end{proof}
+
+In the lower form ($\kappa_i = -1$) this reads $\pi_i\ge0$ at the lower bound $\ell_i$ of the
+row and $\pi_i\le0$ at its upper bound $u_i$, which are the complementarity conditions of the
+free dual of a range row in \cref{prop:lagrangian-general}. The condition at $s_i = U_i$ is
+the only one that the multiplier test of \cref{alg:hot-qpas} cannot check, since that test only
+sees variables at zero. The bound flip removes this case.
+
+\begin{prop}[Ratio test with upper bounds] \label{prop:range-ratio}
+Let $y$ be feasible and $p$ a search direction. The step $y + \alpha p$ satisfies the
+bounds~\eqref{eq:range-bounds} for all $\alpha\in[0,\alpha_R]$ with
+\[
+\alpha_R = \min_{\substack{i\in R\cap\Ns\\ (p_s)_i>0}} \frac{U_i - s_i}{(p_s)_i}
+\qquad(\min\emptyset = \infty),
+\]
+and for no larger $\alpha$ if $\alpha_R<\infty$. Slacks in $\Ws$ do not move.
+\end{prop}
+
+\begin{proof}
+Slacks in $\Ws$ have $(p_s)_i = 0$. A free slack with $(p_s)_i\le0$ does not approach $U_i$.
+For $(p_s)_i>0$ the bound $s_i + \alpha(p_s)_i\le U_i$ is equivalent to
+$\alpha\le(U_i - s_i)/(p_s)_i$.
+\end{proof}
+
+The ratio test of \cref{alg:hot-qpas} therefore takes the minimum of its usual value and
+$\alpha_R$. If $\alpha_R$ attains the minimum, the step is \textbf{blocked by the upper bound}
+of a range slack $i$, and $s_i = U_i$ after the step.
+
+\begin{theorem}[The bound flip is an expansion] \label{thm:flip-expand}
+Let the step be blocked by the upper bound of the free range slack $i$, and apply the bound
+flip~\eqref{eq:bound-flip} to row $i$. Then:
+\begin{enumerate}
+    \item \label{thm:flip-expand:i} the dual estimate $\pi(y)$, the master objective $\Phi$
+          of~\eqref{eq:objective-relation}, the gradient components of all columns, the
+          extended ordering, the nullspace basis, $\Aeff$ and $\Heff$ are unchanged, and the
+          slack of row $i$ is now $s_i = 0$;
+    \item \label{thm:flip-expand:ii} adding this slack to the working set is case~\ref{lem:expand-ordering:iii}
+          of \cref{lem:expand-ordering}: the factorization receives the rank-one update
+          $\Heff' = \Heff + v_iv_i^\top$ of \cref{thm:H-expand}~\ref{thm:H-expand:iii}, with the same
+          vector $v_i$ as for a slack reaching zero;
+    \item \label{thm:flip-expand:iii} afterwards every range slack in $\Ws$ is at zero in its current form, and the
+          multiplier of slack $i$ in later multiplier tests is $-\kappa_i\pi_i$ with the new
+          $\kappa_i$, the sign condition of the bound that the row has reached.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(i) By \cref{lem:bound-flip}, $b - \Abar y$ is unchanged, and with it $\pi(y) = \pihat + (b - \Abar y)/\delta$
+and, by \cref{prop:objective-value}, $\Phi$. The gradient of column $j$ is $c_j - a_j^\top\pi$
+(\cref{lem:gradient-dual}) and does not change. The flip changes neither the columns $a_j$ nor
+the sets of the ordering, and since slack $i$ is free, row $i$ is not part of $\Aeff$; $Z$,
+$\Aeff$ and $\Heff$ depend only on the columns, the ordering and the rows of $\Aeff$
+(\cref{cor:Aeff,rem:factor-independent}). The new slack is $U_i - s_i = 0$.
+(ii) After the flip, slack $i$ is a free slack at its lower bound, which is the situation of
+case~\ref{lem:expand-ordering:iii}. Row $i$ joins $\Aeff$ with its column coefficients
+$(A_I)_{i,:}$, which the flip does not change; $\kappa_i$ does not enter $\Heff$
+(\cref{rem:kappa-summary}).
+(iii) The new slack is at zero, and its multiplier is $g_{n+i} = -\kappa_i\pi_i$ with the
+current $\kappa_i$ (\cref{rem:kappa-summary}). For the lower form after the flip this is
+$\pi_i\ge0$, for the upper form $\pi_i\le0$, as in \cref{thm:kkt-range}.
+\end{proof}
+
+The eliminated objective $f$ of~\eqref{eq:eliminated} changes by a constant under the flip,
+since it differs from $\Phi$ by $\frac{1}{2\delta}\lVert b\rVert^2 + \pihat^\top b$
+(\cref{thm:eliminated}); its gradient component of slack $i$ changes sign together with the
+variable. Neither affects the method, which works with $\pi$ and the gradient of the columns.
+
+\begin{cor}[Correctness with range rows] \label{cor:range-correct}
+If the ratio test of \cref{alg:hot-qpas} includes $\alpha_R$ and every block by an upper bound
+is followed by the bound flip and the expansion of \cref{thm:flip-expand}, then every iterate
+satisfies~\eqref{eq:range-bounds}, every range slack in $\Ws$ is at zero in its current form,
+and the stopping test of \cref{alg:hot-qpas} certifies the optimality conditions of
+\cref{thm:kkt-range}.
+\end{cor}
+
+\begin{proof}
+Feasibility follows from \cref{prop:range-ratio}, and the statement on $\Ws$ from
+\cref{thm:flip-expand}~\ref{thm:flip-expand:iii}, since a release only removes a slack from $\Ws$.
+At a subspace minimizer, the free slacks have $\pi_i = 0$ (\cref{prop:free-duals}), which
+satisfies the condition of \cref{thm:kkt-range} for every value of $s_i$, including
+$s_i = U_i$. The slacks in $\Ws$ are at zero, and their condition $-\kappa_i\pi_i\ge0$ is part
+of the multiplier test. The conditions of the columns are unchanged.
+\end{proof}
+
+\paragraph{Releases, singular steps and the hot start.} A range slack with a negative
+multiplier is released as any other slack (\cref{thm:H-reduce}~\ref{thm:H-reduce:v}); the
+direction then moves it into the interior of $[0,U_i]$, away from the bound of its current form.
+The zero-curvature steps of \cref{chap:singular} use the same extended ratio test. The proof of
+\cref{thm:removal} only uses $d_q\ne0$ for the blocking index $q$, so it also holds when $q$ is
+blocked by its upper bound, and \cref{prop:stays-minimizer} holds because the flip does not
+change $\pi$. The forms $\kappa_i$ and right-hand sides $b_i$ belong to the state of the method
+and are kept from one column generation iteration to the next; new columns and new centers do
+not change them (\cref{thm:hot-start}).
+
+\begin{cor}[Exact termination with range rows] \label{cor:range-termination}
+\Cref{thm:exact-termination} holds for problems with ``$\le$'' rows and range rows, with the
+dual~\eqref{eq:master-dual} replaced by the problem of maximizing
+$\sum_i\phi_i(\pi_i) + \one^\top\mu$ subject to the reduced cost conditions, with $\phi_i$ as in
+\cref{prop:lagrangian-general}.
+\end{cor}
+
+\begin{proof}
+If $\pi = \pihat$, then $\Abar y = b$ by \cref{prop:residual}, so every row satisfies
+$A_{i,:}\lambda + \kappa_is_i = b_i$ with $0\le s_i\le U_i$, i.e.\ $\ell_i\le A_{i,:}\lambda\le u_i$. By
+\cref{thm:kkt-range}, $\pi_i\ge0$ if the row is at $\ell_i<u_i$, $\pi_i\le0$ if it is at
+$u_i>\ell_i$, and $\pi_i = 0$ if it lies strictly between, so $\phi_i(\pi_i)$ is finite and equals
+$\pi_iA_{i,:}\lambda$. Together with the reduced cost conditions, which pricing extends to all
+columns, and the duality argument of \cref{prop:lagrangian-general}, $\lambda$ and $(\pi,\mu)$
+are feasible and have equal objective values, so both are optimal.
+\end{proof}
+
+The cost of a bound flip is $O(1)$ for the flip itself plus the rank-one update of the
+expansion. A run with range rows therefore has the same kind of iterations as a run with
+one-sided rows, with expansions at either bound of the slacks. \Cref{sec:results-range}
+measures this.

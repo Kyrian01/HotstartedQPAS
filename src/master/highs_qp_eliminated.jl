@@ -4,7 +4,7 @@
 Stabilized restricted master problem in the *eliminated* form (thesis Thm. 3.3.1, Eliminated
 regularized master problem, eq. 3.5 with c̃ from eq. 3.6), where
 `w = (b - Āy)/δ` has been substituted, solved by HiGHS' QP solver on a persistent instance.
-Every inequality coupling row gets a slack as in the QPAS (thesis §2.4, Rem. 2.4.4 and 2.4.5),
+Every inequality coupling row gets a slack as in the QPAS (thesis §2.4, Rem. 2.4.4; §2.4.1),
 `aᵢᵀλ + κᵢ sᵢ = bᵢ` with `0 ≤ sᵢ ≤ Uᵢ` (`slack_structure`), so with `y = [s; λ]` and
 `Ā = [K  AX]` (`K` places `κᵢ` in the row of slack `i`):
 

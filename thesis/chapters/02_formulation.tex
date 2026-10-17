@@ -21,7 +21,9 @@ generation algorithm.
 
 Finally, we introduce \textbf{surplus variables} for the inequality rows. They bring every
 linking constraint into equality form and lead to a single, \emph{unified} formulation of the
-master problem in which equality and inequality rows are treated alike. This formulation is
+master problem in which equality and inequality rows are treated alike. Rows with two finite
+bounds, the \textbf{range rows}, get a single slack with an upper bound, and switch between
+two one-sided forms. This formulation is
 the starting point for everything that follows. It also reveals the one structural property
 that the inequality rows destroy: the surplus variables belong to no block.
 
@@ -116,7 +118,8 @@ block-diagonal.}
 A linking row $\sum_k (A_{I,k})_{i,:}\,\xi_k \le (b_I)_i$ is the row
 $\sum_k (-A_{I,k})_{i,:}\,\xi_k \ge -(b_I)_i$, so the form~\eqref{eq:compact-ineq} covers both
 directions, and the text only treats ``$\ge$'' rows. \Cref{rem:kappa} shows how a ``$\le$''
-row can be kept as it is instead of being negated.
+row can be kept as it is instead of being negated, and \cref{sec:range} treats rows with two
+finite bounds.
 \end{remark}
 
 \begin{example}[Crew scheduling] \label{ex:crew}
@@ -454,29 +457,110 @@ few formulas carry a factor $\kappa_i$, and these are collected in \cref{rem:kap
 In the text we write all formulas for ``$\ge$'' rows ($D_\kappa = -I$).
 \end{remark}
 
-\begin{remark}[Range rows] \label{rem:range}
-A row with two different finite bounds $\underline{b}_i\le A_{i,:}\lambda\le\overline{b}_i$ gets a single
-slack with an upper bound,
+\subsection{Range rows}
+\label{sec:range}
+
+A \textbf{range row} bounds a linking row from both sides,
 \[
-A_{i,:}\lambda + \kappa_i s_i = b_i,\qquad 0\le s_i\le U_i := \overline{b}_i - \underline{b}_i ,
+\ell_i \;\le\; A_{i,:}\lambda \;\le\; u_i, \qquad -\infty < \ell_i < u_i < \infty .
 \]
-starting as a ``$\ge$'' row ($\kappa_i = -1$, $b_i = \underline{b}_i$). The substitution
-$\bar s_i = U_i - s_i$ rewrites the same row as
+In crew scheduling, a flight that must be operated at least once and may carry at most one
+pilot as a passenger has the coverage row $1\le A_{i,:}\lambda\le 2$. A range row could be
+written as two inequality rows, a ``$\ge$'' row and a ``$\le$'' row with identical
+coefficients. We use a single slack with an upper bound instead, and switch between the two
+one-sided forms of the row whenever this slack reaches its upper bound.
+
+\begin{definition}[The two forms of a range row] \label{def:range}
+Let $U_i = u_i - \ell_i > 0$. The \textbf{lower form} of the range row is the ``$\ge$'' row
+with surplus $s_i = A_{i,:}\lambda - \ell_i$, and the \textbf{upper form} is the ``$\le$'' row
+with slack $\bar s_i = u_i - A_{i,:}\lambda$:
 \[
-A_{i,:}\lambda - \kappa_i\bar s_i = b_i - \kappa_i U_i,\qquad 0\le\bar s_i\le U_i ,
+\begin{aligned}
+&\text{lower form:} && A_{i,:}\lambda - s_i = \ell_i, && \kappa_i = -1,\;\; b_i = \ell_i,\\
+&\text{upper form:} && A_{i,:}\lambda + \bar s_i = u_i, && \kappa_i = +1,\;\; b_i = u_i,
+\end{aligned}
+\qquad 0\le s_i,\,\bar s_i\le U_i .
 \]
-i.e.\ as the ``$\le$'' row $A_{i,:}\lambda + \bar s_i = \overline{b}_i$, and back. Both forms describe the
-same feasible set and give the same value of $\Abar y - b$, hence the same dual estimate and
-objective. A range row is therefore handled like a one-sided row of \cref{rem:kappa} whose
-form is switched whenever its slack reaches $U_i$: the slack, now $\bar s_i = 0$, enters the
-working set in the new form, $\kappa_i$ and $b_i$ change, and nothing else does. Its
-multiplier $-\kappa_i(\pi_I)_i$ then automatically has the sign condition of the active bound,
-$(\pi_I)_i\ge0$ at $\underline{b}_i$ and $(\pi_I)_i\le0$ at $\overline{b}_i$. The only addition to
-the active-set method is that the ratio test also stops a free slack at $U_i$. All results of
-the following chapters hold unchanged, since they depend on $\kappa_i$ only through
-$\kappa_i^2 = 1$ and the formulas of \cref{rem:kappa-summary}, which are evaluated with the
-current $\kappa_i$.
+In both forms the row reads $A_{i,:}\lambda + \kappa_i s_i = b_i$ with $0\le s_i\le U_i$, in
+the notation of \cref{rem:kappa}. The \textbf{bound flip} replaces one form by the other:
+\begin{equation} \label{eq:bound-flip}
+(\kappa_i,\; b_i,\; s_i) \;\longmapsto\; (-\kappa_i,\; b_i - \kappa_i U_i,\; U_i - s_i).
+\end{equation}
+\end{definition}
+
+The flip maps the lower form to the upper form and back: for $\kappa_i = -1$ it gives
+$b_i = \ell_i + U_i = u_i$ and $\bar s_i = U_i - s_i = u_i - A_{i,:}\lambda$.
+
+\begin{lemma}[Invariance under the bound flip] \label{lem:bound-flip}
+The bound flip~\eqref{eq:bound-flip} preserves the bounds $0\le s_i\le U_i$ and the residual
+of row $i$,
+\[
+b_i - A_{i,:}\lambda - \kappa_i s_i .
+\]
+In particular, a point $y$ is feasible in one form if and only if its image is feasible in
+the other, and the vector $b - \Abar y$ is the same in both forms.
+\end{lemma}
+
+\begin{proof}
+$0\le s_i\le U_i$ is equivalent to $0\le U_i - s_i\le U_i$. For the residual,
+\[
+(b_i - \kappa_iU_i) - A_{i,:}\lambda - (-\kappa_i)(U_i - s_i)
+= b_i - A_{i,:}\lambda - \kappa_iU_i + \kappa_iU_i - \kappa_i s_i
+= b_i - A_{i,:}\lambda - \kappa_i s_i .
+\]
+The other rows are not affected.
+\end{proof}
+
+Every quantity of the following chapters that depends on $y$ only through $b - \Abar y$, such
+as the dual estimate $\pi(y)$ of \cref{def:dual-estimate} and the objective of the regularized
+master problem, is therefore invariant under the flip. The sign condition of the dual of a
+range row is the one of its current form: $\pi_i\ge0$ in the lower form and $\pi_i\le0$ in
+the upper form (\cref{rem:kappa}). This is consistent with the dual of the master problem,
+in which the dual of a range row is free, as the next proposition shows.
+
+\begin{prop}[Lagrangian bound for general linking rows] \label{prop:lagrangian-general}
+Let every linking row have bounds $\ell_i\le A_{i,:}\lambda\le u_i$ with
+$-\infty\le\ell_i\le u_i\le\infty$ (an equality row has $\ell_i = u_i$), and let
+\[
+\phi_i(\pi_i) = \min_{\ell_i\le v_i\le u_i}\pi_iv_i =
+\begin{cases} \ell_i\pi_i & \pi_i > 0,\\ u_i\pi_i & \pi_i < 0,\\ 0 & \pi_i = 0 .\end{cases}
+\]
+Then for every $\pi$ for which all $\phi_i(\pi_i)$ are finite,
+\[
+\theta(\pi) = \sum_{i=1}^{m}\phi_i(\pi_i) + \sum_{k=1}^{K}\,\min_{\xi_k\in P_k}\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top\xi_k
+\;\le\; z^\star .
+\]
+$\phi_i$ is finite for every $\pi_i$ on equality and range rows, for $\pi_i\ge0$ on ``$\ge$''
+rows ($u_i = \infty$) and for $\pi_i\le0$ on ``$\le$'' rows ($\ell_i = -\infty$). For problems
+with ``$\ge$'' and equality rows only, $\theta$ is the bound of \cref{prop:lagrangian-bound}.
+\end{prop}
+
+\begin{proof}
+Let $\xi^\star$ be optimal and $v^\star = \sum_kA_k\xi_k^\star$, so that
+$\ell\le v^\star\le u$. Then $\pi^\top v^\star\ge\sum_i\phi_i(\pi_i)$, and
+\[
+z^\star = \sum_k c^{(k)\top}\xi_k^\star
+= \pi^\top v^\star + \sum_k\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top\xi_k^\star
+\;\ge\; \sum_i\phi_i(\pi_i) + \sum_k\min_{\xi_k\in P_k}\bigl(c^{(k)} - A_k^\top\pi\bigr)^\top\xi_k .
+\]
+For $\ell_i = u_i = b_i$, $\phi_i(\pi_i) = b_i\pi_i$; for $u_i = \infty$ and $\pi_i\ge0$,
+$\phi_i(\pi_i) = \ell_i\pi_i = (b_I)_i\pi_i$. This gives $b^\top\pi$ in
+\cref{prop:lagrangian-bound}.
+\end{proof}
+
+\begin{remark}[One slack instead of two rows] \label{rem:range-split}
+Writing a range row as a ``$\ge$'' row and a ``$\le$'' row with identical coefficients gives
+an equivalent problem, but it adds a linking row, a slack and a dual per range row, and it
+regularizes the two duals of the row separately, although only their sum enters the reduced
+costs. With the single slack of \cref{def:range} the number of linking rows stays $m$, and at
+most one form of the row is present at any time. \Cref{sec:results-range} compares both
+choices.
 \end{remark}
+
+The active-set method needs one addition for range rows: its ratio test must also stop a
+free slack at its upper bound $U_i$, which is then flipped. \Cref{sec:range-qpas} shows that
+the flip is an ordinary expansion of the working set, and that all results of the following
+chapters carry over. Until then, the text treats ``$\ge$'' rows.
 
 
 \needspace{0.5\textheight}

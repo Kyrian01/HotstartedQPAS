@@ -3,7 +3,7 @@
 
 This work developed a hot-started nullspace active-set method for the quadratic master
 problems of regularized column generation, for multi-block linear programs whose linking
-constraints may be equalities or inequalities of either direction.
+constraints may be equalities, inequalities of either direction or range constraints.
 
 \section{Summary}
 
@@ -70,7 +70,10 @@ just as accurate. The complete column generation run is faster than solving the 
 program directly from the second instance on, by a factor of three to four on the larger
 instances, and on the largest ones the direct solve did not finish in the time in which the
 active-set method was done. Inequality rows need no new kind of linear algebra, keep the time
-per master problem of the same order, and lead to shorter runs.
+per master problem of the same order, and lead to shorter runs. Range rows need none either:
+their single slack reaches its upper bound up to 1\,561 times per run, and each time the bound
+flip turns this into an ordinary rank-one update, 1.2 to 1.3 times faster than splitting
+every range row into two rows (\cref{sec:results-range}).
 
 \medskip
 
