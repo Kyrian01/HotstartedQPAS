@@ -27,7 +27,8 @@
 # only changes π (recomputed from scratch at the start of each solve).
 
 """
-    QPASState(pool, rhs, delta; options = QPASOptions(), slack_rows = Int[], slack_signs = Float64[])
+    QPASState(pool, rhs, delta; options = QPASOptions(), slack_rows = Int[], slack_signs = Float64[],
+              slack_upper = fill(Inf, length(slack_rows)))
 
 Everything the hot-started active-set solver keeps from one column generation iteration to
 the next: the iterate `x` (column weights) and `s` (slacks of the inequality rows), the working
@@ -35,8 +36,10 @@ duals `π`, the convexity duals `μ`, the KKT system (ordering + factor), scratc
 counters and timers.
 
 `rhs` is `b`, the right-hand side of every coupling row written as an equality
-`aᵢᵀx + κσ sσ = bᵢ`. Row `slack_rows[σ]` has a slack with coefficient `slack_signs[σ]`
-(`-1` for a `≥` row, `+1` for a `≤` row); all other rows are equalities.
+`aᵢᵀx + κσ sσ = bᵢ`. Row `slack_rows[σ]` has a slack `0 ≤ sσ ≤ slack_upper[σ]` with
+coefficient `slack_signs[σ]` (`-1` for a `≥` row, `+1` for a `≤` row; the upper bound is finite
+only for range rows); all other rows are equalities. `rhs` and the signs of range rows change
+when their slack flips its bound (`flip_bound!`).
 
 `pool` must hold at least one column per block; the first column of each block becomes its
 representative with weight 1, all other columns start in the working set. All slacks start in
@@ -67,13 +70,14 @@ end
 
 function QPASState(pool::ColumnPool, rhs::AbstractVector{Float64}, delta::Real;
                    options::QPASOptions = QPASOptions(), slack_rows::Vector{Int} = Int[],
-                   slack_signs::Vector{Float64} = Float64[])
+                   slack_signs::Vector{Float64} = Float64[],
+                   slack_upper::Vector{Float64} = fill(Inf, length(slack_rows)))
     delta > 0 || throw(ArgumentError("δ must be positive"))
     validate(options)
     m, P, cap = pool.n_rows, pool.n_blocks, pool.capacity
     length(rhs) == m || throw(DimensionMismatch("rhs must have length $m"))
     all(r -> 1 <= r <= m, slack_rows) || throw(ArgumentError("slack row out of range"))
-    surplus = SurplusSet(slack_rows, slack_signs, m)
+    surplus = SurplusSet(slack_rows, slack_signs, m; upper = slack_upper)
     mI = n_surplus(surplus)
     st = QPASState(pool, options, Float64(delta), collect(Float64, rhs), zeros(m),
                    zeros(cap), zeros(mI), zeros(m), zeros(P), zeros(m), zeros(cap), zeros(mI),
@@ -135,6 +139,30 @@ function refresh_duals!(st::QPASState)
         st.Ap[sp.row[σ]] += sp.sign[σ] * st.s[σ]
     end
     @. st.π = st.center + (st.rhs - st.Ap) / st.delta
+    return st
+end
+
+"""
+    flip_bound!(state, σ)
+
+Range-row slack `σ` (free, at its upper bound `Uσ`): substitute `s̄σ = Uσ - sσ`, i.e.
+
+    aᵢᵀx + κσ sσ = bᵢ   ⟺   aᵢᵀx - κσ s̄σ = bᵢ - κσ Uσ,
+
+so `κσ ← -κσ`, `bᵢ ← bᵢ - κσ Uσ` and `sσ ← Uσ - sσ` (≈ 0). The row switches between its `≥`
+form (`bᵢ = ℓᵢ`) and its `≤` form (`bᵢ = uᵢ`). `Āy - b`, and with it `π`, the objective and the
+row's contribution to `H_eff`, are unchanged; the caller then fixes `s̄σ = 0` like any slack
+that reaches zero.
+"""
+function flip_bound!(st::QPASState, σ::Integer)
+    sp = st.kkt.surplus
+    U = sp.upper[σ]
+    isfinite(U) || throw(ArgumentError("slack $σ has no upper bound"))
+    κ = sp.sign[σ]
+    i = sp.row[σ]
+    st.rhs[i] -= κ * U
+    sp.sign[σ] = -κ
+    st.s[σ] = U - st.s[σ]
     return st
 end
 

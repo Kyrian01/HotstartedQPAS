@@ -138,8 +138,8 @@ HiGHS \cite{huangfu2018parallelizing} (version 1.15, with its simplex method for
 its active-set QP solver for the QPs) is used through a persistent model, to which new columns
 are added incrementally, so that its LP solves are warm-started. The LP master starts with
 artificial columns of cost $M = 10^4$ on both sides of every linking row (\cref{sec:column-generation}),
-which keep it feasible until enough columns are generated. Our HiGHS implementation of the
-eliminated QP has no surplus variables, so it is run on the equality variant only. The sparse
+which keep it feasible until enough columns are generated. The eliminated QP master is
+run on the equality variant only. The sparse
 factorization of the active-set method uses CHOLMOD \cite{chen2008cholmod} from SuiteSparse~7.10
 for the factorization and its updates. The dense factorization is our own implementation of
 \cref{chap:dense}; its triangular solves call the BLAS routine \code{trsv} of OpenBLAS, and
@@ -215,8 +215,8 @@ iteration.}
 \bottomrule
 \end{tabular}
 }
-\caption{Inequality variant (30\% ``$\ge$'' rows). The eliminated HiGHS QP master does not
-support inequality rows, and the HiGHS QP masters are run on I1 only.}
+\caption{Inequality variant (30\% ``$\ge$'' rows). The eliminated HiGHS QP master is not
+run on this variant, and the explicit HiGHS QP master is run on I1 only.}
 \label{tab:comparison-ineq}
 \end{table}
 

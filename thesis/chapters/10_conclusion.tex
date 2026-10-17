@@ -87,8 +87,6 @@ The experiments point to four directions for further work.
           iterations is a property of the proximal point method with a fixed $\delta$
           (\cref{prop:center-only}). Since $\delta$ does not enter the factorization, it can be
           decreased in this phase at no cost to the linear algebra.
-    \item \textbf{Range rows.} Linking rows with two finite bounds need surpluses with upper
-          bounds, which fit into the same framework as an additional working-set state.
     \item \textbf{Inexact master solves.} Since the multipliers are the reduced costs, pricing
           could be called at any subspace minimizer instead of only at the optimum of the
           master problem. This would turn column generation into a single active-set method

@@ -51,8 +51,9 @@ end
 
 # QPAS state for coupling rows lo ≤ AXλ ≤ hi (slacks built as in QPASMaster).
 function _ineq_state(pool, lo, hi, δ; options = _qopts(debug = true))
-    b, rows, signs = HQ.slack_structure(lo, hi)
-    return HQ.QPASState(pool, b, δ; options, slack_rows = rows, slack_signs = signs)
+    b, rows, signs, upper = HQ.slack_structure(lo, hi)
+    return HQ.QPASState(pool, b, δ; options, slack_rows = rows, slack_signs = signs,
+                        slack_upper = upper)
 end
 
 # First-order optimality of the QPAS iterate (independent of the solver's own bookkeeping),
@@ -63,6 +64,7 @@ function _check_kkt(st; tol = 1e-7)
     x = st.x[1:n]
     @test all(x .>= 0)
     @test all(st.s .>= 0)
+    @test all(st.s .<= st.kkt.surplus.upper)
     for b in 1:pool.n_blocks
         @test sum(x[j] for j in 1:n if pool.block[j] == b) ≈ 1 atol = 1e-10
     end
@@ -87,8 +89,9 @@ function _check_kkt(st; tol = 1e-7)
     end
 end
 
-# Random row types: equality (b = 1), "≥ 1" or "≤ 1" with the given fractions.
-function _random_rows(rng, m; ge = 0.4, le = 0.2)
+# Random row types: equality (b = 1), "≥ 1", "≤ 1" or a range row ([0.5, 1] or [1, 1.5], so
+# that both bounds can be active) with the given fractions.
+function _random_rows(rng, m; ge = 0.4, le = 0.2, range = 0.0)
     lo, hi = ones(m), ones(m)
     for i in 1:m
         r = rand(rng)
@@ -96,6 +99,8 @@ function _random_rows(rng, m; ge = 0.4, le = 0.2)
             hi[i] = Inf
         elseif r < ge + le
             lo[i] = -Inf
+        elseif r < ge + le + range
+            rand(rng, Bool) ? (lo[i] = 0.5) : (hi[i] = 1.5)
         end
     end
     return lo, hi
@@ -232,6 +237,85 @@ end
         @test st.total.slack_expansions > 0 && st.total.slack_reductions > 0
     end
 
+    # The eliminated HiGHS QP with slacks y = [s; λ] solves the same QP as the explicit one.
+    @testset "eliminated HiGHS QP with inequality and range rows (m=$m, P=$P, n=$n, δ=$δ)" for
+            (m, P, n, δ) in [(8, 2, 12, 1.0), (20, 4, 60, 0.5), (25, 3, 90, 0.1)]
+        rng = Xoshiro(500 + m + P + n)
+        pool = _random_pool(rng, m, P, n, 200)
+        lo, hi = _random_rows(rng, m; ge = 0.3, le = 0.2, range = 0.3)
+        center = randn(rng, m)
+        spec = HQ.MasterSpec(lo, hi, pool.n_blocks, pool.capacity, δ)
+        master = HighsEliminatedQPMaster()
+        HQ.initialize!(master, spec, pool)
+        HQ.set_center!(master, center)
+        sol = HQ.solve!(master)
+        @test sol.status === :optimal
+        ref = _highs_ineq_reference(pool, lo, hi, δ, center)
+        @test sol.objective ≈ ref.objective rtol = 1e-6
+        @test sol.π ≈ ref.π atol = 1e-4
+        HQ.release!(master)
+    end
+
+    # Range rows: one slack with 0 ≤ s ≤ U; at U the row flips to its "≤" form.
+    @testset "range rows: single solve vs HiGHS (m=$m, P=$P, n=$n, δ=$δ)" for
+            (m, P, n, δ) in [(8, 2, 12, 1.0), (20, 4, 60, 0.5), (30, 5, 120, 2.0), (25, 3, 90, 0.1)]
+        rng = Xoshiro(300 + m + P + n)
+        pool = _random_pool(rng, m, P, n, 200)
+        lo, hi = _random_rows(rng, m; ge = 0.2, le = 0.1, range = 0.5)
+        center = randn(rng, m)
+        st = _ineq_state(pool, lo, hi, δ)
+        HQ.set_center!(st, center)
+        @test HQ.qpas_solve!(st) === :optimal
+        _check_kkt(st)
+        ref = _highs_ineq_reference(pool, lo, hi, δ, center)
+        @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-6
+        @test st.π ≈ ref.π atol = 1e-4
+    end
+
+    @testset "range rows: hot-started sequence (seed $seed)" for seed in 1:3
+        rng = Xoshiro(400 + seed)
+        m, P, δ = 25, 4, 1.0
+        pool = _random_pool(rng, m, P, P, 400)
+        lo, hi = _random_rows(rng, m; ge = 0.1, le = 0.1, range = 0.6)
+        opts = _qopts(debug = true, refactor_interval = seed == 3 ? 7 : 150,
+                      dense_refactor_interval = seed == 3 ? 7 : 0)
+        st = _ineq_state(pool, lo, hi, δ; options = opts)
+        center = zeros(m)
+        for it in 1:60
+            HQ.set_center!(st, center)
+            @test HQ.qpas_solve!(st) === :optimal
+            _check_kkt(st)
+            if it % 10 == 0
+                ref = _highs_ineq_reference(pool, lo, hi, δ, center)
+                @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-6
+            end
+            center = copy(st.π)
+            _add_random_column!(rng, pool, rand(rng, 1:P))
+            HQ.register_columns!(st)
+        end
+        @test st.total.bound_flips > 0
+    end
+
+    @testset "range row flips back and forth" begin
+        # one block, one row 0.4 ≤ x₂ ≤ 0.6, i.e. x₂ - s = 0.4 with 0 ≤ s ≤ 0.2. A negative
+        # center pulls x₂ - s down, so s reaches 0.2 and the row flips to its "≤" form
+        # (κ = +1); a positive center pulls it up and the row flips back (κ = -1). (The
+        # regularized master only penalizes the row, so x₂ itself may leave [0.4, 0.6].)
+        pool = HQ.ColumnPool(1, 1, 10)
+        HQ.add_column!(pool, 1, 0.0, Int[], Float64[], [1])
+        HQ.add_column!(pool, 1, 0.0, [1], [1.0], [2])
+        st = _ineq_state(pool, [0.4], [0.6], 1.0)
+        for (c, κ) in [(-5.0, 1.0), (5.0, -1.0), (-5.0, 1.0)]
+            HQ.set_center!(st, [c])
+            @test HQ.qpas_solve!(st) === :optimal
+            _check_kkt(st)
+            @test st.kkt.surplus.sign[1] == κ
+            ref = _highs_ineq_reference(pool, [0.4], [0.6], 1.0, [c])
+            @test HQ.master_objective(st) ≈ ref.objective rtol = 1e-8
+        end
+        @test st.total.bound_flips >= 2
+    end
+
     @testset "inequality rows: dependent columns" begin
         rng = Xoshiro(13)
         m, P, δ = 6, 2, 1.0
@@ -297,9 +381,10 @@ end
     end
 
     @testset "row classification" begin
-        b, rows, signs = HQ.slack_structure([1.0, 2.0, -Inf, 0.0], [1.0, Inf, 3.0, 0.0])
-        @test b == [1.0, 2.0, 3.0, 0.0] && rows == [2, 3] && signs == [-1.0, 1.0]
-        @test_throws ArgumentError HQ.slack_structure([0.0], [1.0])      # range row
+        b, rows, signs, upper = HQ.slack_structure([1.0, 2.0, -Inf, 0.0, 0.5],
+                                                   [1.0, Inf, 3.0, 0.0, 2.0])
+        @test b == [1.0, 2.0, 3.0, 0.0, 0.5] && rows == [2, 3, 5] && signs == [-1.0, 1.0, -1.0]
+        @test upper == [Inf, Inf, 1.5]                                   # range row: U = u - ℓ
         @test_throws ArgumentError HQ.slack_structure([-Inf], [Inf])     # free row
     end
 

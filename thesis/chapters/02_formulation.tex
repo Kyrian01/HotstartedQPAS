@@ -455,8 +455,27 @@ In the text we write all formulas for ``$\ge$'' rows ($D_\kappa = -I$).
 \end{remark}
 
 \begin{remark}[Range rows] \label{rem:range}
-A row with two different finite bounds $\underline{b}_i\le A_{i,:}\lambda\le\overline{b}_i$ needs a slack with
-an upper bound. Such rows are not considered in this work.
+A row with two different finite bounds $\underline{b}_i\le A_{i,:}\lambda\le\overline{b}_i$ gets a single
+slack with an upper bound,
+\[
+A_{i,:}\lambda + \kappa_i s_i = b_i,\qquad 0\le s_i\le U_i := \overline{b}_i - \underline{b}_i ,
+\]
+starting as a ``$\ge$'' row ($\kappa_i = -1$, $b_i = \underline{b}_i$). The substitution
+$\bar s_i = U_i - s_i$ rewrites the same row as
+\[
+A_{i,:}\lambda - \kappa_i\bar s_i = b_i - \kappa_i U_i,\qquad 0\le\bar s_i\le U_i ,
+\]
+i.e.\ as the ``$\le$'' row $A_{i,:}\lambda + \bar s_i = \overline{b}_i$, and back. Both forms describe the
+same feasible set and give the same value of $\Abar y - b$, hence the same dual estimate and
+objective. A range row is therefore handled like a one-sided row of \cref{rem:kappa} whose
+form is switched whenever its slack reaches $U_i$: the slack, now $\bar s_i = 0$, enters the
+working set in the new form, $\kappa_i$ and $b_i$ change, and nothing else does. Its
+multiplier $-\kappa_i(\pi_I)_i$ then automatically has the sign condition of the active bound,
+$(\pi_I)_i\ge0$ at $\underline{b}_i$ and $(\pi_I)_i\le0$ at $\overline{b}_i$. The only addition to
+the active-set method is that the ratio test also stops a free slack at $U_i$. All results of
+the following chapters hold unchanged, since they depend on $\kappa_i$ only through
+$\kappa_i^2 = 1$ and the formulas of \cref{rem:kappa-summary}, which are evaluated with the
+current $\kappa_i$.
 \end{remark}
 
 

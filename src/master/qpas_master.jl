@@ -8,11 +8,11 @@ working set, ordering and LDLᵀ factor of the reduced Hessian) is carried over 
 column generation iterations; a new column only joins the working set. The factor backend is
 `QPASOptions.factorization` (`:cholmod` or `:dense`).
 
-Coupling rows may be equalities, `≥` rows or `≤` rows (one finite bound). Every inequality row
-gets a slack variable, `aᵢᵀλ - sᵢ = ℓᵢ` or `aᵢᵀλ + sᵢ = uᵢ`, which makes the eliminated form
-valid again (thesis §2.4, Surplus Variables and the Unified Formulation; Rem. 2.4.4 for `≤`
-rows). Range rows with two different finite bounds
-are not supported.
+Coupling rows may be equalities, `≥` rows, `≤` rows or range rows `ℓᵢ ≤ aᵢᵀλ ≤ uᵢ`. Every
+inequality row gets a slack variable, `aᵢᵀλ - sᵢ = ℓᵢ` or `aᵢᵀλ + sᵢ = uᵢ`, which makes the
+eliminated form valid again (thesis §2.4, Surplus Variables and the Unified Formulation;
+Rem. 2.4.4 for `≤` rows). The slack of a range row has the upper bound `uᵢ - ℓᵢ`; when it is
+reached, the row switches to its `≤` form (bound flip, thesis Rem. 2.4.5, Range rows).
 
 Keyword arguments are forwarded to [`QPASOptions`](@ref).
 """
@@ -31,24 +31,27 @@ is_stabilized(::QPASMaster) = true
 supports_inequalities(::QPASMaster) = true
 
 """
-    slack_structure(row_lower, row_upper) -> (b, slack_rows, slack_signs)
+    slack_structure(row_lower, row_upper) -> (b, slack_rows, slack_signs, slack_upper)
 
-Write every coupling row `ℓᵢ ≤ aᵢᵀλ ≤ uᵢ` as an equality `aᵢᵀλ + κ sᵢ = bᵢ`:
+Write every coupling row `ℓᵢ ≤ aᵢᵀλ ≤ uᵢ` as an equality `aᵢᵀλ + κ sᵢ = bᵢ`, `0 ≤ sᵢ ≤ U`:
 
-| row                  | `bᵢ` | slack                      |
-|:---------------------|:-----|:---------------------------|
-| `ℓᵢ = uᵢ`            | `ℓᵢ` | none                       |
-| `uᵢ = +∞` (`≥` row)  | `ℓᵢ` | surplus, `κ = -1`          |
-| `ℓᵢ = -∞` (`≤` row)  | `uᵢ` | slack, `κ = +1`            |
+| row                       | `bᵢ` | slack                      | `U`       |
+|:--------------------------|:-----|:---------------------------|:----------|
+| `ℓᵢ = uᵢ`                 | `ℓᵢ` | none                       |           |
+| `uᵢ = +∞` (`≥` row)       | `ℓᵢ` | surplus, `κ = -1`          | `∞`       |
+| `ℓᵢ = -∞` (`≤` row)       | `uᵢ` | slack, `κ = +1`            | `∞`       |
+| `ℓᵢ < uᵢ` both finite     | `ℓᵢ` | surplus, `κ = -1`          | `uᵢ - ℓᵢ` |
 
 A `≤` row is the `≥` row `-aᵢᵀλ ≥ -uᵢ`; flipping the sign of its slack instead of the row
-keeps the columns unchanged. Rows with two different finite bounds, or none, are rejected.
+keeps the columns unchanged. A range row starts in its `≥` form; the solver switches it to the
+`≤` form (`κ = +1`, `bᵢ = uᵢ`) when its slack reaches `U`. Free rows are rejected.
 """
 function slack_structure(lo::AbstractVector{Float64}, hi::AbstractVector{Float64})
     m = length(lo)
     b = zeros(m)
     rows = Int[]
     signs = Float64[]
+    upper = Float64[]
     for i in 1:m
         if lo[i] == hi[i]
             b[i] = lo[i]                               # equality row
@@ -56,25 +59,32 @@ function slack_structure(lo::AbstractVector{Float64}, hi::AbstractVector{Float64
             b[i] = lo[i]                               # aᵢᵀλ - sᵢ = ℓᵢ
             push!(rows, i)
             push!(signs, -1.0)
+            push!(upper, Inf)
         elseif lo[i] == -Inf && isfinite(hi[i])
             b[i] = hi[i]                               # aᵢᵀλ + sᵢ = uᵢ
             push!(rows, i)
             push!(signs, 1.0)
+            push!(upper, Inf)
+        elseif isfinite(lo[i]) && isfinite(hi[i]) && lo[i] < hi[i]
+            b[i] = lo[i]                               # aᵢᵀλ - sᵢ = ℓᵢ, 0 ≤ sᵢ ≤ uᵢ - ℓᵢ
+            push!(rows, i)
+            push!(signs, -1.0)
+            push!(upper, hi[i] - lo[i])
         else
             throw(ArgumentError("QPAS master: coupling row $i has bounds [$(lo[i]), $(hi[i])]; " *
-                                "only equalities and one-sided inequalities are supported"))
+                                "free rows are not supported"))
         end
     end
-    return b, rows, signs
+    return b, rows, signs, upper
 end
 
 function initialize!(m::QPASMaster, spec::MasterSpec, pool::ColumnPool)
     isfinite(spec.delta) && spec.delta > 0 ||
         throw(ArgumentError("stabilization parameter δ must be positive"))
     release!(m)
-    b, rows, signs = slack_structure(spec.row_lower, spec.row_upper)
+    b, rows, signs, upper = slack_structure(spec.row_lower, spec.row_upper)
     m.state = QPASState(pool, b, spec.delta; options = m.options, slack_rows = rows,
-                        slack_signs = signs)
+                        slack_signs = signs, slack_upper = upper)
     m.solution = MasterSolution(spec)
     return m
 end
@@ -137,6 +147,11 @@ function solver_details(m::QPASMaster)
         push!(details, "inequality rows (slacks)" => n_surplus(sp))
         push!(details, "  slack expansions / reductions" =>
                        "$(c.slack_expansions) / $(c.slack_reductions)")
+        n_range = count(isfinite, sp.upper)
+        if n_range > 0
+            push!(details, "  of which range rows" => n_range)
+            push!(details, "  bound flips (range rows)" => c.bound_flips)
+        end
         push!(details, "  final free slacks |N_s|" => length(sp.free))
     end
     for (k, name) in enumerate(t.names)

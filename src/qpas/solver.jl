@@ -63,7 +63,7 @@ function qpas_solve!(st::QPASState)
             end
             at_minimizer = false
         else
-            α, q, q_slack = @timed_section timer :step ratio_test(st, 1.0, 0, 0)
+            α, q, q_slack, q_upper = @timed_section timer :step ratio_test(st, 1.0, 0, 0)
             @timed_section timer :step take_step!(st, α, 0, 0)
             clear_direction!(st)
             ctr.steps += 1
@@ -72,7 +72,7 @@ function qpas_solve!(st::QPASState)
                 ctr.full_steps += 1
                 at_minimizer = true
             elseif q_slack
-                @timed_section timer :expand expand_surplus!(st, q)
+                @timed_section timer :expand expand_slack!(st, q, q_upper)
             else
                 @timed_section timer :expand expand_working_set!(st, q)
             end
@@ -189,11 +189,12 @@ end
 # ── primal step ──────────────────────────────────────────────────────────────────────────
 
 """
-    ratio_test(state, αmax, extra, extra_s) -> (α, q, q_is_slack)
+    ratio_test(state, αmax, extra, extra_s) -> (α, q, q_is_slack, q_at_upper)
 
-Largest `α ≤ αmax` keeping `x + αp ≥ 0` and `s + αp_s ≥ 0` over the support of the direction
-(`N ∪ S`, the free slacks `N_s`, plus column `extra` / slack `extra_s` if nonzero). `q` is the
-blocking index (a column, or a slack if `q_is_slack`), or 0 if `α = αmax` is not blocked.
+Largest `α ≤ αmax` keeping `x + αp ≥ 0` and `0 ≤ s + αp_s ≤ U` over the support of the
+direction (`N ∪ S`, the free slacks `N_s`, plus column `extra` / slack `extra_s` if nonzero).
+`q` is the blocking index (a column, or a slack if `q_is_slack`), or 0 if `α = αmax` is not
+blocked. `q_at_upper` is `true` if slack `q` blocks at its upper bound (range rows only).
 """
 function ratio_test(st::QPASState, αmax::Float64, extra::Int, extra_s::Int)
     ord = st.kkt.ordering
@@ -201,6 +202,7 @@ function ratio_test(st::QPASState, αmax::Float64, extra::Int, extra_s::Int)
     α = αmax
     q = 0
     q_slack = false
+    q_upper = false
     x, p = st.x, st.p
     # columns: αₖ = xₖ / -pₖ for every decreasing component
     @inbounds for k in items(ord.N)
@@ -224,23 +226,29 @@ function ratio_test(st::QPASState, αmax::Float64, extra::Int, extra_s::Int)
             αk < α && ((α, q) = (αk, extra))
         end
     end
-    # slacks: the same test on s ≥ 0
-    s, ps = st.s, st.ps
+    # slacks: the same test on s ≥ 0, and on s ≤ U for range rows
+    s, ps, U = st.s, st.ps, st.kkt.surplus.upper
     @inbounds for σ in items(st.kkt.surplus.free)
         pσ = ps[σ]
         if pσ < -tol
             ασ = max(s[σ], 0.0) / -pσ
-            ασ < α && ((α, q, q_slack) = (ασ, σ, true))
+            ασ < α && ((α, q, q_slack, q_upper) = (ασ, σ, true, false))
+        elseif pσ > tol && isfinite(U[σ])
+            ασ = max(U[σ] - s[σ], 0.0) / pσ
+            ασ < α && ((α, q, q_slack, q_upper) = (ασ, σ, true, true))
         end
     end
     if extra_s != 0
         @inbounds pσ = ps[extra_s]
         if pσ < -tol
             ασ = max(s[extra_s], 0.0) / -pσ
-            ασ < α && ((α, q, q_slack) = (ασ, extra_s, true))
+            ασ < α && ((α, q, q_slack, q_upper) = (ασ, extra_s, true, false))
+        elseif pσ > tol && isfinite(U[extra_s])
+            ασ = max(U[extra_s] - s[extra_s], 0.0) / pσ
+            ασ < α && ((α, q, q_slack, q_upper) = (ασ, extra_s, true, true))
         end
     end
-    return α, q, q_slack
+    return α, q, q_slack, q_upper
 end
 
 """
@@ -287,7 +295,8 @@ end
 @inline function _step_slack!(st, sp, σ, α)
     pσ = st.ps[σ]
     pσ == 0.0 && return nothing
-    @inbounds st.s[σ] = max(st.s[σ] + α * pσ, 0.0)
+    # clamp to [0, U] so round-off never pushes a blocking slack past its bound
+    @inbounds st.s[σ] = clamp(st.s[σ] + α * pσ, 0.0, sp.upper[σ])
     @inbounds st.Ap[sp.row[σ]] += sp.sign[σ] * pσ
     return nothing
 end
@@ -464,14 +473,14 @@ function _singular_step!(st::QPASState, r::Int, t)
     end
     # slack part: free slacks absorb the residual of their row so that Ād = 0 there
     _zero_curvature_slacks!(st, r, 0)
-    α, q, q_slack = ratio_test(st, Inf, r, 0)
+    α, q, q_slack, q_upper = ratio_test(st, Inf, r, 0)
     q == 0 && error("QPAS: unbounded zero-curvature direction (infeasible master?)")
     take_step!(st, α, r, 0)
     clear_direction!(st, r)
     st.last.singular_steps += 1
 
     if q_slack
-        expand_surplus!(st, q)
+        expand_slack!(st, q, q_upper)
         return false
     end
     if in_S(ord, q) && block[q] == block[r]
@@ -529,6 +538,23 @@ function expand_surplus!(st::QPASState, σ::Int)
     st.last.expansions += 1
     st.last.slack_expansions += 1
     _check_factor!(st)
+    return nothing
+end
+
+"""
+    expand_slack!(state, σ, at_upper)
+
+The free slack `σ` blocked. At zero it enters the working set directly; at its upper bound
+(range rows) the row first switches to its other form (`flip_bound!`), after which the new
+slack is zero. Both cases are the same rank-one update of `H_eff`, since the row's contribution
+`vvᵀ` does not depend on the slack's sign.
+"""
+function expand_slack!(st::QPASState, σ::Int, at_upper::Bool)
+    if at_upper
+        flip_bound!(st, σ)
+        st.last.bound_flips += 1
+    end
+    expand_surplus!(st, σ)
     return nothing
 end
 
@@ -592,12 +618,12 @@ function _surplus_singular_step!(st::QPASState, σ::Int, t)
         p[ord.rep[block[k]]] -= tk
     end
     _zero_curvature_slacks!(st, 0, σ)
-    α, q, q_slack = ratio_test(st, Inf, 0, σ)
+    α, q, q_slack, q_upper = ratio_test(st, Inf, 0, σ)
     q == 0 && error("QPAS: unbounded zero-curvature direction (infeasible master?)")
     take_step!(st, α, 0, σ)
     clear_direction!(st, 0, σ)
     st.last.singular_steps += 1
-    q_slack ? expand_surplus!(st, q) : expand_working_set!(st, q)
+    q_slack ? expand_slack!(st, q, q_upper) : expand_working_set!(st, q)
     return nothing
 end
 

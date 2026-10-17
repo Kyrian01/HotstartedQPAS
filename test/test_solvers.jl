@@ -91,8 +91,8 @@ end
         @test has_inequalities(inst)
         exact = solve_exact(inst)
         @test exact.status === :optimal
-        for master in (HighsLPMaster(), HighsExplicitQPMaster(), QPASMaster(),
-                       QPASMaster(factorization = :dense))
+        for master in (HighsLPMaster(), HighsExplicitQPMaster(), HighsEliminatedQPMaster(),
+                       QPASMaster(), QPASMaster(factorization = :dense))
             r = solve_column_generation(inst, master; options = opts)
             @test r.status === :optimal
             @test r.objective ≈ exact.objective rtol = 1e-6
@@ -100,7 +100,6 @@ end
             @test r.infeasibility <= 1e-5
             _check_flows(inst, edge_flows(r, inst); tol = 1e-5)
         end
-        @test_throws ArgumentError solve_column_generation(inst, HighsEliminatedQPMaster())
     end
 
     # "≤" rows are handled by a slack with the opposite sign; build an instance with
@@ -115,7 +114,7 @@ end
                                          lo, hi, "le_rows")
         exact = solve_exact(inst)
         @test exact.status === :optimal
-        for master in (HighsLPMaster(), QPASMaster(), QPASMaster(debug = true),
+        for master in (HighsLPMaster(), HighsEliminatedQPMaster(), QPASMaster(), QPASMaster(debug = true),
                        QPASMaster(factorization = :dense),
                        QPASMaster(factorization = :dense, debug = true))
             r = solve_column_generation(inst, master; options = opts)
@@ -124,12 +123,31 @@ end
             @test r.lower_bound <= exact.objective + 1e-6
             _check_flows(inst, edge_flows(r, inst); tol = 1e-5)
         end
-        # a range row (two different finite bounds) is rejected by the QPAS master
-        lo2 = copy(base.task_lower)
-        lo2[1] = 0.0
-        range_inst = HQ.CrewSchedulingInstance(base.network, base.edge_costs, base.task_matrix,
-                                               lo2, base.task_upper, "range_row")
-        @test_throws ArgumentError solve_column_generation(range_inst, QPASMaster())
+    end
+
+    # range rows ℓ ≤ cover ≤ u: one slack with an upper bound (bound flips); "cover ∈ [0, 1]"
+    # (optional flight) and "cover ∈ [1, 2]" so that both bounds become active
+    @testset "range rows" begin
+        base = test_instance(:small; seed = 5)
+        T = n_tasks(base)
+        lo, hi = copy(base.task_lower), copy(base.task_upper)
+        lo[1:3:T] .= 0.0                                      # cover ∈ [0, 1]
+        hi[2:3:T] .= 2.0                                      # cover ∈ [1, 2]
+        inst = HQ.CrewSchedulingInstance(base.network, base.edge_costs, base.task_matrix,
+                                         lo, hi, "range_rows")
+        exact = solve_exact(inst)
+        @test exact.status === :optimal
+        for master in (HighsLPMaster(), HighsExplicitQPMaster(), HighsEliminatedQPMaster(),
+                       QPASMaster(), QPASMaster(debug = true),
+                       QPASMaster(factorization = :dense),
+                       QPASMaster(factorization = :dense, debug = true))
+            r = solve_column_generation(inst, master; options = opts)
+            @test r.status === :optimal
+            @test r.objective ≈ exact.objective rtol = 1e-6
+            @test r.lower_bound <= exact.objective + 1e-6
+            @test r.infeasibility <= 1e-5
+            _check_flows(inst, edge_flows(r, inst); tol = 1e-5)
+        end
     end
 
     @testset "inequality rows: pricing and stabilization variants" begin

@@ -111,7 +111,7 @@ print_details(qpas)
 | 1 | `solve_exact` | — : the edge-based LP with all coupling and flow rows stacked in one matrix, HiGHS | §2.1, §9.1 |
 | 2 | `HighsLPMaster` | LP master with Big-M slacks, persistent HiGHS instance (`addCols`, warm-started simplex) | §2.3, Alg. 2.1 |
 | 3a | `HighsExplicitQPMaster` | stabilized QP that keeps `w`: Hessian `δI` on `w` only, HiGHS QP | §3.2 |
-| 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`: Hessian `(AX)ᵀ(AX)/δ`, HiGHS QP | §3.3 |
+| 3b | `HighsEliminatedQPMaster` | stabilized QP without `w`, variables `y = [s; λ]` (slacks of the inequality rows): Hessian `ĀᵀĀ/δ`, HiGHS QP | §3.3 |
 | 4 | `QPASMaster` | the same QP as 3b, solved by the hot-started QPAS of Chapters 4–8 | Alg. 6.1, 7.1, 8.1 |
 
 All column generation variants share one driver (`solve_column_generation`), one pricing
@@ -314,9 +314,9 @@ bounds; `≥ 1` rows are made with `generate_instance(...; inequality_fraction =
 | component | inequality rows |
 |-----------|-----------------|
 | exact LP, LP CG, explicit QP CG | supported (row bounds; the duals get their sign automatically) |
-| QPAS | `=`, `≥` and `≤` rows (one finite bound); range rows raise `ArgumentError` |
+| QPAS | `=`, `≥`, `≤` and range rows `ℓ ≤ aᵀλ ≤ u` (one slack with an upper bound, bound flips) |
 | pricing, Lagrangian bound, infeasibility measure | supported (duals are projected onto their sign conditions before pricing) |
-| eliminated QP (HiGHS) | raises `ArgumentError` (`supports_inequalities(master) == false`) |
+| eliminated QP (HiGHS) | all row types: one slack variable per inequality row, `y = [s; λ]`, with bounds `0 ≤ sᵢ ≤ uᵢ − ℓᵢ` passed to HiGHS (thesis Thm. 3.3.1) |
 
 The QPAS gives every inequality row a slack, `aᵢᵀλ − sᵢ = bᵢ` for `≥` rows and
 `aᵢᵀλ + sᵢ = bᵢ` for `≤` rows (a `≤` row is a `≥` row with both sides negated; flipping the
@@ -329,7 +329,12 @@ backend stores only `|N| × |N|`). A slack entering `W_s` is a
 rank-one update `H_eff + vvᵀ`, a slack leaving it a downdate `H_eff − vvᵀ`
 (`cholmod_l_updown`), with `v` the row of `AZ` of that inequality. The multiplier of a slack in
 `W_s` is the dual of its row (signed), so the optimality test also checks the dual sign
-conditions. Theory: thesis §2.4, §5.2–5.3 and §6.4.2. Working notes:
+conditions. A range row `ℓᵢ ≤ aᵢᵀλ ≤ uᵢ` gets one slack `0 ≤ sᵢ ≤ uᵢ − ℓᵢ` and starts in its
+`≥` form (`aᵢᵀλ − sᵢ = ℓᵢ`). When the free slack reaches its upper bound, the solver substitutes
+`s̄ᵢ = (uᵢ − ℓᵢ) − sᵢ`, which turns the row into its `≤` form `aᵢᵀλ + s̄ᵢ = uᵢ` (`flip_bound!`:
+only `κᵢ` and `bᵢ` change), and fixes `s̄ᵢ = 0` with the same rank-one update as any other slack.
+`π`, the objective and `H_eff` are unchanged by the flip. Theory: thesis §2.4 (Rem. 2.4.5),
+§5.2–5.3 and §6.4.2. Working notes:
 [`docs/qpas_inequality_extension.md`](docs/qpas_inequality_extension.md).
 
 ## Reproducing the benchmarks

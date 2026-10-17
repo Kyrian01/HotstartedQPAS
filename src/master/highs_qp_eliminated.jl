@@ -3,25 +3,31 @@
 
 Stabilized restricted master problem in the *eliminated* form (thesis Thm. 3.3.1, Eliminated
 regularized master problem, eq. 3.5 with c̃ from eq. 3.6), where
-`w = (b - AXλ)/δ` has been substituted, solved by HiGHS' QP solver on a persistent instance:
+`w = (b - Āy)/δ` has been substituted, solved by HiGHS' QP solver on a persistent instance.
+Every inequality coupling row gets a slack as in the QPAS (thesis §2.4, Rem. 2.4.4 and 2.4.5),
+`aᵢᵀλ + κᵢ sᵢ = bᵢ` with `0 ≤ sᵢ ≤ Uᵢ` (`slack_structure`), so with `y = [s; λ]` and
+`Ā = [K  AX]` (`K` places `κᵢ` in the row of slack `i`):
 
 ```
-min  1/(2δ) λᵀ(AX)ᵀ(AX)λ + c̃ᵀλ,   c̃ = c - (AX)ᵀ(π̂ + b/δ)
-s.t. Cλ = 1,   λ ≥ 0
+min  1/(2δ) yᵀĀᵀĀy + c̃ᵀy,   c̃ = [0; c] - Āᵀ(π̂ + b/δ)
+s.t. Cλ = 1,   λ ≥ 0,   0 ≤ s ≤ U
 ```
 
-This is the same QP the hot-started QPAS solves. The Gram matrix `G = (AX)ᵀ(AX)` is kept
-incrementally (one new row/column per added column, O(nnz(AX)) work); because HiGHS has
-no Hessian update API, the full lower triangle of `G/δ` is re-passed whenever columns were
-added, and all costs change when the center moves.
+This is the same QP the hot-started QPAS solves. HiGHS handles the slack bounds directly, so a
+range row needs no bound flips here (`Uᵢ = uᵢ - ℓᵢ`; `Uᵢ = ∞` for one-sided rows).
 
-Only equality coupling rows are supported (eliminating `w` relies on `AXλ + δw = b`).
+The Gram matrix `G = ĀᵀĀ` is kept incrementally: the slack block is `KᵀK = I` (one slack per
+row), a new column `j` adds `a_kᵀa_j` for the earlier columns and `κᵢ (a_j)ᵢ` for the slacks
+(O(nnz(AX)) work). Because HiGHS has no Hessian update API, the full lower triangle of `G/δ`
+is re-passed whenever columns were added, and all costs change when the center moves.
 """
 mutable struct HighsEliminatedQPMaster <: AbstractMasterSolver
     output::Bool
     model::Union{Nothing,HighsModel}
     delta::Float64
     rhs::Vector{Float64}
+    slack_rows::Vector{Int}       # coupling row of slack σ (HiGHS variable σ)
+    slack_signs::Vector{Float64}  # κσ
     n_rows::Int
     n_blocks::Int
     n_columns::Int
@@ -29,7 +35,8 @@ mutable struct HighsEliminatedQPMaster <: AbstractMasterSolver
     center::Vector{Float64}
     solution::Union{Nothing,MasterSolution}
     hessian_stale::Bool
-    # lower triangle of the Gram matrix, column-wise: rows ≥ column index, increasing
+    # lower triangle of the Gram matrix ĀᵀĀ over the variables y = [s; λ] (slack σ is
+    # variable σ, column j is variable m_I + j), column-wise: rows ≥ column index, increasing
     gram_rows::Vector{Vector{Int}}
     gram_vals::Vector{Vector{Float64}}
     # buffers
@@ -47,24 +54,28 @@ mutable struct HighsEliminatedQPMaster <: AbstractMasterSolver
 end
 
 HighsEliminatedQPMaster(; output::Bool = false) =
-    HighsEliminatedQPMaster(output, nothing, NaN, Float64[], 0, 0, 0, nothing, Float64[], nothing,
+    HighsEliminatedQPMaster(output, nothing, NaN, Float64[], Int[], Float64[], 0, 0, 0, nothing,
+                            Float64[], nothing,
                             true, Vector{Int}[], Vector{Float64}[], Float64[], Float64[],
                             Float64[], Float64[], Float64[], Float64[], Float64[], Float64[],
                             Int[], Int[], Float64[])
 
 method_name(::HighsEliminatedQPMaster) = "Eliminated QP CG (HiGHS)"
 is_stabilized(::HighsEliminatedQPMaster) = true
-supports_inequalities(::HighsEliminatedQPMaster) = false
+supports_inequalities(::HighsEliminatedQPMaster) = true
+
+"Number of slack variables (they come first among the HiGHS variables)."
+n_slacks(m::HighsEliminatedQPMaster) = length(m.slack_rows)
 
 function initialize!(m::HighsEliminatedQPMaster, spec::MasterSpec, pool::ColumnPool)
-    equality_only(spec) ||
-        throw(ArgumentError("$(method_name(m)) supports equality coupling rows only"))
     isfinite(spec.delta) && spec.delta > 0 ||
         throw(ArgumentError("stabilization parameter δ must be positive"))
     release!(m)
     T, P = n_rows(spec), spec.n_blocks
     m.delta = spec.delta
-    m.rhs = copy(spec.row_lower)
+    # coupling rows as equalities aᵢᵀλ + κᵢsᵢ = bᵢ, 0 ≤ sᵢ ≤ Uᵢ (the same as in the QPAS)
+    m.rhs, m.slack_rows, m.slack_signs, upper = slack_structure(spec.row_lower, spec.row_upper)
+    mI = length(m.slack_rows)
     m.n_rows, m.n_blocks, m.n_columns = T, P, 0
     m.pool = pool
     m.center = zeros(T)
@@ -72,15 +83,18 @@ function initialize!(m::HighsEliminatedQPMaster, spec::MasterSpec, pool::ColumnP
     m.model = HighsModel(; output = m.output)
     # w is eliminated, so the only rows are the P convexity rows Cλ = 1
     append_rows!(m.model, ones(P), ones(P))
+    # slack variables 0 ≤ sσ ≤ Uσ: in no constraint row, cost set in `solve!`
+    append_columns!(m.model, zeros(mI), zeros(mI), upper, ones(Int, mI + 1), Int[], Float64[])
 
-    m.gram_rows = Vector{Int}[]
-    m.gram_vals = Vector{Float64}[]
+    # slack block of the Gram matrix: KᵀK = I (one slack per row, κσ² = 1)
+    m.gram_rows = [[σ] for σ in 1:mI]
+    m.gram_vals = [[1.0] for _ in 1:mI]
     m.scatter = zeros(T)
     m.shifted_dual = zeros(T)
     m.Ax = zeros(T)
-    m.cost = zeros(spec.capacity)
-    m.col_value = zeros(spec.capacity)
-    m.col_dual = zeros(spec.capacity)
+    m.cost = zeros(mI + spec.capacity)
+    m.col_value = zeros(mI + spec.capacity)
+    m.col_dual = zeros(mI + spec.capacity)
     m.row_value = zeros(P)
     m.row_dual = zeros(P)
 
@@ -102,22 +116,33 @@ function add_columns!(m::HighsEliminatedQPMaster, pool::ColumnPool, cols::UnitRa
     return m
 end
 
-# New Gram entries G[j, k] = a_jᵀ a_k for k ≤ j (row j is the largest so far, so pushing keeps
-# every column's row list sorted).
+# New Gram entries for column j (variable v = m_I + j, the largest so far, so pushing keeps
+# every column's row list sorted): G[v, σ] = κσ (a_j)_row(σ) for the slacks and
+# G[v, m_I + k] = a_jᵀ a_k for the earlier columns k.
 function _extend_gram!(m::HighsEliminatedQPMaster, pool::ColumnPool, j::Int)
     buf = m.scatter
+    mI = n_slacks(m)
+    v_j = mI + j
     # scatter a_j into a dense buffer so each a_kᵀa_j is a sparse–dense dot product
     column_axpy!(buf, 1.0, pool, j)
+    # slack–column entries (Ā = [K  AX]): stored in the slack's column; exact zeros skipped
+    @inbounds for σ in 1:mI
+        a = buf[m.slack_rows[σ]]
+        if a != 0.0
+            push!(m.gram_rows[σ], v_j)
+            push!(m.gram_vals[σ], m.slack_signs[σ] * a)
+        end
+    end
     # off-diagonal entries G[j, k], stored in column k (lower triangle); exact zeros skipped
     for k in 1:(j - 1)
         v = column_dot(pool, k, buf)
         if v != 0.0
-            push!(m.gram_rows[k], j)
-            push!(m.gram_vals[k], v)
+            push!(m.gram_rows[mI + k], v_j)
+            push!(m.gram_vals[mI + k], v)
         end
     end
     # new column j starts with its diagonal entry G[j, j] = ‖a_j‖²
-    push!(m.gram_rows, [j])
+    push!(m.gram_rows, [v_j])
     push!(m.gram_vals, [column_dot(pool, j, buf)])
     # reset only the touched entries so the scatter buffer is all zeros again
     @inbounds for i in column_rows(pool, j)
@@ -127,7 +152,7 @@ function _extend_gram!(m::HighsEliminatedQPMaster, pool::ColumnPool, j::Int)
 end
 
 function _pass_hessian!(m::HighsEliminatedQPMaster)
-    n = m.n_columns
+    n = n_slacks(m) + m.n_columns               # all variables y = [s; λ]
     colptr, rowval, nzval = m.hess_colptr, m.hess_rowval, m.hess_nzval
     empty!(rowval)
     empty!(nzval)
@@ -159,12 +184,17 @@ function solve!(m::HighsEliminatedQPMaster)
     n, T, δ = m.n_columns, m.n_rows, m.delta
     m.hessian_stale && _pass_hessian!(m)
 
-    # c̃ = c - (AX)ᵀ(π̂ + b/δ): one sparse dot product per column with the shifted dual
+    mI = n_slacks(m)
+    # c̃ = [0; c] - Āᵀ(π̂ + b/δ): -κσ times the shifted dual of its row for a slack, one sparse
+    # dot product with the shifted dual per column
     @. m.shifted_dual = m.center + m.rhs / δ
-    @inbounds for j in 1:n
-        m.cost[j] = pool.cost[j] - column_dot(pool, j, m.shifted_dual)
+    @inbounds for σ in 1:mI
+        m.cost[σ] = -m.slack_signs[σ] * m.shifted_dual[m.slack_rows[σ]]
     end
-    change_costs!(m.model, 1, view(m.cost, 1:n))
+    @inbounds for j in 1:n
+        m.cost[mI + j] = pool.cost[j] - column_dot(pool, j, m.shifted_dual)
+    end
+    change_costs!(m.model, 1, view(m.cost, 1:(mI + n)))
 
     sol.status = run!(m.model)
     its = iteration_counts(m.model)
@@ -172,10 +202,13 @@ function solve!(m::HighsEliminatedQPMaster)
     sol.status === :optimal || return sol
     get_solution!(m.model, m.col_value, m.col_dual, m.row_value, m.row_dual)
 
-    λ = view(m.col_value, 1:n)
-    copyto!(sol.weights, 1, m.col_value, 1, n)
-    # recover π = π̂ + w with w = (b - AXλ)/δ from the primal λ
-    coupling_product!(m.Ax, pool, m.col_value)
+    λ = view(m.col_value, (mI + 1):(mI + n))
+    copyto!(sol.weights, 1, m.col_value, mI + 1, n)
+    # recover π = π̂ + w with w = (b - Āy)/δ = (b - AXλ - Ks)/δ from the primal y
+    coupling_product!(m.Ax, pool, λ)
+    @inbounds for σ in 1:mI
+        m.Ax[m.slack_rows[σ]] += m.slack_signs[σ] * m.col_value[σ]
+    end
     @. sol.π = m.center + (m.rhs - m.Ax) / δ              # thesis eq. 3.9 (dual estimate)
     copyto!(sol.μ, 1, m.row_dual, 1, m.n_blocks)
     # HiGHS' objective drops the constants of c̃, so the stabilized objective is rebuilt
@@ -184,7 +217,8 @@ function solve!(m::HighsEliminatedQPMaster)
 end
 
 solver_details(m::HighsEliminatedQPMaster) =
-    Pair{String,Any}["Hessian nonzeros (lower)" => sum(length, m.gram_rows; init = 0)]
+    Pair{String,Any}["Hessian nonzeros (lower)" => sum(length, m.gram_rows; init = 0),
+                     "slack variables" => n_slacks(m)]
 
 function release!(m::HighsEliminatedQPMaster)
     m.model === nothing || close(m.model)

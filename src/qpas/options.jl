@@ -74,6 +74,8 @@ Event counters of the active-set solver (per solve and cumulative).
 - `reductions`: constraints released from W (thesis §6.3, Reducing the working set)
 - `slack_expansions`, `slack_reductions`: of the expansions/reductions, those of an
   inequality-row slack (rank-one update/downdate of `H_eff`)
+- `bound_flips`: of the slack expansions, those at the upper bound of a range-row slack (the row
+  switches between its `≥` and `≤` form)
 - `singular_steps`: zero-curvature steps taken because the reduced Hessian would become
   singular (thesis Ch. 7: Prop. 7.1.1, Singular reductions; Thm. 7.3.1 / 7.3.2,
   zero-curvature directions for a released column / surplus)
@@ -90,6 +92,7 @@ Base.@kwdef mutable struct QPASCounters
     reductions::Int = 0
     slack_expansions::Int = 0
     slack_reductions::Int = 0
+    bound_flips::Int = 0
     singular_steps::Int = 0
     factor_updates::Int = 0
     refactorizations::Int = 0

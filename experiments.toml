@@ -148,7 +148,7 @@ edge_probability    = 0.09
 n_tasks             = 230
 n_pilots            = 15
 inequality_fraction = 0.5
-[experiment.solvers]          # the eliminated HiGHS QP cannot handle inequality rows
+[experiment.solvers]          # the eliminated HiGHS QP hits the 600 s limit at this size
 eliminated_qp = false
 
 # ── B: CHOLMOD vs dense factor ───────────────────────────────────────────────────────────
