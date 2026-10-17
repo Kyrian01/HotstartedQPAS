@@ -4,3 +4,10 @@
 *.toc
 *.synctex.gz
 build.log
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+*.lof
+*.lot
+*.toc.bak
