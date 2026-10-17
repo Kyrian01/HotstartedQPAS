@@ -59,7 +59,8 @@ tex_num(x; digits = 2) = isnan(x) ? "--" : @sprintf("%.*f", digits, x)
 function tex_sci(x)
     (isnan(x) || x == 0) && return x == 0 ? "\$0\$" : "--"
     e = floor(Int, log10(abs(x)))
-    m = x / 10.0^e
+    m = round(x / 10.0^e; digits = 1)
+    abs(m) >= 10 && (m /= 10; e += 1)        # 9.96 rounds to 10.0: write 1.0·10^(e+1)
     return @sprintf("\$%.1f\\cdot 10^{%d}\$", m, e)
 end
 tex_int(x) = begin
@@ -480,6 +481,79 @@ let p = joinpath(RAW, "micro.csv")
                 end
                 println(io, join(cells, " & "), " \\\\")
             end
+        end
+    end
+end
+
+# ── 10. adaptive stabilization: fixed and geometric δ (section F of generate_data.jl) ───
+const ADAPT_FILE = joinpath(RAW, "adaptive.csv")
+if isfile(ADAPT_FILE)
+    _, adapt = readcsv(ADAPT_FILE)
+    arow(name, frac, pricing, variant) = begin
+        rs = [r for r in adapt if r["instance"] == name && num(r["frac"]) == frac &&
+                                  r["pricing"] == pricing && r["variant"] == variant]
+        isempty(rs) ? nothing : rs[1]
+    end
+    const PRICINGS = ("first_improving", "all_blocks")
+    const TIME_VARIANTS = ("fixed_0.1", "fixed_1", "fixed_3", "geometric_1", "geometric_3")
+    present = [(n, f) for n in MAIN_INSTANCES, f in (0.0, 0.3)
+               if arow(n, f, "first_improving", "fixed_1") !== nothing]
+    sort!(present; by = x -> (findfirst(==(x[1]), MAIN_INSTANCES), x[2]))
+    ineq(f) = f == 0 ? "--" : "30\\%"
+    tex_err(x) = x < 1e-15 ? "\$<10^{-15}\$" : tex_sci(x)
+    # time [s] of all variants, the fastest of each pricing rule in bold
+    open(joinpath(DATA, "tab_adaptive_time.tex"), "w") do io
+        for (n, f) in present
+            cells = [n, ineq(f)]
+            for pr in PRICINGS
+                t = [num(arow(n, f, pr, v)["total_s"]) for v in TIME_VARIANTS]
+                best = argmin(t)
+                for (k, x) in enumerate(t)
+                    push!(cells, k == best ? "\\textbf{" * tex_time(x) * "}" : tex_time(x))
+                end
+            end
+            println(io, join(cells, " & "), " \\\\")
+        end
+    end
+    # CG iterations (column-adding iterations) of the thesis setting and the geometric rule
+    open(joinpath(DATA, "tab_adaptive_iter.tex"), "w") do io
+        for (n, f) in present
+            cells = [n, ineq(f)]
+            for pr in PRICINGS, v in ("fixed_1", "geometric_1", "geometric_3")
+                r = arow(n, f, pr, v)
+                push!(cells, tex_int(num(r["iterations"])) * " (" *
+                             tex_int(num(r["column_iterations"])) * ")")
+            end
+            println(io, join(cells, " & "), " \\\\")
+        end
+    end
+    # accuracy: relative cost error and infeasibility, fixed δ vs the geometric rule
+    open(joinpath(DATA, "tab_adaptive_acc.tex"), "w") do io
+        for (n, f) in present
+            zstar = num(crow(n, f, "exact")["exact_objective"])
+            cells = [n, ineq(f)]
+            for (pr, v) in (("first_improving", "fixed_1"), ("first_improving", "geometric_3"),
+                            ("all_blocks", "fixed_1"), ("all_blocks", "geometric_1"))
+                r = arow(n, f, pr, v)
+                push!(cells, tex_err(abs(num(r["objective"]) - zstar) / abs(zstar)),
+                      tex_err(num(r["infeasibility"])))
+            end
+            println(io, join(cells, " & "), " \\\\")
+        end
+    end
+    # traces of I2 (equality variant): master objective error and δ over the iterations
+    if crow("I2", 0.0, "exact") !== nothing
+        zstar = num(crow("I2", 0.0, "exact")["exact_objective"])
+        for pr in PRICINGS, v in ("fixed_1", "geometric_1", "geometric_3")
+            tp = joinpath(RAW, "trace_I2_0_adapt_$(pr)_$(v).csv")
+            isfile(tp) || continue
+            _, tr = readcsv(tp)
+            it = col(tr, "iteration")
+            gap = abs.(col(tr, "master_objective") .- zstar) ./ abs(zstar)
+            δ = col(tr, "delta")
+            idx = thin(length(it), 1500)
+            writecsv(joinpath(DATA, "adapt_I2_0_$(pr)_$(v).csv"), ["it", "gap", "delta"],
+                     it[idx], max.(gap[idx], 1e-16), δ[idx])
         end
     end
 end

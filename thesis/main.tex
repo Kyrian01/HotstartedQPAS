@@ -253,6 +253,15 @@ memory. The complete column generation run is much faster than classical column 
 with a linear master problem, and, on all but the smallest instance, faster than solving the
 full linear program directly.
 
+\medskip
+
+Since the stabilization parameter does not enter the factorization, it can be changed in every
+iteration at no cost. Interpreted as the step size of a proximal point method, it should be
+small while the restricted master problem stays the same and large when new columns arrive.
+A geometric rule based on this removes the long tail of iterations that only move the
+stability center, makes the runs up to 2.6 times faster, and makes the final solution exact up
+to rounding errors.
+
 
 \cleardoublepage
 \tableofcontents

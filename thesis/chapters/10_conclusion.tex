@@ -72,10 +72,20 @@ instances, and on the largest ones the direct solve did not finish in the time i
 active-set method was done. Inequality rows need no new kind of linear algebra, keep the time
 per master problem of the same order, and lead to shorter runs.
 
+\medskip
+
+The stabilization parameter is the step size of a proximal point method on the restricted
+dual (\cref{sec:adaptive}), and for this method a change of it is free. A geometric rule that
+halves $\delta$ in every center-only iteration and doubles it, up to a base value, in every
+iteration that adds a column removes the long proximal phase of a fixed parameter. It makes
+the runs 1.2 to 2.6 times faster on I2--I4, with all-blocks pricing 6.9 times faster on I4 than
+the fixed parameter with first-improving pricing, and it makes the final solution exact up to
+rounding errors (\cref{sec:results-adaptive}).
+
 
 \section{Outlook}
 
-The experiments point to four directions for further work.
+The experiments point to three directions for further work.
 \begin{itemize}
     \item \textbf{A cheaper multiplier test.} With the dense factorization, the linear algebra
           is no longer the dominant cost. The multiplier test, which computes the reduced cost of
@@ -83,10 +93,13 @@ The experiments point to four directions for further work.
           direction computation. Since a step changes $\pi$ only by a multiple of $\Abar p$, the
           reduced costs could be updated incrementally, or the test could be restricted to a
           candidate list as in partial pricing.
-    \item \textbf{Adaptive stabilization in the proximal phase.} The long tail of center-only
-          iterations is a property of the proximal point method with a fixed $\delta$
-          (\cref{prop:center-only}). Since $\delta$ does not enter the factorization, it can be
-          decreased in this phase at no cost to the linear algebra.
+    \item \textbf{Adaptive stabilization in the column phase.} The geometric rule leaves
+          $\delta$ at its base value while columns are added, and the best base value depends
+          on the instance and on the pricing rule (\cref{sec:results-adaptive}). Proximity
+          control as in bundle methods \cite{kiwiel1990proximity}, which compares the actual
+          increase of the Lagrangian bound with the increase predicted by the restricted
+          model, would adapt $\delta$ in this phase too, at the price of pricing all blocks in
+          every iteration.
     \item \textbf{Inexact master solves.} Since the multipliers are the reduced costs, pricing
           could be called at any subspace minimizer instead of only at the optimum of the
           master problem. This would turn column generation into a single active-set method

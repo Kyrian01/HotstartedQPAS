@@ -607,6 +607,9 @@ walk ends when a multiplier changes sign, so that the working set changes, or wh
 finds an improving column. If the scaled residual $w'$ is small, many such iterations are needed,
 which explains the long tail of center-only iterations observed in \cref{sec:results-phases}.
 Each of them is cheap: one direction computation, which returns zero, and one multiplier test.
+The step length is proportional to $1/\delta$, and a change of $\delta$ costs nothing by
+\cref{rem:factor-independent}; the geometric rule of \cref{sec:adaptive} uses this to remove
+the tail (\cref{sec:results-adaptive}).
 
 
 \section{The Complete Method}

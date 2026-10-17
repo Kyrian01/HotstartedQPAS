@@ -22,9 +22,10 @@ problem that the active-set method of the following chapters solves.
 Two identities derived in this chapter are used throughout the rest of the work. The first
 expresses the duals of the linking rows as an explicit function of the primal iterate. The
 second shows that the gradient of the quadratic objective consists of the reduced costs of
-the columns and the duals of the inequality rows. The chapter ends with the regularized
+the columns and the duals of the inequality rows. The chapter then states the regularized
 column generation algorithm, its exact stopping criterion and the accuracy that this
-criterion guarantees.
+criterion guarantees. It ends with a rule that adapts the stabilization parameter during the
+run, based on the interpretation of $\delta$ as the step size of a proximal point method.
 
 \vspace*{\fill}
 
@@ -444,3 +445,150 @@ of the regularized master problem, is the subject of the remaining chapters.
 
 The bundle rule would need the Lagrangian bound in every iteration and hence full pricing; the
 experiments of \cref{chap:results} use the proximal point rule.
+
+
+\section{An Adaptive Stabilization Parameter}
+\label{sec:adaptive}
+
+\Cref{alg:rcg} keeps $\delta$ fixed. This section shows that $\delta$ is the step size of a
+proximal point method on the restricted dual function, recalls what the theory of that method
+says about variable step sizes, and derives a simple rule that changes $\delta$ during the
+run. Its effect is measured in \cref{sec:results-adaptive}.
+
+\subsection{The stabilization parameter as a step size}
+
+For a set $\mathcal{J}'$ of columns, write $\mathcal{J}'_k = \mathcal{J}'\cap\mathcal{J}_k$ and
+let
+\[
+D(\pi) = b^\top\pi + \sum_{k=1}^{K}\,\min_{j\in\mathcal{J}'_k}\bigl(c_j - a_j^\top\pi\bigr)
+\qquad\text{for } \pi_I\ge0,
+\]
+and $D(\pi) = -\infty$ otherwise. This is the objective of the restricted
+dual~\eqref{eq:restricted-dual} with $\mu$ maximized out, since the best $\mu_k$ is the
+smallest $c_j - a_j^\top\pi$ of block $k$. $D$ is concave and piecewise linear, and, since
+$\mathcal{J}'\subseteq\mathcal{J}$, it overestimates the Lagrangian bound,
+$D(\pi)\ge\theta(\pi)$ (\cref{prop:lagrangian-bound}): $D$ is the cutting-plane model of
+$\theta$ given by the current columns. A vector $g$ is a \textbf{supergradient} of $D$ at $\pi$
+if $D(\pi')\le D(\pi) + g^\top(\pi'-\pi)$ for all $\pi'$; the set of supergradients is
+$\partial D(\pi)$.
+
+\begin{prop}[Proximal step] \label{prop:proximal-step}
+Let $y$ be optimal for the eliminated regularized master problem~\eqref{eq:eliminated} with
+center $\pihat$ and parameter $\delta$, and let $\pi = \pi(y)$. Then
+\[
+\pi = \arg\max_{\pi'}\; D(\pi') - \frac{\delta}{2}\lVert\pi' - \pihat\rVert^2
+\qquad\text{and}\qquad
+\pi = \pihat + \frac{1}{\delta}\,r, \quad r = b - \Abar y\in\partial D(\pi).
+\]
+\end{prop}
+
+\begin{proof}
+By \cref{thm:explicit-duality,thm:eliminated}, $\pi$ is the $\pi$-part of the optimal solution
+of the stabilized dual~\eqref{eq:stabilized-dual}. Maximizing over $\mu$ first gives the
+stated problem, whose objective is strictly concave, so $\pi$ is its unique maximizer. Its
+optimality condition is $0\in\partial D(\pi) - \delta(\pi - \pihat)$, i.e.\
+$\delta(\pi-\pihat)\in\partial D(\pi)$, and $\delta(\pi - \pihat) = b - \Abar y$ by
+\cref{prop:residual}.
+\end{proof}
+
+A master solve is therefore an implicit supergradient step of length $1/\delta$ on the
+restricted dual, and a sequence of center-only iterations is the proximal point method
+\cite{rockafellar1976monotone} on the fixed function $D$, with step parameters
+$c_t = 1/\delta_t$. Its classical theory makes the role of the step size precise.
+
+\begin{remark}[Proximal point method with variable steps] \label{rem:prox-theory}
+Let $\Pi^\star$ be the set of maximizers of $D$, assumed nonempty.
+\begin{enumerate}
+    \item The iterates converge to a point of $\Pi^\star$ for every sequence with
+          $\sum_t c_t = \infty$, in particular for every sequence with $\delta_t\le\delta_0$
+          \cite{rockafellar1976monotone, guler1991convergence}.
+    \item The values satisfy $D^\star - D(\pi_t)\le \operatorname{dist}(\pi_0,\Pi^\star)^2 /
+          (2\sum_{s<t}c_s)$ \cite{guler1991convergence}. With a fixed $\delta$ the gap decreases
+          like $\delta/t$; with $\delta_t = \delta_0\gamma^t$, $\gamma<1$, it decreases
+          geometrically.
+    \item Since $D$ is polyhedral, the method reaches $\Pi^\star$ after finitely many steps
+          for every sequence $c_t$ bounded away from zero
+          \cite{rockafellar1976monotone, ferris1991finite}.
+    \item For a linear program there is a $\bar\delta(\pihat)>0$ such that for every
+          $\delta\le\bar\delta(\pihat)$ the proximal point is the projection of $\pihat$ onto
+          $\Pi^\star$ \cite{mangasarian1979nonlinear, friedlander2007exact}: a small enough
+          $\delta$ reaches $\Pi^\star$ in one step.
+\end{enumerate}
+\end{remark}
+
+On a fixed restricted model, a small $\delta$ is therefore always better. With a fixed
+$\delta$, the center-only iterations walk towards $\Pi^\star$ in steps of length
+$\lVert r\rVert/\delta$, and once the working set has settled the step does not change from
+one iteration to the next (\cref{prop:center-only}); the number of such iterations grows
+with $\delta$. This is the long proximal phase observed in \cref{sec:results-phases}. A small
+$\delta$ throughout is no solution either: when new columns enter, the model changes, and a
+small $\delta$ lets the duals jump like the duals of the linear master problem, which is the
+instability that the regularization is meant to remove (\cref{rem:instability}). The
+parameter should be small while the model is fixed and large when it changes.
+
+\subsection{The geometric rule}
+
+\begin{definition}[Geometric stabilization parameter] \label{def:geometric-delta}
+Let $\delta_0>0$ be the base value and $0<\gamma<1\le\beta$, $0<\delta_{\min}\le\delta_0$.
+After every iteration of \cref{alg:rcg} in which the center moves, the parameter of the next
+master problem is
+\begin{equation} \label{eq:geometric-delta}
+\delta \;\gets\;
+\begin{cases}
+\max(\delta_{\min},\ \gamma\,\delta) & \text{after a center-only iteration},\\
+\min(\delta_0,\ \beta\,\delta) & \text{after an iteration that adds a column}.
+\end{cases}
+\end{equation}
+\end{definition}
+
+During a run of center-only iterations the parameter follows the geometric sequence
+$\delta_0\gamma^t$, which gives the rule its name; we use $\gamma = 1/2$ and $\beta = 2$. The
+choice $\beta = \infty$ resets $\delta$ to $\delta_0$ whenever a column is added. In the
+column phase, where almost every iteration adds a column, $\delta$ stays at $\delta_0$, so
+the new columns enter under full stabilization as in \cref{alg:rcg}. The rule needs no
+information beyond whether pricing added a column, so it works with first-improving pricing
+and does not require the Lagrangian bound.
+
+\begin{prop}[Properties of the geometric rule] \label{prop:geometric-delta}
+Let $\delta$ be changed by~\eqref{eq:geometric-delta}, or by any other rule, between two
+master problems.
+\begin{enumerate}
+    \item \label{prop:geometric-delta:i} The change leaves the iterate feasible, and for the
+          active-set method of the following
+          chapters it leaves the ordering, the nullspace basis and the factorization
+          unchanged. Only the dual estimate changes, to $\pihat + (b - \Abar y)/\delta$.
+    \item \label{prop:geometric-delta:ii} \Cref{thm:exact-termination} holds unchanged, and
+          \cref{prop:stop-accuracy} holds with the value of $\delta$ in the last master
+          problem.
+\end{enumerate}
+\end{prop}
+
+\begin{proof}
+(i) The constraints~\eqref{eq:eliminated-conv} and~\eqref{eq:eliminated-bounds} do not contain
+$\delta$. For the active-set method, $\Heff$ does not depend on $\delta$
+(\cref{rem:factor-independent}); $\delta$ enters only the right-hand side of the reduced
+system and the dual estimate~\eqref{eq:pi-of-y}, exactly like a new center
+(\cref{thm:hot-start}~\ref{thm:hot-start:ii}).
+(ii) Neither the statement nor the proof of \cref{thm:exact-termination} uses the value of
+$\delta$, and the proof of \cref{prop:stop-accuracy} uses only \cref{prop:residual} for the
+last master problem.
+\end{proof}
+
+Part~\ref{prop:geometric-delta:i} is what makes the rule attractive for this method: a general
+quadratic programming solver sees a new Hessian $\frac{1}{\delta}\Abar^\top\Abar$ after every
+change of $\delta$ and has to refactorize it, whereas for the active-set method a change of
+$\delta$ costs as little as a new center. Part~\ref{prop:geometric-delta:ii} shows a second
+benefit: if the run ends in the proximal phase, the final $\delta$ is much smaller than
+$\delta_0$, and so is the bound on the residual of the linking rows.
+
+\medskip
+
+The rule is a simple form of the \emph{proximity control} of bundle methods
+\cite{kiwiel1990proximity}, which adapts $1/\delta$ to the progress of the method. A
+center-only iteration brings no new information into the model, so a longer step is safe; a
+new column changes the model, and the step is shortened again. Stabilized column generation
+uses related schedules for the parameters of penalty, box and smoothing stabilization
+\cite{dumerle1999stabilized, benamor2009choice, pessoa2018automation}. Rules that compare the
+actual increase of $\theta$ with the increase predicted by $D$ come with convergence guarantees
+for the bundle method, but they need the Lagrangian bound in every iteration and hence full
+pricing.

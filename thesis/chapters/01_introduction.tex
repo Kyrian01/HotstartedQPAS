@@ -123,10 +123,17 @@ The main results of this work are the following.
           released column is exactly its Schur complement, which makes the detection of
           singular reduced Hessians exact (\cref{chap:dense}).
 
+    \item \textbf{An adaptive stabilization parameter.} The stabilization parameter is the
+          step size of a proximal point method on the restricted dual. Since it does not
+          enter the factorization, it can be changed in every iteration at no cost. A
+          geometric rule removes the long proximal phase of a fixed parameter and makes the
+          final solution exact up to rounding errors (\cref{chap:regularization,chap:results}).
+
     \item \textbf{A computational study} on generated crew scheduling instances with equality
           and inequality coverage rows: correctness against the full linear program, timing,
           the two phases of convergence, the fill of the sparse factor and its refactorization,
-          and a comparison of the sparse and the dense factorization (\cref{chap:results}).
+          a comparison of the sparse and the dense factorization, and the adaptive
+          stabilization parameter (\cref{chap:results}).
 \end{itemize}
 
 
@@ -136,7 +143,8 @@ The main results of this work are the following.
 constraints, its Dantzig--Wolfe reformulation, column generation and the surplus
 formulation. \Cref{chap:regularization} adds the proximal regularization, eliminates the
 auxiliary variable and derives the relation between the gradient of the quadratic master
-problem and the reduced costs. \Cref{chap:qpas} sets up the active-set method for the
+problem and the reduced costs; it ends with a rule that adapts the stabilization parameter
+during the run. \Cref{chap:qpas} sets up the active-set method for the
 regularized master problem and establishes the five-set reordering of the constraint matrix.
 \Cref{chap:nullspace} constructs the nullspace basis, solves the reduced KKT system with the
 effective reduced Hessian and recovers the Lagrange multipliers. \Cref{chap:updates}

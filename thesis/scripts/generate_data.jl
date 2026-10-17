@@ -8,6 +8,7 @@
 #           C constraint matrix D_W before / after the reordering (spy plot)
 #           D scaling to larger instances (S5, S6)
 #           E cost of the individual factor operations against the active size
+#           F adaptive stabilization: fixed and geometric δ, both pricing rules (I1–I4)
 #
 # Output: thesis/data/raw/*.csv. The plotting tables are derived from these files by
 # thesis/scripts/make_plot_data.jl, so plots can be changed without rerunning experiments.
@@ -22,7 +23,7 @@ BLAS.set_num_threads(1)              # all experiments single-threaded
 const SMOKE = get(ENV, "HQ_SMOKE", "")
 const RAW = isempty(SMOKE) ? joinpath(@__DIR__, "..", "data", "raw") : SMOKE
 mkpath(RAW)
-const SECTIONS = isempty(ARGS) ? ["A", "B", "C", "D", "E"] : uppercase.(ARGS)
+const SECTIONS = isempty(ARGS) ? ["A", "B", "C", "D", "E", "F"] : uppercase.(ARGS)
 
 #              name  |V|   p      tasks pilots
 const SIZES = isempty(SMOKE) ?
@@ -125,6 +126,9 @@ let w = instance("W", 20, 0.2, 12, 3, 0.5)
                                                           diagnostics_residual = true))
     end
     solve_column_generation(instance("W", 20, 0.2, 12, 3, 0.0), HighsEliminatedQPMaster())
+    solve_column_generation(w, QPASMaster(factorization = :dense);
+                            options = CGOptions(pricing = :all_blocks,
+                                                stabilization = StabilizationOptions(delta_update = :geometric)))
     solve_exact(w)
 end
 
@@ -345,6 +349,52 @@ if "E" in SECTIONS
         end
     end
     write(joinpath(RAW, "micro.csv"), join(rows, '\n') * '\n')
+end
+
+# ── F. adaptive stabilization: fixed and geometric δ, both pricing rules ────────────────
+# Dense factor. The reference optimum is taken from comparison.csv (section A) by
+# make_plot_data.jl, so the exact LP is not solved again.
+const ADAPT_VARIANTS = [
+    ("fixed_0.1",   StabilizationOptions(delta = 0.1)),
+    ("fixed_1",     StabilizationOptions(delta = 1.0)),
+    ("fixed_3",     StabilizationOptions(delta = 3.0)),
+    ("geometric_1", StabilizationOptions(delta = 1.0, delta_update = :geometric)),
+    ("geometric_3", StabilizationOptions(delta = 3.0, delta_update = :geometric)),
+]
+if "F" in SECTIONS
+    ADAPT = joinpath(RAW, "adaptive.csv")
+    isfile(ADAPT) && rm(ADAPT)
+    for (name, V, p, T, P) in SIZES, frac in FRACS
+        inst = instance(name, V, p, T, P, frac)
+        t = tag(name, frac)
+        for pricing in (:first_improving, :all_blocks), (label, stab) in ADAPT_VARIANTS
+            opts = CGOptions(pricing = pricing, stabilization = stab)
+            best = nothing
+            for _ in 1:2
+                GC.gc()
+                r = solve_column_generation(inst, QPASMaster(factorization = :dense); options = opts)
+                (best === nothing || r.stats.total_time < best.stats.total_time) && (best = r)
+            end
+            st = best.stats
+            append_row(ADAPT,
+                       "instance,frac,pricing,variant,status,iterations,column_iterations," *
+                       "columns,total_s,master_s,pricing_s,inner,objective,master_objective," *
+                       "bound,infeasibility,final_delta",
+                       [name, frac, pricing, label, best.status, st.iterations,
+                        count(>(0), st.columns_added), length(best.weights),
+                        @sprintf("%.4f", st.total_time), @sprintf("%.4f", sum(st.master_time)),
+                        @sprintf("%.4f", sum(st.pricing_time)), sum(st.inner_iterations),
+                        @sprintf("%.10f", best.objective), @sprintf("%.10f", st.master_objective[end]),
+                        @sprintf("%.10f", best.lower_bound), @sprintf("%.3e", best.infeasibility),
+                        @sprintf("%.3e", st.delta[end])])
+            # traces for the figure: I2 (equality variant), the fixed default and the rule
+            t == "I2_0" && label in ("fixed_1", "geometric_1", "geometric_3") &&
+                write_trace_csv(joinpath(RAW, "trace_$(t)_adapt_$(pricing)_$(label).csv"), st)
+            println("$t $pricing $label: $(best.status) $(st.iterations) it ",
+                    "$(round(st.total_time; digits = 3)) s")
+            flush(stdout)
+        end
+    end
 end
 
 println("done")

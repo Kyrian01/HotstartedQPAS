@@ -23,8 +23,9 @@ instances with almost a thousand linking rows.
 
 The last sections look inside the method. We follow the sizes of the nullspace sets over a run
 with inequality rows, measure the \textbf{contents of the sparse factorization} and the value
-of periodic refactorization, and finally compare the \textbf{two factorizations} operation by
-operation, in memory and in accuracy.
+of periodic refactorization, and compare the \textbf{two factorizations} operation by
+operation, in memory and in accuracy. The last section replaces the fixed stabilization
+parameter by the \textbf{adaptive} rule of \cref{sec:adaptive}.
 
 \vspace*{\fill}
 
@@ -149,7 +150,8 @@ its rank-one modifications are plain loops over the columns of the stored array.
 
 All column generation runs use the same settings: the initial columns are the cheapest path
 of every pilot, pricing visits the pilots in random order and adds the first improving
-column, the proximal point rule moves the center after every iteration, and $\delta = 1$,
+column, the proximal point rule moves the center after every iteration, and, except in
+\cref{sec:results-adaptive}, $\delta = 1$,
 $\varepsilon_{\mathrm{c}} = 10^{-6}$, $\varepsilon_{\mathrm{rc}} = 10^{-6}$. The active-set
 method uses the column capacity $\nmax = 20\,000$ and the pivot tolerance
 $\varepsilon_{\mathrm{piv}} = 10^{-10}$ with both factorizations. The sparse factorization is
@@ -901,6 +903,167 @@ stable in practice, as \cref{rem:c1-stability} suggests.
 \end{figure}
 
 
+\section{An Adaptive Stabilization Parameter}
+\label{sec:results-adaptive}
+
+All runs so far used the fixed parameter $\delta = 1$. This section replaces it by the
+geometric rule of \cref{def:geometric-delta} with $\gamma = 1/2$, $\beta = 2$ and
+$\delta_{\min} = 10^{-6}$, for the base values $\delta_0 = 1$ and $\delta_0 = 3$. As controls,
+the fixed parameters $\delta = 0.1$ and $\delta = 3$ are run as well. Every variant is run
+with two pricing rules: the first-improving pricing of \cref{sec:setup}, and
+\textbf{all-blocks pricing}, which prices every pilot in every iteration and adds one column
+for each pilot with negative reduced cost. All runs use the dense factorization; times are
+the faster of two runs.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrr}
+\toprule
+ & & \multicolumn{3}{c}{first-improving pricing} & \multicolumn{3}{c}{all-blocks pricing} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+instance & ineq. & fixed $\delta = 1$ & geom.\ $\delta_0 = 1$ & geom.\ $\delta_0 = 3$
+         & fixed $\delta = 1$ & geom.\ $\delta_0 = 1$ & geom.\ $\delta_0 = 3$ \\
+\midrule
+\tabinput{data/tab_adaptive_iter.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Column generation iterations with a fixed and with a geometric stabilization
+parameter (in parentheses: iterations that add a column).}
+\label{tab:adaptive-iter}
+\end{table}
+
+\paragraph{The proximal phase disappears.} \Cref{tab:adaptive-iter} shows the effect on the
+number of iterations. With first-improving pricing and $\delta_0 = 1$, the column-adding
+iterations are almost the same as with the fixed parameter, but the center-only iterations
+drop from 10\,717 to 233 on I2 and from 7\,209 to 50 on I3. With all-blocks pricing the
+reduction is similar. \Cref{fig:adaptive} shows why on I2. With the fixed parameter, the
+error of the master objective decreases in a long tail of small steps; with the geometric
+rule, $\delta$ falls by several orders of magnitude in the runs of center-only iterations,
+the duals reach the restricted optimum in a few steps, and the parameter grows back towards
+$\delta_0$ when new columns arrive.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[group style={group size=2 by 1, horizontal sep=1.6cm},
+    width=0.5\textwidth, height=0.42\textwidth, ymode=log,
+    xlabel={CG iteration}, tick label style={font=\scriptsize}, label style={font=\small},
+    title style={font=\small}, legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east},
+    every axis plot/.append style={line width=0.7pt}]
+\nextgroupplot[title={relative error of the master objective}, ymin=1e-14, ymax=1, xmax=4000]
+    \addplot[cred] table[x=it, y=gap, col sep=comma] {data/adapt_I2_0_first_improving_fixed_1.csv};
+    \addplot[cblue] table[x=it, y=gap, col sep=comma] {data/adapt_I2_0_first_improving_geometric_1.csv};
+    \addplot[cgreen, densely dashed] table[x=it, y=gap, col sep=comma] {data/adapt_I2_0_first_improving_geometric_3.csv};
+    \legend{fixed $\delta = 1$, geometric $\delta_0 = 1$, geometric $\delta_0 = 3$}
+\nextgroupplot[title={stabilization parameter $\delta$}, ymin=1e-5, ymax=10]
+    \addplot[cblue, const plot] table[x=it, y=delta, col sep=comma] {data/adapt_I2_0_first_improving_geometric_1.csv};
+    \addplot[cgreen, const plot, densely dashed] table[x=it, y=delta, col sep=comma] {data/adapt_I2_0_first_improving_geometric_3.csv};
+    \legend{geometric $\delta_0 = 1$, geometric $\delta_0 = 3$}
+\end{groupplot}
+\end{tikzpicture}
+\caption{Instance I2 (equality variant, first-improving pricing). Left: relative distance of
+the master objective to $z^\star$; the run with the fixed parameter continues until
+iteration 11\,974. Right: the parameter $\delta$ of every master problem under the geometric
+rule.}
+\label{fig:adaptive}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrrrrrr}
+\toprule
+ & & \multicolumn{5}{c}{first-improving pricing} & \multicolumn{5}{c}{all-blocks pricing} \\
+\cmidrule(lr){3-7}\cmidrule(lr){8-12}
+ & & \multicolumn{3}{c}{fixed $\delta$} & \multicolumn{2}{c}{geometric $\delta_0$}
+   & \multicolumn{3}{c}{fixed $\delta$} & \multicolumn{2}{c}{geometric $\delta_0$} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-7}\cmidrule(lr){8-10}\cmidrule(lr){11-12}
+instance & ineq. & $0.1$ & $1$ & $3$ & $1$ & $3$ & $0.1$ & $1$ & $3$ & $1$ & $3$ \\
+\midrule
+\tabinput{data/tab_adaptive_time.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Total time of the column generation run in seconds. The fastest variant of each
+pricing rule is in bold.}
+\label{tab:adaptive-time}
+\end{table}
+
+\paragraph{Time.} \Cref{tab:adaptive-time} gives the total times. With the best base value,
+the geometric rule is faster than the fixed parameter $\delta = 1$ on every instance. On
+I2--I4 the factor is 1.3 (I2, inequality variant) to 1.9 (I3) with first-improving pricing
+and $\delta_0 = 3$, and 1.2 (I4) to 2.6 (I2) with all-blocks pricing and $\delta_0 = 1$.
+The speedup is smaller than the reduction of the iteration count, because the center-only
+iterations were already cheap (\cref{tab:phases}): what remains is the column phase, whose
+iterations cost tens of active-set iterations each. With the geometric rule, all-blocks
+pricing is faster than first-improving pricing on every instance, and this combination is the
+fastest configuration overall: I4 takes 1.0\,s, against 6.9\,s with the setting of the previous
+sections and 24\,s for the direct solution of the full linear program.
+
+\paragraph{Why no fixed parameter can do this.} The controls show that $\delta$ acts in
+opposite directions in the two phases. In the column phase, more stabilization means fewer
+column-adding iterations: with first-improving pricing on I4 they decrease from 3\,631
+($\delta = 0.1$) to 2\,417 ($\delta = 1$) and 1\,903 ($\delta = 3$), and $\delta = 0.1$
+is twice as slow as $\delta = 1$. In the proximal phase, more stabilization means a longer
+tail: with $\delta = 3$, I2 needs 26\,789 iterations. A fixed parameter has to compromise
+between the two, and the best compromise differs from instance to instance (from $0.1$ to
+$3$ in \cref{tab:adaptive-time}). The geometric rule removes the compromise: $\delta_0$ is
+chosen for the column phase, and the tail that a large $\delta_0$ would cause is removed by
+the halvings. With the best base value of the pricing rule, it is at least as fast as the
+best fixed parameter on every instance except I1, where all variants take a few
+milliseconds.
+
+\paragraph{The base value depends on the pricing rule.} With first-improving pricing,
+$\delta_0 = 3$ is better than $\delta_0 = 1$ on all instances except the equality variant of
+I1; with all-blocks pricing it is the other way around, except on the inequality variant of
+I4. A plausible
+explanation is the number of columns per iteration. With first-improving pricing a single
+column enters, and a strong stabilization makes each of these columns count. With all-blocks
+pricing up to one column per pilot enters, the model improves much faster per iteration, and
+less stabilization is needed.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcrrrrrrrr}
+\toprule
+ & & \multicolumn{4}{c}{first-improving pricing} & \multicolumn{4}{c}{all-blocks pricing} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-10}
+ & & \multicolumn{2}{c}{fixed $\delta = 1$} & \multicolumn{2}{c}{geom.\ $\delta_0 = 3$}
+   & \multicolumn{2}{c}{fixed $\delta = 1$} & \multicolumn{2}{c}{geom.\ $\delta_0 = 1$} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}
+instance & ineq. & cost error & infeas. & cost error & infeas. & cost error & infeas.
+         & cost error & infeas. \\
+\midrule
+\tabinput{data/tab_adaptive_acc.tex}
+\bottomrule
+\end{tabular}
+}
+\caption{Accuracy of the final solution: relative cost error $|c^\top\lambda - z^\star|/|z^\star|$
+and infeasibility of the linking rows.}
+\label{tab:adaptive-acc}
+\end{table}
+
+\paragraph{Accuracy.} Every run ends optimal. \Cref{tab:adaptive-acc} shows that the
+geometric rule also makes the final solution more accurate: the cost error drops from up to
+$2.6\cdot10^{-5}$ to at most $5.3\cdot10^{-13}$, and the infeasibility from up to
+$6.7\cdot10^{-5}$ to the level of rounding errors. This is
+\cref{prop:geometric-delta}~\ref{prop:geometric-delta:ii}: the stopping test bounds the
+residual by $\delta\,\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$ with the
+parameter of the last master problem, and in a run that ends in the proximal phase this
+parameter is several orders of magnitude smaller than $\delta_0$.
+
 \section{Discussion}
 \label{sec:discussion}
 
@@ -927,14 +1090,18 @@ The experiments support the main claims of this work.
           of a few hundred updates works well. A dense factorization in activation order
           needs none, is two to four times faster with a speedup that grows with $m$, needs an
           order of magnitude less memory, and is just as accurate.
+    \item \textbf{Adaptive stabilization.} Halving $\delta$ in every center-only iteration and
+          doubling it in every iteration that adds a column removes almost all center-only
+          iterations, at no cost to the linear algebra. With the right base value it is 1.2 to
+          2.6 times faster than a fixed $\delta$ on I2--I4, and the final solution is exact up
+          to rounding errors.
 \end{itemize}
 
 The experiments also show the limits of the approach. Since $\Heff$ is dense, the cost of the
-method grows with the cube of the number of linking rows, and the \textbf{proximal phase} can
-be long, since the duals approach the restricted optimum in many small steps
-(\cref{prop:center-only}). With the dense factorization the factor is no longer the dominant
-cost: the multiplier test, which touches every column of the working set, now costs as much as
-the direction computation. Natural next steps are therefore an incremental multiplier test that
-avoids rescanning all columns, and an adaptive stabilization parameter in the proximal phase.
-A change of $\delta$ does not affect the factorization (\cref{rem:factor-independent}) and is
-therefore free for this method.
+method grows with the cube of the number of linking rows. With a fixed $\delta$ the
+\textbf{proximal phase} can be long, since the duals approach the restricted optimum in many
+small steps (\cref{prop:center-only}); the adaptive parameter removes this tail, and what
+remains is the column phase, whose length is set by the base value $\delta_0$. With the dense
+factorization the factor is no longer the dominant cost: the multiplier test, which touches
+every column of the working set, now costs as much as the direction computation. A natural
+next step is therefore an incremental multiplier test that avoids rescanning all columns.
