@@ -133,20 +133,20 @@ $z_j = e_j - e_{S_k}$ refer to the representative $S_k$.
 \begin{lemma}[Ordering after an expansion] \label{lem:expand-ordering}
 Let $q$ be the blocking index. The extended ordering is updated as follows.
 \begin{enumerate}
-    \item $q\in\Nx$: $\;\Nx\gets\Nx\setminus\{q\}$, $\;\Wx\gets\Wx\cup\{q\}$.
-    \item $q = S_k\in\Sset$: choose a \textbf{replacement} $S_k'\in\mathcal{N}_x^{(k)}$, the new
+    \item \label{lem:expand-ordering:i} $q\in\Nx$: $\;\Nx\gets\Nx\setminus\{q\}$, $\;\Wx\gets\Wx\cup\{q\}$.
+    \item \label{lem:expand-ordering:ii} $q = S_k\in\Sset$: choose a \textbf{replacement} $S_k'\in\mathcal{N}_x^{(k)}$, the new
           representative of block $k$; then $\Nx\gets\Nx\setminus\{S_k'\}$,
           $\;\Wx\gets\Wx\cup\{q\}$, and $S_k'$ takes the place of $q$ in the list $\Sset$.
-    \item $q$ is the free surplus $i\in\Ns$: $\;\Ns\gets\Ns\setminus\{i\}$, $\;\Ws\gets\Ws\cup\{i\}$.
+    \item \label{lem:expand-ordering:iii} $q$ is the free surplus $i\in\Ns$: $\;\Ns\gets\Ns\setminus\{i\}$, $\;\Ws\gets\Ws\cup\{i\}$.
 \end{enumerate}
 \end{lemma}
 
-In case~(ii) the representative itself reaches zero, and another free column of its block
+In case~\ref{lem:expand-ordering:ii} the representative itself reaches zero, and another free column of its block
 has to take its place in the list $\Sset$. The next lemma shows that one is always
 available.
 
 \begin{lemma}[Existence of a replacement] \label{lem:replacement}
-In case~(ii), the set $\mathcal{N}_x^{(k)}$ is not empty.
+In case~\ref{lem:expand-ordering:ii}, the set $\mathcal{N}_x^{(k)}$ is not empty.
 \end{lemma}
 
 \begin{proof}
@@ -156,7 +156,8 @@ decreases, $p_{S_k}<0$, so the sum is not empty.
 \end{proof}
 
 The same argument applies to the zero-curvature directions of \cref{chap:singular}, whose
-representative components are $-\sum_{j\in\mathcal{N}_x^{(k)}}\beta_j$, except in the block of a
+representative components are $\mp\sum_{j\in\mathcal{N}_x^{(k)}}\beta_j$ (upper sign for a released
+surplus, lower sign for a released column), except in the block of a
 released column $r$, where $d_{S_k}$ contains the additional term $-1$; that case is handled by
 \cref{rem:rep-blocks}.
 
@@ -167,21 +168,21 @@ next step.
 \begin{theorem}[Update of the nullspace basis] \label{thm:Z-update}
 After an expansion, the nullspace basis changes as follows.
 \begin{enumerate}
-    \item $q\in\Nx$: the vector $z_q$ is removed.
-    \item $q = S_k$ with replacement $S_k'$: the vector $z_{S_k'}$ is removed, and for every
+    \item \label{thm:Z-update:i} $q\in\Nx$: the vector $z_q$ is removed.
+    \item \label{thm:Z-update:ii} $q = S_k$ with replacement $S_k'$: the vector $z_{S_k'}$ is removed, and for every
           $j\in\mathcal{N}_x^{(k)}\setminus\{S_k'\}$ the vector $z_j$ is replaced by
           \[
           z_j' = e_j - e_{S_k'} = z_j - z_{S_k'} .
           \]
           All other vectors are unchanged.
-    \item $q$ the surplus $i$: the vector $e_{n+i}$ is removed.
+    \item \label{thm:Z-update:iii} $q$ the surplus $i$: the vector $e_{n+i}$ is removed.
 \end{enumerate}
 \end{theorem}
 
 \begin{proof}
 By \cref{cor:z-explicit} there is one basis vector per index of $\Nx$ and of $\Ns$, given by
-$z_j = e_j - e_{\rep(j)}$ and $z_{n+i} = e_{n+i}$. In cases~(i) and~(iii) one index leaves $\Nx$ or
-$\Ns$, and the representatives do not change, so only its vector disappears. In case~(ii),
+$z_j = e_j - e_{\rep(j)}$ and $z_{n+i} = e_{n+i}$. In cases~\ref{thm:Z-update:i} and~\ref{thm:Z-update:iii} one index leaves $\Nx$ or
+$\Ns$, and the representatives do not change, so only its vector disappears. In case~\ref{thm:Z-update:ii},
 $S_k'$ leaves $\Nx$ and the representative of block $k$ changes from $q$ to $S_k'$. For
 $j\in\mathcal{N}_x^{(k)}\setminus\{S_k'\}$ the new vector is
 $z_j' = e_j - e_{S_k'} = (e_j - e_q) - (e_{S_k'} - e_q) = z_j - z_{S_k'}$. The vectors of other blocks refer
@@ -191,15 +192,15 @@ to other representatives and do not change.
 \begin{theorem}[Update of the effective reduced Hessian, expansion] \label{thm:H-expand}
 After an expansion, $\Heff$ changes as follows.
 \begin{enumerate}
-    \item $q\in\Nx$: row and column $q$ are removed.
-    \item $q = S_k$ with replacement $S_k'$: row and column $S_k'$ are removed, and for
+    \item \label{thm:H-expand:i} $q\in\Nx$: row and column $q$ are removed.
+    \item \label{thm:H-expand:ii} $q = S_k$ with replacement $S_k'$: row and column $S_k'$ are removed, and for
           $j,j'\in\mathcal{N}_x^{(k)}\setminus\{S_k'\}$ and $\ell\in\Nx\setminus\mathcal{N}_x^{(k)}$
           \[
           (\Heff')_{\ell j} = (\Heff)_{\ell j} - (\Heff)_{\ell S_k'},\qquad
           (\Heff')_{j'j} = (\Heff)_{j'j} - (\Heff)_{j'S_k'} - (\Heff)_{S_k'j} + (\Heff)_{S_k'S_k'};
           \]
           all other entries are unchanged.
-    \item $q$ the surplus of inequality row $i$: row $i$ of $A_I$ joins $\Aeff$, and
+    \item \label{thm:H-expand:iii} $q$ the surplus of inequality row $i$: row $i$ of $A_I$ joins $\Aeff$, and
           \begin{equation} \label{eq:rank-one-up}
           \Heff' = \Heff + v_iv_i^\top,\qquad
           v_i = Z_x^\top (A_I)_{i,:}^\top,\qquad (v_i)_j = (A_I)_{ij} - (A_I)_{i,\rep(j)}\;\;(j\in\Nx).
@@ -230,9 +231,9 @@ Entry $j$ of $v_i = Z_x^\top(A_I)_{i,:}^\top$ is the product of column $j$ of $Z
 $e_j - e_{\rep(j)}$, with row $i$ of $A_I$, i.e.\ $(v_i)_j = (A_I)_{ij} - (A_I)_{i,\rep(j)}$.
 \end{proof}
 
-The vector $v_i$ is row $i$ of $B_I = A_IZ_x$. Its entry $(v_i)_j$ is nonzero only if exactly
-one of the columns $j$ and $\rep(j)$ has a nonzero coefficient in row $i$; in crew scheduling,
-if exactly one of the two schedules covers flight $i$.
+The vector $v_i$ is row $i$ of $B_I = A_IZ_x$. Its entry $(v_i)_j = (A_I)_{ij} - (A_I)_{i,\rep(j)}$ is nonzero only if
+the columns $j$ and $\rep(j)$ have different coefficients in row $i$; for the 0/1 data of crew
+scheduling, if exactly one of the two schedules covers flight $i$.
 
 \begin{prop} \label{prop:expand-pd}
 If $\Heff$ is positive definite before an expansion, it is positive definite after it.
@@ -263,13 +264,13 @@ of cost, so they can be compared directly. Releasing an index adds a basis vecto
 \begin{theorem}[Update of the effective reduced Hessian, reduction] \label{thm:H-reduce}
 The two kinds of reduction change $\Heff$ as follows.
 \begin{enumerate}
-    \item[(iv)] Column $r\in\Wx$ is released ($\Wx\gets\Wx\setminus\{r\}$, $\Nx\gets\Nx\cup\{r\}$).
+    \item[(iv)] \partlabel{(iv)}{thm:H-reduce:iv}Column $r\in\Wx$ is released ($\Wx\gets\Wx\setminus\{r\}$, $\Nx\gets\Nx\cup\{r\}$).
           The basis gains $z_r = e_r - e_{\rep(r)}$, and
           \begin{equation} \label{eq:bordered}
           \Heff' = \begin{bmatrix}\Heff & \gamma_r\\ \gamma_r^\top & \gamma_{rr}\end{bmatrix},\qquad
           \gamma_r = (\Aeff Z_x)^\top\Aeff z_r,\qquad \gamma_{rr} = \lVert\Aeff z_r\rVert^2 .
           \end{equation}
-    \item[(v)] The surplus of inequality row $i$ is released ($\Ws\gets\Ws\setminus\{i\}$,
+    \item[(v)] \partlabel{(v)}{thm:H-reduce:v}The surplus of inequality row $i$ is released ($\Ws\gets\Ws\setminus\{i\}$,
           $\Ns\gets\Ns\cup\{i\}$). The basis gains $e_{n+i}$, row $i$ leaves $\Aeff$, and
           \begin{equation} \label{eq:rank-one-down}
           \Heff' = \Heff - v_iv_i^\top
@@ -286,13 +287,13 @@ $\Aeff Z_x' = [\,\Aeff Z_x\;\;\Aeff z_r\,]$ and
 = \begin{bmatrix}\Heff & (\Aeff Z_x)^\top\Aeff z_r\\ (\Aeff z_r)^\top\Aeff Z_x & \lVert\Aeff z_r\rVert^2\end{bmatrix}.
 \]
 (v) $Z_x$ does not change, and $\Aeff$ loses the row $(A_I)_{i,:}$. This is the reverse of
-case~(iii) of \cref{thm:H-expand}, so $\Heff = \Heff' + v_iv_i^\top$.
+case~\ref{thm:H-expand:iii} of \cref{thm:H-expand}, so $\Heff = \Heff' + v_iv_i^\top$.
 \end{proof}
 
 \begin{lemma}[Descent after a reduction] \label{lem:descent}
 Suppose the reduced Hessian is positive definite after the reduction. Then the next search
-direction moves the released variable away from its bound: $p_r>0$ in case~(iv), and
-$(p_s)_i>0$ in case~(v).
+direction moves the released variable away from its bound: $p_r>0$ in case~\ref{thm:H-reduce:iv}, and
+$(p_s)_i>0$ in case~\ref{thm:H-reduce:v}.
 \end{lemma}
 
 \begin{proof}
@@ -312,11 +313,11 @@ component is the change of the released variable ($p_r = \eta_r$, $(p_s)_i = (\e
 \end{proof}
 
 Unlike an expansion, a reduction can make the reduced Hessian singular: the new vector $\Aeff z_r$ in
-case~(iv) can lie in the span of the old ones, and the downdate in case~(v) can remove the
+case~\ref{thm:H-reduce:iv} can lie in the span of the old ones, and the downdate in case~\ref{thm:H-reduce:v} can remove the
 last direction of curvature. This is the subject of \cref{chap:singular}.
 
 
-\section{Updating the $LDL^\top$ Factorization}
+\section{Updating the \texorpdfstring{$LDL^\top$}{LDL\textasciicircum T} Factorization}
 \label{sec:ldl-updates}
 
 The updates of \cref{sec:expanding,sec:reducing} are applied to the factorization
@@ -332,11 +333,11 @@ dense factor of $\Heff$ alone:
 \toprule
 change of the working set & change of $\Heff^{\mathrm{emb}}$ & CHOLMOD routine \\
 \midrule
-(i) column leaves $\Nx$ & row/column $q$ becomes $e_q$ & \code{rowdel} \\
-(ii) representative swap & rows/columns of $\mathcal{N}_x^{(k)}$ rewritten & \code{rowdel} + \code{rowadd} \\
-(iii) surplus becomes active & $+\,v_iv_i^\top$ & \code{updown} (update) \\
-(iv) column enters $\Nx$ & row/column $r$ set to $[\gamma_r; \gamma_{rr}]$ & \code{rowadd} \\
-(v) surplus becomes free & $-\,v_iv_i^\top$ & \code{updown} (downdate) \\
+\ref{thm:H-expand:i} column leaves $\Nx$ & row/column $q$ becomes $e_q$ & \code{rowdel} \\
+\ref{thm:H-expand:ii} representative swap & rows/columns of $\mathcal{N}_x^{(k)}$ rewritten & \code{rowdel} + \code{rowadd} \\
+\ref{thm:H-expand:iii} surplus becomes active & $+\,v_iv_i^\top$ & \code{updown} (update) \\
+\ref{thm:H-reduce:iv} column enters $\Nx$ & row/column $r$ set to $[\gamma_r; \gamma_{rr}]$ & \code{rowadd} \\
+\ref{thm:H-reduce:v} surplus becomes free & $-\,v_iv_i^\top$ & \code{updown} (downdate) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -402,13 +403,15 @@ block, where $D_{22}$ and $L_{32}$ are the current pivot and column of index $j$
 
 \subsection{Rank-one modifications}
 
-The surplus cases (iii) and (v) modify the whole matrix by $\pm v_iv_i^\top$. The factorization
+The surplus cases~\ref{thm:H-expand:iii} and~\ref{thm:H-reduce:v} modify the whole matrix by $\pm v_iv_i^\top$. The factorization
 $LDL^\top\pm v_iv_i^\top = L'D'L'^\top$ is computed by the classical rank-one update and downdate
 algorithms \cite{gill1974methods, davis1999modifying}, which process the columns of $L$ along
 the path in the elimination tree that starts at the first nonzero of $v_i$. Their cost is
 proportional to the number of entries of $L$ in these columns. An update keeps the matrix
 positive definite (\cref{prop:expand-pd}). A downdate can make it singular; by the matrix
-determinant lemma~\cite{golub2013matrix},
+determinant lemma (write $\Heff - v_iv_i^\top = \Heff(I - \Heff^{-1}v_iv_i^\top)$; the matrix
+$I - ab^\top$ has the eigenvalue $1 - b^\top a$ for the eigenvector $a$ and the eigenvalue $1$ on
+the orthogonal complement of $b$),
 \[
 \det\bigl(\Heff - v_iv_i^\top\bigr) = \det\Heff\cdot\bigl(1 - v_i^\top\Heff^{-1}v_i\bigr),
 \]
@@ -425,16 +428,19 @@ of $\nmax$, which is what makes a large capacity $\nmax$ affordable.
 
 \subsection{Assembly of a new row}
 
-A row addition in case~(iv) of \cref{thm:H-reduce} needs the vector $\gamma_r$ of~\eqref{eq:bordered}.
+A row addition in case~\ref{thm:H-reduce:iv} of \cref{thm:H-reduce} needs the vector $\gamma_r$ of~\eqref{eq:bordered}.
 By~\eqref{eq:implicit}, $(\gamma_r)_j = u_j^\top\Meff u_r$ with $u_r = a_r - a_{\rep(r)}$. In an
 implementation, $\Meff u_r$ is scattered into a dense $m$-vector once, with the entries of the
 rows of free surpluses set to zero. Then $(\gamma_r)_j = a_j^\top(\Meff u_r) - a_{\rep(j)}^\top(\Meff u_r)$
 is computed for every $j\in\Nx$, where the products with the $K$ representatives are computed once and reused. The
 cost is $O\bigl((|\Nx| + K)\,\bar\ell\bigr)$, independent of $n$. A representative swap
-(case~(ii) of \cref{lem:expand-ordering}) first deletes the row of $S_k'$ and then rewrites the
-rows of $\mathcal{N}_x^{(k)}$ one by one, each by a row deletion followed by a row addition of the
-row assembled with the new vectors $z_j'$. Every intermediate matrix is then the Gram matrix of
-a mixture of old and new vectors, which spans the same space, so it stays positive definite.
+(case~\ref{lem:expand-ordering:ii} of \cref{lem:expand-ordering}) first deletes all rows of $\mathcal{N}_x^{(k)}$, including the
+row of $S_k'$, and then adds the rows of $\mathcal{N}_x^{(k)}\setminus\{S_k'\}$ again, assembled with
+the new vectors $z_j'$. Every intermediate matrix is then the Gram matrix of a subset of the old
+vectors, or of such a subset together with some of the new vectors $\Aeff z_j'$. Together with
+$\Aeff z_{S_k'}$, the old and the new vectors each form a basis of the same space
+(\cref{prop:expand-pd}), so every such set is linearly independent, and the matrix stays
+positive definite.
 This costs the same as applying the formulas of \cref{thm:H-expand}, and it needs no stored copy
 of $\Heff$.
 
@@ -510,12 +516,12 @@ factorization.
 Let $y = [x;s]$ be the final iterate of a master problem, with its extended ordering and the
 factorization of $\Heff$.
 \begin{enumerate}
-    \item \textbf{New column.} If a column $n+1\le\nmax$ is added with weight $x_{n+1} = 0$
+    \item \label{thm:hot-start:i} \textbf{New column.} If a column $n+1\le\nmax$ is added with weight $x_{n+1} = 0$
           and placed in the working set $\Wx$, then $y$ remains feasible, $\pi(y)$ is
           unchanged, and the nullspace basis, $\Aeff$, $\Heff$ and its factorization are
           unchanged. The multiplier of the new column is its reduced cost
           $c_{n+1} - a_{n+1}^\top\pi - \mu_{\psi(n+1)}$.
-    \item \textbf{New center.} If the center changes from $\pihat$ to $\pihat + \Delta$,
+    \item \label{thm:hot-start:ii} \textbf{New center.} If the center changes from $\pihat$ to $\pihat + \Delta$,
           then $y$ remains feasible, the ordering and the factorization are unchanged, and the
           dual estimate becomes $\pi(y) + \Delta$.
 \end{enumerate}
@@ -537,7 +543,7 @@ $\pi(y) = (\pihat + \Delta) + \frac{1}{\delta}(b - \Abar y)$ is the old dual est
 If only a column is added, the previous optimum remains a subspace minimizer, and its only
 negative multiplier is that of the new column: pricing found its reduced cost below
 $-\varepsilon_{\mathrm{rc}}$ (with $\pi^+ = \pi$ up to the master tolerance). The next master
-problem then starts by releasing the new column (case~(iv) of \cref{thm:H-reduce}). Under the
+problem then starts by releasing the new column (case~\ref{thm:H-reduce:iv} of \cref{thm:H-reduce}). Under the
 proximal point rule the center moves at the same time; the gradient changes, the iterate is in
 general no longer a subspace minimizer, and the next master problem starts with a direction
 computation on the inherited factorization. The surpluses are never added or
@@ -556,8 +562,8 @@ $w = (b - \Abar y)/\delta$ (the auxiliary variable of~\eqref{eq:explicit}) and d
 $\pi = \pihat + w$, and let the center move to $\pihat' = \pi$. Suppose that the next
 master problem takes one full step and keeps the working set. Then
 \begin{enumerate}
-    \item the new scaled residual is $w' = (I-\Pi)\,w$ and the new dual is $\pi' = \pi + (I-\Pi)\,w$;
-    \item if the working set stays the same in the following center-only iterations, the
+    \item \label{prop:center-only:i} the new scaled residual is $w' = (I-\Pi)\,w$ and the new dual is $\pi' = \pi + (I-\Pi)\,w$;
+    \item \label{prop:center-only:ii} if the working set stays the same in the following center-only iterations, the
           primal iterate no longer changes, and every further iteration moves the dual by the
           fixed vector $w'$:
           \[
@@ -587,7 +593,7 @@ and by \cref{prop:residual} the new scaled residual is $w' = \pi' - \pihat' = (I
 
 (ii) The vector $w' = (I-\Pi)w$ is orthogonal to the range of $\Abar Z$, i.e.\
 $(\Abar Z)^\top w' = 0$. In the next center-only iteration the center moves by
-$\Delta' = w'$, and the same computation as in~(i) gives the reduced gradient
+$\Delta' = w'$, and the same computation as in~\ref{prop:center-only:i} gives the reduced gradient
 $-(\Abar Z)^\top\Delta' = 0$: the direction is zero and $y$ does not move. The dual becomes
 $\pi' + \Delta'$; since the new center is $\pi'$, the scaled residual is
 $(\pi'+\Delta') - \pi' = w'$ again, and the argument repeats. The multipliers follow from \cref{cor:multipliers-minimizer}. A shift of $\pi$ by
@@ -634,11 +640,12 @@ extended ordering and the factorization, is kept from one call to the next.
         \EndIf
     \EndIf
     \State Refactorize if $\tau$ updates have passed since the last refactorization
-           \Comment{sparse factor only}
+           \Comment{sparse factor only}, or if an expansion violated the pivot invariant
 \Until{returned}
 \end{algobox}
 
 The algorithm accesses the factorization only through the operations of
 \cref{sec:ldl-updates}: row additions, row deletions, rank-one modifications and solves. It is
 therefore independent of how the factor is stored. With the dense factor of
-\cref{chap:dense}, the periodic refactorization in the last line is dropped.
+\cref{chap:dense}, the periodic refactorization in the last line is dropped, and only the
+pivot test remains (\cref{cor:expand-pivots} and the remark after it).

@@ -4,7 +4,7 @@
 \vspace*{\fill}
 
 The nullspace method requires the reduced Hessian to be positive definite
-(\cref{ass:nullspace}~(ii)). The Hessian of the regularized master problem is only positive
+(\cref{ass:nullspace}~\ref{ass:nullspace:ii}). The Hessian of the regularized master problem is only positive
 semidefinite, and its rank is bounded by the number of linking rows, while the number of
 columns keeps growing. It is therefore unavoidable that a reduction of the working set
 occasionally produces a nullspace direction along which the objective has no curvature.
@@ -37,10 +37,10 @@ of \cref{thm:H-reduce}.
 \begin{prop}[Singular reductions] \label{prop:singular-cases}
 Let $\Heff$ be positive definite before the reduction.
 \begin{enumerate}
-    \item After releasing column $r$ (case~(iv) of \cref{thm:H-reduce}), the matrix $\Heff'$ of~\eqref{eq:bordered} is
+    \item \label{prop:singular-cases:i} After releasing column $r$ (case~\ref{thm:H-reduce:iv} of \cref{thm:H-reduce}), the matrix $\Heff'$ of~\eqref{eq:bordered} is
           singular if and only if $\Aeff z_r\in\spn\{\Aeff z_j : j\in\Nx\}$, which is the case if
           and only if the Schur complement $\sigma_r = \gamma_{rr} - \gamma_r^\top\Heff^{-1}\gamma_r$ vanishes.
-    \item After releasing the surplus of row $i$ (case~(v) of \cref{thm:H-reduce}), the matrix $\Heff' = \Heff - v_iv_i^\top$
+    \item \label{prop:singular-cases:ii} After releasing the surplus of row $i$ (case~\ref{thm:H-reduce:v} of \cref{thm:H-reduce}), the matrix $\Heff' = \Heff - v_iv_i^\top$
           is singular if and only if $\omega_i = 1 - v_i^\top\Heff^{-1}v_i$ vanishes.
 \end{enumerate}
 Moreover $\sigma_r\ge0$ and $0\le\omega_i\le1$.
@@ -58,13 +58,13 @@ so $\Heff'$ is singular if and only if $\sigma_r = 0$.
 (ii) By the matrix determinant lemma, $\det(\Heff - v_iv_i^\top) = \det\Heff\cdot(1 - v_i^\top\Heff^{-1}v_i)
 = \det\Heff\cdot\omega_i$, so $\Heff'$ is singular if and only if $\omega_i = 0$.
 
-In both cases $\Heff'$ is a Gram matrix, of $[\,\Aeff Z_x\;\;\Aeff z_r\,]$ in~(i) and of $\Aeff'Z_x$
-($\Aeff$ without row $i$) in~(ii). It is therefore positive semidefinite, so
+In both cases $\Heff'$ is a Gram matrix, of $[\,\Aeff Z_x\;\;\Aeff z_r\,]$ in~\ref{prop:singular-cases:i} and of $\Aeff'Z_x$
+($\Aeff$ without row $i$) in~\ref{prop:singular-cases:ii}. It is therefore positive semidefinite, so
 $\det\Heff'\ge0$, and with $\det\Heff>0$ we get $\sigma_r\ge0$ and $\omega_i\ge0$. Finally
 $\omega_i\le1$ because $\Heff^{-1}$ is positive definite, so $v_i^\top\Heff^{-1}v_i\ge0$.
 \end{proof}
 
-Part~(ii) of \cref{prop:singular-cases} also shows that the downdate of a surplus release can never make $\Heff$
+Part~\ref{prop:singular-cases:ii} of \cref{prop:singular-cases} also shows that the downdate of a surplus release can never make $\Heff$
 indefinite: in exact arithmetic, the worst case is a singular matrix.
 
 
@@ -88,10 +88,10 @@ The scale $\lVert u_j\rVert^2$ uses all rows on purpose: a column $j$ whose diff
 its nonzeros in rows with free surpluses has $(\Heff)_{jj} = 0$, and a scale based on $\Heff$ would hide this
 singularity.
 
-The determinant of $\Heff'$ is the product of its pivots. When a column is released (part~(i) of
+The determinant of $\Heff'$ is the product of its pivots. When a column is released (part~\ref{prop:singular-cases:i} of
 \cref{prop:singular-cases}), the row addition creates the pivot of $r$ and downdates the pivots
 of the later active indices, and their product changes by the factor $\sigma_r$
-(\cref{prop:rowadd}). When a surplus is released (part~(ii)), the pivots change by the factor
+(\cref{prop:rowadd}). When a surplus is released (part~\ref{prop:singular-cases:ii}), the pivots change by the factor
 $\omega_i$ in total, since $\det\Heff' = \det\Heff\cdot\omega_i$. All pivots are therefore checked,
 not only the new one. If all pivots satisfied the invariant before the update, a
 vanishing $\sigma_r$ or $\omega_i$ must therefore show up as a pivot that violates it after the
@@ -105,7 +105,8 @@ created by dividing by a tiny pivot. We use $\varepsilon_{\mathrm{piv}} = 10^{-1
 
 For the dense factorization of \cref{chap:dense} the detection is sharper. A released column is
 appended as the last index, all other pivots stay unchanged, and the new pivot is $\sigma_r$
-itself (\cref{cor:append-pivot}). A released surplus is a rank-one downdate, whose pivots stay
+itself (\cref{cor:append-pivot}). The test then measures the angle between the new direction
+and the span of the old ones (\cref{lem:pivot-angle}). A released surplus is a rank-one downdate, whose pivots stay
 positive if and only if $\omega_i>0$, and whose pivot ratios multiply to $\omega_i$
 (\cref{prop:c1-pivots}).
 
@@ -140,9 +141,9 @@ d_x = z_r - \sum_{j\in\Nx}\beta_j\,z_j,\qquad
 \end{equation}
 Then
 \begin{enumerate}
-    \item $Cd_x = 0$, and $d_\ell = 0$ for every $\ell\in\Wset\setminus\{r\}$;
-    \item $\Abar d = 0$;
-    \item $\nabla f(y)^\top d = (\nu_x)_r < 0$.
+    \item \label{thm:zc-column:i} $Cd_x = 0$, and $d_\ell = 0$ for every $\ell\in\Wset\setminus\{r\}$;
+    \item \label{thm:zc-column:ii} $\Abar d = 0$;
+    \item \label{thm:zc-column:iii} $\nabla f(y)^\top d = (\nu_x)_r < 0$.
 \end{enumerate}
 \end{theorem}
 
@@ -177,9 +178,9 @@ d_x = \sum_{j\in\Nx}\beta_j\,z_j,\qquad
 \end{equation}
 Then
 \begin{enumerate}
-    \item $Cd_x = 0$, $d_x$ vanishes on $\Wx$, $d_s$ vanishes on $\Ws\setminus\{i\}$, and $(d_s)_i = 1$;
-    \item $\Abar d = 0$;
-    \item $\nabla f(y)^\top d = \pi_i < 0$.
+    \item \label{thm:zc-surplus:i} $Cd_x = 0$, $d_x$ vanishes on $\Wx$, $d_s$ vanishes on $\Ws\setminus\{i\}$, and $(d_s)_i = 1$;
+    \item \label{thm:zc-surplus:ii} $\Abar d = 0$;
+    \item \label{thm:zc-surplus:iii} $\nabla f(y)^\top d = \pi_i < 0$.
 \end{enumerate}
 \end{theorem}
 
@@ -252,10 +253,10 @@ $\Sset\cup\Nx\cup\Ns$.
 \end{lemma}
 
 \begin{proof}
-Suppose $d\ge0$. By part~(i) of the theorems, every block sum of $d_x$ is zero ($Cd_x = 0$).
+Suppose $d\ge0$. By part~\ref{thm:zc-column:i} of \cref{thm:zc-column} and part~\ref{thm:zc-surplus:i} of \cref{thm:zc-surplus}, every block sum of $d_x$ is zero ($Cd_x = 0$).
 A nonnegative vector whose block sums are zero is zero, so $d_x = 0$. Then
-$\Abar d = [\,A_Ed_x;\; A_Id_x - d_s\,] = [\,0;\;-d_s\,]$, and $\Abar d = 0$ (part~(ii)) forces
-$d_s = 0$. But $d = 0$ contradicts $\nabla f(y)^\top d < 0$ (part~(iii)). So some component of
+$\Abar d = [\,A_Ed_x;\; A_Id_x - d_s\,] = [\,0;\;-d_s\,]$, and $\Abar d = 0$ (parts~\ref{thm:zc-column:ii} and~\ref{thm:zc-surplus:ii}, respectively) forces
+$d_s = 0$. But $d = 0$ contradicts $\nabla f(y)^\top d < 0$ (parts~\ref{thm:zc-column:iii} and~\ref{thm:zc-surplus:iii}). So some component of
 $d$ is negative, and the minimum is taken over a nonempty set. The blocking index cannot lie in
 $\Wset\setminus\{\rho\}$, where $d$ vanishes, and it is not the released index $\rho$, whose
 component of $d$ is positive ($d_r = 1$ or $(d_s)_i = 1$). Hence $q\in\Sset\cup\Nx\cup\Ns$.
@@ -287,8 +288,9 @@ definite, so $\ker\Abar\cap Y_0 = \{0\}$. Removing one constraint from the worki
 dimension, $Y_0\subset Y_1$ with $\dim Y_1 = \dim Y_0 + 1$. If $\ker\Abar\cap Y_1$ contained two
 linearly independent vectors, some nonzero combination of them would satisfy the one extra
 constraint ($y_\rho = 0$) and therefore lie in $Y_0\cap\ker\Abar = \{0\}$, a contradiction. So
-$\dim(\ker\Abar\cap Y_1)\le1$. The direction $d$ lies in $Y_1$ (part~(i) of
-\cref{thm:zc-column,thm:zc-surplus}) and in $\ker\Abar$ (part~(ii)), and $d\ne0$, so
+$\dim(\ker\Abar\cap Y_1)\le1$. The direction $d$ lies in $Y_1$ (part~\ref{thm:zc-column:i} of
+\cref{thm:zc-column} and part~\ref{thm:zc-surplus:i} of \cref{thm:zc-surplus}) and in $\ker\Abar$
+(parts~\ref{thm:zc-column:ii} and~\ref{thm:zc-surplus:ii}, respectively), and $d\ne0$, so
 $\ker\Abar\cap Y_1 = \spn\{d\}$.
 
 \emph{Step 2: $\ker\Abar\cap Y_2 = \{0\}$.} By Step~1, every vector of $\ker\Abar\cap Y_2$ is a
@@ -301,7 +303,8 @@ The retried release starts from the same kind of state as the first attempt: a v
 reduced gradient and a negative multiplier for $\rho$.
 
 \begin{prop}[The reduced gradient stays zero] \label{prop:stays-minimizer}
-After the zero-curvature step and the expansion by $q$, the reduced gradient for the working
+Unless $\rho = r$ and $q = \rep(r)$ (the case of \cref{rem:rep-blocks}), after the
+zero-curvature step and the expansion by $q$ the reduced gradient for the working
 set $\Wset\cup\{q\}$ (with $\rho$ still in it) vanishes, and the multiplier of $\rho$ is
 unchanged. The only index of $\Wset\cup\{q\}$ whose variable is not at zero is $\rho$ itself
 ($y_\rho = \alpha^\star$), which is released next.
@@ -323,7 +326,7 @@ $\Wset\setminus\{\rho\}$, so $y_\rho = \alpha^\star$ and all other working-set v
 In \cref{thm:zc-column}, the blocking index may be the representative $q = \rep(r)$ of the
 block $k$ of $r$, for example when $\mathcal{N}_x^{(k)}$ is empty. Then $r$, which now has the weight
 $\alpha^\star\ge0$, takes over as the new representative: $r$ leaves $\Wx$, $q$ enters $\Wx$, and
-for $j\in\mathcal{N}_x^{(k)}$ the vectors become $e_j - e_r = z_j - z_r$, as in case~(ii) of
+for $j\in\mathcal{N}_x^{(k)}$ the vectors become $e_j - e_r = z_j - z_r$, as in case~\ref{lem:expand-ordering:ii} of
 \cref{lem:expand-ordering} but without removing a row of $\Nx$. The resulting working set is
 $\Wset'$ of \cref{thm:removal}, so $\Heff$ stays positive definite, and the release is complete.
 \end{remark}
@@ -351,6 +354,10 @@ set, so the number of passes is bounded by the number of free variables.
     \State Expand the working set by $q$ \Comment{\cref{thm:removal}: the next pass succeeds}
 \EndLoop
 \end{algobox}
+
+If $\Aeff z_r = 0$ (a fully masked column, \cref{rem:masked-column}), the release is singular
+without any test, since $\gamma_{rr} = 0$. Our implementation then skips the update and the
+refactorization and goes directly to the zero-curvature step.
 
 \begin{remark}[Why not remove the largest coefficient?] \label{rem:argmax}
 A simpler rule moves the index $j = \arg\max_{j'\in\Nx}|\beta_{j'}|$ of the largest coefficient of

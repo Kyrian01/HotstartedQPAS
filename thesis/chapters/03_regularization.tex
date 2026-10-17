@@ -315,7 +315,9 @@ Two rules for the center update are common.
           $\theta(\pi^+) > \theta(\pihat^+)$ with the projection $\pi^+$ of
           \cref{sec:bound-ineq} (a \emph{serious step}). Otherwise the center stays
           (a \emph{null step}). This requires the Lagrangian bound at every iteration, i.e.\
-          all blocks must be priced every iteration.
+          all blocks must be priced every iteration. In an iteration without a new column, a
+          null step would repeat the same master problem, so there the center is always
+          moved (the center-only iteration of \cref{alg:rcg}).
 \end{itemize}
 
 \subsection{Exact termination}
@@ -332,8 +334,8 @@ problem~\eqref{eq:eliminated} over the columns $\mathcal{J}'$, with dual estimat
 $\pi = \pi(y)$, and let $\mu$ be the Lagrange multipliers of the convexity
 constraints~\eqref{eq:eliminated-conv}. If
 \begin{enumerate}
-    \item $\pi = \pihat$, and
-    \item the pricing problem~\eqref{eq:pricing} has a nonnegative optimal value for every
+    \item \label{thm:exact-termination:i} $\pi = \pihat$, and
+    \item \label{thm:exact-termination:ii} the pricing problem~\eqref{eq:pricing} has a nonnegative optimal value for every
           block,
 \end{enumerate}
 then $\lambda$, extended by zeros, is optimal for the master problem~\eqref{eq:master}, and
@@ -352,7 +354,7 @@ is feasible for~\eqref{eq:master}.
           $\lambda_j>0$;
     \item $\pi_i\ge0$ for every inequality row $i$, with equality if $s_i>0$.
 \end{itemize}
-Condition~(ii) extends the first inequality to all $j\in\mathcal{J}$, because the pricing
+Condition~\ref{thm:exact-termination:ii} extends the first inequality to all $j\in\mathcal{J}$, because the pricing
 problem of each block minimizes $c_j - a_j^\top\pi - \mu_{\psi(j)}$ over its columns. Hence
 $(\pi,\mu)$ satisfies both constraints of the dual~\eqref{eq:master-dual}.
 
@@ -373,7 +375,7 @@ columns, and center-only iterations that drive $\pi$ towards $\pihat$.
 measures both kinds.
 
 \begin{prop}[Accuracy of the stopping test] \label{prop:stop-accuracy}
-In practice condition~(i) of \cref{thm:exact-termination} is tested as
+In practice condition~\ref{thm:exact-termination:i} of \cref{thm:exact-termination} is tested as
 \begin{equation} \label{eq:center-test}
 \lVert\pi - \pihat\rVert_\infty \;\le\; \varepsilon_{\mathrm{c}}\,\max\bigl(1,\lVert\pi\rVert_\infty\bigr)
 \end{equation}
@@ -411,8 +413,8 @@ bound is therefore evaluated at the projection
 which always satisfies the sign condition, so that $\theta(\pi^+)\le z^\star$ holds by
 \cref{prop:lagrangian-bound}. The same projected vector is passed to the pricing problem.
 For problems with equality rows only, $\pi^+ = \pi$. At an exact optimum of the master problem
-$\pi_I\ge0$ (\cref{thm:kkt-master}~(ii)), so $\pi^+ = \pi$ and the pricing test of
-\cref{alg:rcg} is condition~(ii) of \cref{thm:exact-termination}.
+$\pi_I\ge0$ (\cref{thm:kkt-master}~\ref{thm:kkt-master:ii}), so $\pi^+ = \pi$ and the pricing test of
+\cref{alg:rcg} is condition~\ref{thm:exact-termination:ii} of \cref{thm:exact-termination}.
 
 \subsection{The algorithm}
 
@@ -431,7 +433,7 @@ of the regularized master problem, is the subject of the remaining chapters.
     \If{no column was added (all blocks priced)}
         \State $\theta\gets\theta(\pi^+)$ \Comment{valid lower bound on $z^\star$}
         \If{$\lVert\pi-\pihat\rVert_\infty\le\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$}
-            \State \textbf{stop}: $\lambda$ is optimal (\cref{thm:exact-termination})
+            \State \textbf{stop}: $\lambda$ is optimal up to the accuracy of \cref{prop:stop-accuracy}
         \EndIf
         \State $\pihat\gets\pi$ \Comment{center-only iteration}
     \Else

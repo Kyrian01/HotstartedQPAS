@@ -43,7 +43,8 @@ represent states of a pilot at given times, and whose edges represent the allowe
 between them. The edge costs of pilot $k$ form the vector $c^{(k)}\in\R^{|E|}$, and every edge
 operates a subset of the flights, recorded in the \textbf{task matrix}
 $A_{\mathrm{task}}\in\{0,1\}^{m\times|E|}$. With $\xi_k\in\{0,1\}^{|E|}$ the edge vector of the
-path of pilot $k$ and $F$ the node--edge incidence matrix of $G$, the linear relaxation reads
+path of pilot $k$ and $F$ the node--edge incidence matrix of $G$ ($F_{\mathrm{tail}(e),e} = 1$,
+$F_{\mathrm{head}(e),e} = -1$), the linear relaxation reads
 \begin{subequations} \label{eq:crew}
 \begin{align}
 \min_{\xi_1,\dots,\xi_K}\quad & \sum_{k=1}^{K} c^{(k)\top} \xi_k\\
@@ -54,7 +55,7 @@ path of pilot $k$ and $F$ the node--edge incidence matrix of $G$, the linear rel
 & F \xi_k = b^{(k)},\quad 0\le \xi_k\le 1 && (k = 1,\dots,K),
 \end{align}
 \end{subequations}
-where $b^{(k)}$ has the entry $-1$ at the source, $+1$ at the sink and $0$ elsewhere, and
+where $b^{(k)}$ has the entry $+1$ at the source, $-1$ at the sink and $0$ elsewhere, and
 $\mathcal{R}_E$, $\mathcal{R}_I$ are the sets of equality and inequality coverage rows. This is a
 multi-block linear program (\cref{def:multiblock}) with identical block polytopes. A
 coverage row in $\mathcal{R}_E$ requires a flight to be operated exactly once; a row in
@@ -223,8 +224,8 @@ support inequality rows, and the HiGHS QP masters are run on I1 only.}
 its time limit stops with an optimal status, and its Lagrangian bound agrees with $z^\star$
 to within $2\cdot10^{-7}$ relative or better. This confirms the exact termination criterion
 of \cref{thm:exact-termination} in practice, including the sign conditions of the inequality
-rows: the bound would be $-\infty$ if the projected duals violated them
-(\cref{rem:bound-sign}).
+rows: the bound is evaluated at the projected duals $\pi^+$, since at duals that violate them it
+would not be valid and could exceed $z^\star$ (\cref{sec:bound-ineq,rem:bound-sign}).
 
 \paragraph{The accuracy of the stabilized methods.} The stabilized methods stop when
 $\lVert\pi-\pihat\rVert_\infty\le\varepsilon_{\mathrm{c}}\max(1,\lVert\pi\rVert_\infty)$, which by
@@ -252,7 +253,7 @@ differ by at most $6\cdot10^{-7}$ relative on all twelve runs (\cref{tab:backend
 with the same accuracy against $z^\star$, and on I2 they perform exactly the same 11\,974
 iterations. Where the iteration counts differ, rounding differences have broken a tie in a
 ratio test or a pricing round differently, after which the runs continue on slightly
-different paths. The differences are at most 6\% on all runs but one: on the inequality
+different paths. The differences are below 7\% on all runs but one: on the inequality
 variant of S6 the dense variant needs 9\,574 iterations against 6\,926, with the same final
 objective.
 
@@ -484,7 +485,7 @@ are the expansions and reductions of the working set without the refactorization
 run, the working set changes tens to hundreds of thousands of times, and every change is a
 single update of the factorization. Representative swaps are rare, because representatives
 carry the largest weights. Singular reduced Hessians occur, but only a handful of times per
-run, and each is resolved by one zero-curvature step. The final nullspace dimension $|\Nx|$
+run, and each is resolved by one zero-curvature step. The final dimension $|\Nx|$ of $\Heff$
 stays below the number of coverage rows, as guaranteed by \cref{cor:dimension}. The sparse
 factorization is rebuilt hundreds to thousands of times per run, almost all of them periodic
 refactorizations; the dense one is rebuilt at most 16 times, each time because a singular
@@ -579,7 +580,7 @@ solve finished within its limit of 300 seconds.}
 
 With 30\% inequality rows, column generation needs fewer active-set iterations on all
 instances, and fewer column generation iterations on I1--I4, considerably fewer on I1--I3
-(\cref{tab:comparison-eq,tab:comparison-ineq}): over-covering a flight is allowed, so the
+(\cref{tab:comparison-eq,tab:comparison-ineq,tab:counters}): over-covering a flight is allowed, so the
 optimal schedules are found with fewer columns, and the proximal phase is shorter.
 
 \medskip
@@ -867,7 +868,8 @@ the factor in $\nmax$ dimensions.
 position of the removed index. Over a run, the trailing part $(t-\ell)/t$ that a deletion
 updates was on average 0.22 to 0.36 of the factor on all instances: as anticipated in
 \cref{sec:dense-delete}, most removed indices had been active only for a short time. The
-dense factor never needed more than $m+1$ positions, as guaranteed by~\eqref{eq:dense-size}.
+dense factor never needed more than $m+1$ positions, as guaranteed by~\eqref{eq:dense-size} and
+the one index of an undone singular release (\cref{sec:why-dense}).
 
 \paragraph{Accuracy.} \Cref{fig:residual} shows the residual
 $\max|(LDL^\top)_{\Nx\Nx} - \Heff|/\max(1,\max|\Heff|)$ of the factor over a run, with $\Heff$

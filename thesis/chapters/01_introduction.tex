@@ -25,8 +25,9 @@ column that can improve the current solution.
 In its classical form the restricted master problem is a linear program. Its dual solutions,
 which drive the pricing problem, are known to jump from one extreme point to another, which
 makes the method unstable and slow in its final phase \cite{lubbecke2005selected}. A
-well-established remedy is \textbf{proximal stabilization}
-\cite{dumerle1999stabilized, briant2008comparison}: the dual problem is augmented by a
+well-established remedy is \textbf{dual stabilization}
+\cite{dumerle1999stabilized, briant2008comparison}, in its proximal form
+\cite{briant2008comparison, kiwiel1990proximity}: the dual problem is augmented by a
 quadratic term that keeps the dual iterate close to a \emph{stability center}. The price of this regularization is
 that every restricted master problem becomes a \textbf{convex quadratic program}.
 
@@ -103,7 +104,7 @@ The main results of this work are the following.
           method are exactly the reduced costs of column generation and the dual sign
           conditions of the inequality rows. The optimality test of the master problem and
           the pricing test are therefore the same test, applied inside and outside the
-          restricted master problem (\cref{chap:nullspace}).
+          restricted master problem (\cref{chap:qpas,chap:nullspace}).
 
     \item \textbf{Updates and hot start.} Every change of the working set is a row
           addition, a row deletion or a rank-one modification of an $LDL^\top$

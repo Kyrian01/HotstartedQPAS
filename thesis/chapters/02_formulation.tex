@@ -202,9 +202,9 @@ nullspace method of \cref{chap:nullspace}.
 \begin{definition}[Column generation property] \label{def:cg-property}
 A matrix $C\in\R^{K\times n}$ has the \textbf{column generation property} if
 \begin{enumerate}
-    \item every entry of $C$ is $0$ or $1$;
-    \item every column of $C$ contains exactly one entry equal to $1$;
-    \item every row of $C$ contains at least one entry equal to $1$.
+    \item \label{def:cg-property:i} every entry of $C$ is $0$ or $1$;
+    \item \label{def:cg-property:ii} every column of $C$ contains exactly one entry equal to $1$;
+    \item \label{def:cg-property:iii} every row of $C$ contains at least one entry equal to $1$.
 \end{enumerate}
 \end{definition}
 
@@ -215,8 +215,8 @@ column of every block.
 \end{lemma}
 
 \begin{proof}
-Property~(i) holds by definition. Every column belongs to exactly one block, which gives
-property~(ii) for every subset of columns. Property~(iii) holds for a subset of columns if
+Property~\ref{def:cg-property:i} holds by definition. Every column belongs to exactly one block, which gives
+property~\ref{def:cg-property:ii} for every subset of columns. Property~\ref{def:cg-property:iii} holds for a subset of columns if
 and only if every block is represented in it. 
 \end{proof}
 
@@ -260,7 +260,9 @@ restricted master problem.
 For a small $\mathcal{J}'$ the restricted master problem may be infeasible: one column per block
 can in general not satisfy $A_E\lambda = b_E$. Classical column generation therefore adds
 artificial variables with a large cost to the linking rows (a \emph{Big-M} start), which keeps
-every restricted master problem feasible; we assume them included where needed.
+every restricted master problem feasible; we assume them included where needed. An optimal
+solution in which an artificial variable is positive is not feasible for the master problem,
+so the optimality test below requires all artificial variables to be zero.
 
 \begin{definition}[Reduced cost] \label{def:reduced-cost}
 For dual values $(\pi,\mu)$ the \textbf{reduced cost} of a column $j\in\mathcal{J}$ is
@@ -284,7 +286,7 @@ is a shortest path problem with edge weights given by the vector $c^{(k)} - A_k^
 
 \begin{prop}[Optimality test] \label{prop:cg-optimality}
 Let $\lambda'$ be optimal for the restricted master problem, with optimal duals
-$(\pi,\mu)$. If $\pi_I\ge0$ and the pricing problem~\eqref{eq:pricing} has a nonnegative
+$(\pi,\mu)$, and with all artificial variables (if present) equal to zero. If $\pi_I\ge0$ and the pricing problem~\eqref{eq:pricing} has a nonnegative
 optimal value for every block, then $\lambda'$, extended by zeros, is optimal for the master
 problem~\eqref{eq:master}.
 \end{prop}
@@ -305,8 +307,9 @@ primal--dual pair that is feasible and complementary is optimal.
 
 For a linear restricted master problem the duals satisfy $\pi_I\ge0$ automatically, so the
 pricing test alone decides optimality. With the regularized master problems of the next
-chapter this is no longer the case: their solution satisfies the linking rows only when the
-duals have converged to the stability center (\cref{thm:exact-termination}). Column generation also provides a lower bound on
+chapter $\pi_I\ge0$ still holds at an exact solution, but the pricing test no longer decides
+optimality: their solution satisfies the linking rows only when the duals have converged to the
+stability center (\cref{prop:residual,thm:exact-termination}). Column generation also provides a lower bound on
 $z^\star$ at every iteration in which all blocks are priced.
 
 \begin{prop}[Lagrangian bound] \label{prop:lagrangian-bound}
@@ -334,7 +337,7 @@ since $\xi_k^\star\in P_k$.
 \begin{remark} \label{rem:bound-sign}
 The sign condition $\pi_I\ge0$ in \cref{prop:lagrangian-bound} is essential: for $\pi_i<0$
 in an over-satisfied inequality row, the term $\pi_i\,\bigl((b_I)_i - \sum_k (A_{I,k})_{i,:}\,\xi^\star_k\bigr)$
-in the proof is positive, so its first inequality fails and $\theta(\pi)$ may exceed $z^\star$. In \cref{sec:center-update} the bound is therefore evaluated at the projection of
+in the proof is positive, so its first inequality can fail and $\theta(\pi)$ may exceed $z^\star$. In \cref{sec:bound-ineq} the bound is therefore evaluated at the projection of
 the dual vector onto $\{\pi_I\ge0\}$.
 \end{remark}
 
@@ -429,7 +432,7 @@ following chapters work with this form.
 
 \begin{remark}[The column generation property is lost] \label{rem:cg-property-lost}
 The augmented convexity matrix $\Cbar = [\,C\;\;0\,]$ has $m_I$ zero columns, one per
-surplus variable, so it violates property~(ii) of \cref{def:cg-property}. The surpluses do
+surplus variable, so it violates property~\ref{def:cg-property:ii} of \cref{def:cg-property}. The surpluses do
 not belong to any block. \Cref{chap:qpas} shows that this causes no difficulty: zero
 columns are even simpler to handle than unit columns, but they have to be treated as a
 separate group of variables.

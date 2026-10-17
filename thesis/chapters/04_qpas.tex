@@ -83,10 +83,10 @@ g = \Cbar^\top\mu + \nu,\qquad \nu\ge0,\qquad \nu_\ell\,y_\ell = 0\quad\text{for
 \]
 Written per variable, with $\pi = \pi(y)$, these conditions are equivalent to:
 \begin{enumerate}
-    \item \textbf{reduced costs:} $\bar c_j(\pi,\mu) = c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0$
+    \item \label{thm:kkt-master:i} \textbf{reduced costs:} $\bar c_j(\pi,\mu) = c_j - a_j^\top\pi - \mu_{\psi(j)}\ge0$
           for every column $j$, with equality if $x_j>0$;
-    \item \textbf{sign condition:} $\pi_i\ge0$ for every inequality row $i$;
-    \item \textbf{slackness:} $\pi_i = 0$ for every inequality row $i$ with $s_i>0$.
+    \item \label{thm:kkt-master:ii} \textbf{sign condition:} $\pi_i\ge0$ for every inequality row $i$;
+    \item \label{thm:kkt-master:iii} \textbf{slackness:} $\pi_i = 0$ for every inequality row $i$ with $s_i>0$.
 \end{enumerate}
 The multipliers are $\nu_j = \bar c_j(\pi,\mu)$ for the columns and $\nu_{n+i} = \pi_i$ for
 the surpluses.
@@ -104,7 +104,7 @@ stationarity condition $g = \Cbar^\top\mu + \nu$ row by row.
 \end{itemize}
 With these expressions, $\nu\ge0$ becomes ``$\bar c_j\ge0$ for all $j$'' and ``$\pi_i\ge0$ for
 all $i$'', and $\nu_\ell y_\ell = 0$ becomes ``$x_j>0\Rightarrow\bar c_j = 0$'' and
-``$s_i>0\Rightarrow\pi_i = 0$''. These are (i)--(iii).
+``$s_i>0\Rightarrow\pi_i = 0$''. These are \ref{thm:kkt-master:i}--\ref{thm:kkt-master:iii}.
 \end{proof}
 
 \begin{remark}[The optimality test is the pricing test] \label{rem:same-test}
@@ -179,8 +179,11 @@ The KKT conditions of~\eqref{eq:eqp} form the linear \textbf{KKT system}
 \end{equation}
 where $\mu\in\R^K$, $\nu_x\in\R^{|\Wx|}$ and $\nu_s\in\R^{|\Ws|}$ are the Lagrange
 multipliers of the convexity constraints and of the working-set constraints of the columns
-and of the surpluses. They are the entries $\nu_\ell$, $\ell\in\Wset$, of the multiplier $\nu$ of
-\cref{thm:kkt-master}, whose other entries are zero. If $p = 0$ solves~\eqref{eq:kkt-system}, the iterate already minimizes
+and of the surpluses. The first block row reads
+$D_\Wset^\top[\mu;\nu_x;\nu_s] = g + \frac{1}{\delta}\Abar^\top\Abar\,p = \nabla f(y+p)$, so these are
+the multipliers of the gradient at $y+p$. At a subspace minimizer ($p=0$, see below) they are the
+entries $\nu_\ell$, $\ell\in\Wset$, of the multiplier $\nu$ of \cref{thm:kkt-master}, whose other
+entries are zero. If $p = 0$ solves~\eqref{eq:kkt-system}, the iterate already minimizes
 $f$ over its face, and we call it a \textbf{subspace minimizer}. At a subspace minimizer, the
 multipliers decide what to do next: if all of them are nonnegative, the KKT conditions of
 \cref{thm:kkt-master} hold and the iterate is optimal; otherwise the index with the most
@@ -225,15 +228,15 @@ a basis $Z$ of $\Null(D_\Wset)$. It relies on two properties of the current work
 \begin{assumption} \label{ass:nullspace}
 The working set $\Wset$ satisfies the following two conditions.
 \begin{enumerate}
-    \item $D_\Wset$ has full row rank.
-    \item The reduced Hessian $Z^\top\Abar^\top\Abar Z$ is positive definite, where the columns
+    \item \label{ass:nullspace:i} $D_\Wset$ has full row rank.
+    \item \label{ass:nullspace:ii} The reduced Hessian $Z^\top\Abar^\top\Abar Z$ is positive definite, where the columns
           of $Z$ form a basis of $\Null(D_\Wset)$.
 \end{enumerate}
 \end{assumption}
 
-Condition~(i) guarantees unique multipliers, and condition~(ii) a unique search direction.
-\Cref{thm:rank} below shows that~(i) holds for every working set that keeps one column per
-block free. Condition~(ii) can fail, and \cref{chap:singular} shows how the method
+Condition~\ref{ass:nullspace:i} guarantees unique multipliers, and condition~\ref{ass:nullspace:ii} a unique search direction.
+\Cref{thm:rank} below shows that~\ref{ass:nullspace:i} holds for every working set that keeps one column per
+block free. Condition~\ref{ass:nullspace:ii} can fail, and \cref{chap:singular} shows how the method
 guarantees it.
 
 
@@ -401,7 +404,7 @@ $m_I = |\Ws| + |\Ns|$.
 The assumption of \cref{thm:reordering}, a free column in every block, holds throughout the
 method: a block's last free column could only reach zero if the weights of its block sum to
 less than one, which the convexity constraint excludes (see also \cref{lem:replacement}).
-Hence condition~(i) of \cref{ass:nullspace} holds for every working set that occurs.
+Hence condition~\ref{ass:nullspace:i} of \cref{ass:nullspace} holds for every working set that occurs.
 
 \begin{remark}[Comparison with problems without inequality rows] \label{rem:three-sets}
 Without inequality rows ($m_I = 0$), the surplus sets are empty, and the extended ordering

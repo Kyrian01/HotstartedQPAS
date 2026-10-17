@@ -105,8 +105,9 @@ $\operatorname{pos}$.
 
 The factor exists and is unique whenever $\Heff$ is positive definite, and then all pivots
 $d_\ell$ are positive \cite{golub2013matrix}. The only object of size $\nmax$ is the integer
-array $\operatorname{pos}$, with the value $0$ for inactive indices; the floating-point data
-occupy at most $(m+1)^2$ entries by~\eqref{eq:dense-size}. The compact representation solves
+array $\operatorname{pos}$, with the value $0$ for inactive indices (and, in our
+implementation, the right-hand side and solution buffers, which are indexed by column); the
+factor occupies at most $(m+1)^2$ floating-point entries by~\eqref{eq:dense-size}. The compact representation solves
 the same systems as the embedded one:
 
 \begin{lemma}[Solves in compact form] \label{lem:compact-solve}
@@ -138,11 +139,11 @@ addition into the cheapest possible operation, an append.
 \toprule
 change of the working set & change of $\hat H$ & dense operation \\
 \midrule
-(i) column leaves $\Nx$ & position $\operatorname{pos}(q)$ removed & delete (\cref{sec:dense-delete}) \\
-(ii) representative swap & rows of $\mathcal{N}_x^{(k)}$ rewritten & deletes + appends \\
-(iii) surplus becomes active & $+\,\hat v_i\hat v_i^\top$ & rank-one update (\cref{sec:dense-rank-one}) \\
-(iv) column enters $\Nx$ & new last row and column & append (\cref{sec:dense-append}) \\
-(v) surplus becomes free & $-\,\hat v_i\hat v_i^\top$ & rank-one downdate (\cref{sec:dense-rank-one}) \\
+\ref{thm:H-expand:i} column leaves $\Nx$ & position $\operatorname{pos}(q)$ removed & delete (\cref{sec:dense-delete}) \\
+\ref{thm:H-expand:ii} representative swap & rows of $\mathcal{N}_x^{(k)}$ rewritten & deletes + appends \\
+\ref{thm:H-expand:iii} surplus becomes active & $+\,\hat v_i\hat v_i^\top$ & rank-one update (\cref{sec:dense-rank-one}) \\
+\ref{thm:H-reduce:iv} column enters $\Nx$ & new last row and column & append (\cref{sec:dense-append}) \\
+\ref{thm:H-reduce:v} surplus becomes free & $-\,\hat v_i\hat v_i^\top$ & rank-one downdate (\cref{sec:dense-rank-one}) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -156,7 +157,7 @@ its new vector $z_j' = z_j - z_{S_k'}$. These rows thereby move to the end of th
 \section{Appending an Index}
 \label{sec:dense-append}
 
-When a column $r$ is released (case~(iv) of \cref{thm:H-reduce}), $\Heff$ is bordered by the
+When a column $r$ is released (case~\ref{thm:H-reduce:iv} of \cref{thm:H-reduce}), $\Heff$ is bordered by the
 vector $\gamma_r$ and the scalar $\gamma_{rr}$ of~\eqref{eq:bordered}. In the compact
 representation the new index takes position $t+1$, so the new matrix is
 \[
@@ -216,23 +217,69 @@ $\gamma_r = U^\top u$ and $\gamma_{rr} = u^\top u$, so
 = \lVert(I-\Pi_{\mathrm{eff}})\,u\rVert^2,
 \]
 because $\Pi_{\mathrm{eff}} = U(U^\top U)^{-1}U^\top$ is symmetric and idempotent. The last statement is
-part~(i) of \cref{prop:singular-cases}.
+part~\ref{prop:singular-cases:i} of \cref{prop:singular-cases}.
+\end{proof}
+
+\subsection{What the singularity test measures}
+
+\Cref{cor:append-pivot} has a consequence for the singularity detection of
+\cref{sec:detection}. There, a release is accepted if every pivot satisfies the pivot
+invariant $D_{jj} > \varepsilon_{\mathrm{piv}}\lVert u_j\rVert^2$, and this test was justified only
+heuristically: in the sparse factorization a row addition changes the new pivot and the pivots
+of all later indices, and only their product is known to equal $\sigma_r$ (\cref{prop:rowadd}).
+In the dense factorization an append changes no existing pivot, so the test decides on the new
+pivot alone, and this pivot is $\sigma_r$ exactly. We can therefore say precisely what the test
+measures. It turns out to be an angle.
+
+For a nonzero vector $u$ and a subspace $\mathcal S$, the angle $\theta\in[0,\pi/2]$ between them is
+the smallest angle between $u$ and a vector of $\mathcal S$. It is attained at the orthogonal
+projection of $u$ onto $\mathcal S$, so $\cos\theta = \lVert\Pi_{\mathcal S}u\rVert/\lVert u\rVert$.
+
+\begin{lemma}[The scaled new pivot is an angle] \label{lem:pivot-angle}
+Let $\Aeff z_r\ne0$, let $\theta_r$ be the angle between $\Aeff z_r$ and the range of $\Aeff Z_x$, and
+let
+\[
+\rho_r = \frac{\lVert\Meff u_r\rVert^2}{\lVert u_r\rVert^2}\in(0,1]
+\]
+be the fraction of $\lVert u_r\rVert^2$ that lies in the unmasked rows. Then the new pivot of
+\cref{thm:append}, scaled by the pivot scale of \cref{def:pivot-invariant}, is
+\[
+\frac{d_{t+1}}{\lVert u_r\rVert^2} \;=\; \rho_r\,\sin^2\theta_r \;\le\; \sin^2\theta_r ,
+\]
+with equality if and only if $\theta_r = 0$ or $u_r$ has no nonzero entry in a masked row.
+\end{lemma}
+
+\begin{proof}
+Let $u = \Aeff z_r$ and $\Pi = \Pi_{\mathrm{eff}}$. The vectors $\Pi u$ and $(I-\Pi)u$ are orthogonal,
+so $\lVert u\rVert^2 = \lVert\Pi u\rVert^2 + \lVert(I-\Pi)u\rVert^2$, and with \cref{cor:append-pivot}
+\[
+\sin^2\theta_r = 1 - \frac{\lVert\Pi u\rVert^2}{\lVert u\rVert^2}
+= \frac{\lVert(I-\Pi)u\rVert^2}{\lVert u\rVert^2} = \frac{d_{t+1}}{\lVert u\rVert^2}.
+\]
+The vector $u$ consists of the unmasked rows of $u_r = a_r - a_{\rep(r)}$, so
+$\lVert u\rVert^2 = \lVert\Meff u_r\rVert^2 = \rho_r\lVert u_r\rVert^2$. Multiplying by $\rho_r$ gives
+the identity. Since $\Meff$ is diagonal with entries $0$ and $1$, $\rho_r\le1$, with equality
+exactly when every nonzero entry of $u_r$ lies in an unmasked row.
 \end{proof}
 
 \begin{remark}[Singularity detection with the dense factor] \label{rem:dense-detection}
-\Cref{cor:append-pivot} makes the detection of \cref{sec:detection} exact for released columns.
-An append leaves all existing pivots unchanged, and the new pivot, scaled by the pivot scale
-$\lVert u_r\rVert^2$ of \cref{def:pivot-invariant}, is
+\Cref{lem:pivot-angle} does not introduce a new test. The implementation runs the same pivot
+check for both factorizations, and with the dense factor it reads
 \[
-\frac{d_{t+1}}{\lVert u_r\rVert^2} = \frac{\lVert(I-\Pi_{\mathrm{eff}})\,\Aeff z_r\rVert^2}{\lVert u_r\rVert^2}
-\;\le\;\sin^2\theta_r ,
+\rho_r\,\sin^2\theta_r \;>\; \varepsilon_{\mathrm{piv}} .
 \]
-where $\theta_r$ is the angle between $\Aeff z_r$ and the range of $\Aeff Z_x$ (with equality if no
-row of $u_r$ is masked). The pivot invariant thus tests directly whether the new direction is
-numerically independent of the old ones. In the sparse factorization of \cref{prop:rowadd} the
-same information is spread over the new pivot and the downdated pivots of the later indices.
-A dependent column can moreover be removed again by deleting the last position, which by
-\cref{thm:delete} below costs no arithmetic at all. (Our implementation undoes it by a
+If no row of $u_r$ is masked, a released column is therefore rejected exactly when its effective
+direction $\Aeff z_r$ makes an angle of less than about $\sqrt{\varepsilon_{\mathrm{piv}}} = 10^{-5}$
+with the span of the active directions. The tolerance $\varepsilon_{\mathrm{piv}}$ thus has a
+geometric meaning that does not depend on the scaling of the columns. Masked rows make the
+test stricter by the factor $\rho_r$. In the extreme case $\Aeff z_r = 0$ (a fully masked column,
+\cref{rem:masked-column}) the angle is undefined, but $d_{t+1} = 0$ and the test fails, which is
+why the pivot scale uses all rows.
+
+In the sparse factorization the same quantity $\sigma_r$ is spread over the new pivot and the
+downdated pivots of the later indices, and no single pivot equals $\rho_r\sin^2\theta_r$. A
+dependent column can moreover be removed from the dense factor by deleting the last position,
+which by \cref{prop:delete-cost} below costs no arithmetic at all. (Our implementation undoes it by a
 refactorization for both factorizations, which happens only a handful of times per run.)
 \end{remark}
 
@@ -240,7 +287,7 @@ refactorization for both factorizations, which happens only a handful of times p
 \section{Rank-One Modifications}
 \label{sec:dense-rank-one}
 
-The surplus cases~(iii) and~(v) change $\Heff$ by $\pm v_iv_i^\top$, and we will see in
+The surplus cases~\ref{thm:H-expand:iii} and~\ref{thm:H-reduce:v} change $\Heff$ by $\pm v_iv_i^\top$, and we will see in
 \cref{sec:dense-delete} that the deletion of an index requires a rank-one update as well. All
 three are instances of the following problem: given the factor $\hat H = LDL^\top$, a vector
 $v\in\R^t$ and a scalar $\varphi$, compute the factor of $\hat H + \varphi\,vv^\top$. We use the
@@ -339,13 +386,13 @@ of~\eqref{eq:c1} are used below.
 \begin{prop}[Pivots of a rank-one modification] \label{prop:c1-pivots}
 In the situation of \cref{thm:rank-one}:
 \begin{enumerate}
-    \item If $\varphi>0$, then $\varphi_j>0$ and $\bar d_j\ge d_j$ for all $j$: an update never
+    \item \label{prop:c1-pivots:i} If $\varphi>0$, then $\varphi_j>0$ and $\bar d_j\ge d_j$ for all $j$: an update never
           decreases a pivot.
-    \item The pivots change by the factor
+    \item \label{prop:c1-pivots:ii} The pivots change by the factor
           \[
           \prod_{j=1}^{t}\frac{\bar d_j}{d_j} = 1 + \varphi\,v^\top\hat H^{-1}v .
           \]
-    \item If $\varphi<0$ and the recursion~\eqref{eq:c1} is run without the assumption that
+    \item \label{prop:c1-pivots:iii} If $\varphi<0$ and the recursion~\eqref{eq:c1} is run without the assumption that
           $\hat H + \varphi vv^\top$ is positive definite, then all $\bar d_j$ are positive if and only if
           $\hat H + \varphi vv^\top$ is positive definite, i.e.\ if and only if
           $1 + \varphi\,v^\top\hat H^{-1}v>0$.
@@ -361,7 +408,7 @@ $\varphi_{j+1} = \varphi_jd_j/\bar d_j>0$.
 \prod_j\frac{\bar d_j}{d_j} = \frac{\det(\hat H + \varphi vv^\top)}{\det\hat H}
 = 1 + \varphi\,v^\top\hat H^{-1}v
 \]
-by the matrix determinant lemma \cite{golub2013matrix}.
+by the matrix determinant lemma (\cref{sec:ldl-updates}).
 
 (iii) The recursion performs symmetric Gaussian elimination without pivoting on
 $D + \varphi\tilde v\tilde v^\top$ (Step~2 of the proof of \cref{thm:rank-one}). Elimination without
@@ -371,13 +418,13 @@ $D + \varphi\tilde v\tilde v^\top$ is positive definite if and only if
 $\hat H + \varphi vv^\top = L(D+\varphi\tilde v\tilde v^\top)L^\top$ is. Since $\hat H$ is positive definite and
 $\hat H + \varphi vv^\top$ differs from it by a rank-one term, the latter is positive definite if and
 only if its determinant is positive (its smallest eigenvalue is the only one that can become
-nonpositive, by interlacing), i.e.\ by~(ii) if and only if $1 + \varphi v^\top\hat H^{-1}v>0$.
+nonpositive, by interlacing), i.e.\ by~\ref{prop:c1-pivots:ii} if and only if $1 + \varphi v^\top\hat H^{-1}v>0$.
 \end{proof}
 
 For the two surplus cases, $\varphi = \pm1$ and $v = \hat v_i$. An activated surplus ($\varphi = 1$)
 can never fail and only increases pivots. A released surplus ($\varphi = -1$) produces positive
 pivots exactly when $\omega_i = 1 - v_i^\top\Heff^{-1}v_i>0$, i.e.\ exactly when its release is not
-singular (part~(ii) of \cref{prop:singular-cases}); the product of the pivot ratios is $\omega_i$.
+singular (part~\ref{prop:singular-cases:ii} of \cref{prop:singular-cases}); the product of the pivot ratios is $\omega_i$.
 \Cref{alg:c1} stops as soon as a pivot is not positive, and the method then proceeds as in
 \cref{alg:singular}.
 
@@ -394,7 +441,7 @@ stays accurate over long runs; \cref{sec:results-factorizations} measures its re
 \section{Removing an Index}
 \label{sec:dense-delete}
 
-When the index $q\in\Nx$ leaves the nullspace set (case~(i) of \cref{thm:H-expand}), its row
+When the index $q\in\Nx$ leaves the nullspace set (case~\ref{thm:H-expand:i} of \cref{thm:H-expand}), its row
 and column are removed from $\hat H$. Let $\ell = \operatorname{pos}(q)$ and partition the
 positions into the groups $1 = \{1,\dots,\ell-1\}$, $2 = \{\ell\}$ and $3 = \{\ell+1,\dots,t\}$:
 \[
@@ -493,26 +540,30 @@ The cost of a deletion therefore depends on how long the removed index has been 
 active-set method most removed indices have entered $\Nx$ recently: a released column moves
 away from its bound (\cref{lem:descent}), and the columns that block are typically those with
 small weights, which have been released last. The measurements of
-\cref{sec:results-factorizations} show that a deletion touches about a quarter of the factor on
+\cref{sec:results-factorizations} show that a deletion touches between a quarter and a third of the factor on
 average.
 
 \begin{cor}[Expansions preserve the pivot invariant] \label{cor:expand-pivots}
-An expansion of type~(i) or~(iii) of \cref{lem:expand-ordering} does not decrease any pivot of
+An expansion of type~\ref{lem:expand-ordering:i} or~\ref{lem:expand-ordering:iii} of \cref{lem:expand-ordering} does not decrease any pivot of
 an index that stays in $\Nx$. In particular, if the pivot invariant of
 \cref{def:pivot-invariant} holds before such an expansion, it holds after it.
 \end{cor}
 
 \begin{proof}
-In case~(i), the pivots $D_1$ are kept and $\bar D_3$ results from a rank-one update with
-$\varphi = d_\ell>0$, so $\bar D_3\ge D_3$ entrywise by part~(i) of \cref{prop:c1-pivots}; each pivot
-moves with its index to the position one up. In case~(iii), the update $+\hat v_i\hat v_i^\top$ has
+In case~\ref{lem:expand-ordering:i}, the pivots $D_1$ are kept and $\bar D_3$ results from a rank-one update with
+$\varphi = d_\ell>0$, so $\bar D_3\ge D_3$ entrywise by part~\ref{prop:c1-pivots:i} of \cref{prop:c1-pivots}; each pivot
+moves with its index to the position one up. In case~\ref{lem:expand-ordering:iii}, the update $+\hat v_i\hat v_i^\top$ has
 $\varphi = 1>0$. The pivot scales $\lVert u_j\rVert^2$ of the remaining indices do not change, since
 their representatives do not change.
 \end{proof}
 
 In exact arithmetic the same holds for the sparse factorization, whose row deletion is the same
-rank-one update (\cref{sec:ldl-updates}). \Cref{cor:expand-pivots} shows that the pivot
-invariant can only be violated by a reduction, which is where \cref{chap:singular} checks it.
+rank-one update (\cref{sec:ldl-updates}). A representative swap, the expansion of
+type~\ref{lem:expand-ordering:ii}, is not covered: it keeps $\Heff$ positive definite
+(\cref{prop:expand-pd}), but its re-appended rows receive new pivots and new pivot scales
+$\lVert u_j - u_{S_k'}\rVert^2$, and their scaled pivots can be arbitrarily smaller than before.
+Our implementation therefore checks the pivot invariant after every expansion as well, and
+refactorizes if it is violated.
 
 
 \section{Structural Zeros and Refactorization}
@@ -570,14 +621,14 @@ refactorization; between refactorizations they grow with the stored pattern.
 operation & sparse factor of $\Heff^{\mathrm{emb}}$ (\cref{chap:updates}) & dense factor of $\hat H$ (this chapter) \\
 \midrule
 dimension & $\nmax$, identity outside $\Nx$ & $t = |\Nx|\le m$ \\
-release of a column, (iv) & row addition at index $r$: solve, new column, downdate of the later indices & append: one forward substitution, $t^2$ \\
-removal of a column, (i) & row deletion: rank-one update of the later indices & delete: rank-one update of the later positions, $2(t-\ell)^2$ \\
-surplus, (iii) and (v) & rank-one update or downdate along the elimination tree & \cref{alg:c1} from the first nonzero, at most $2t^2$ \\
+release of a column, \ref{thm:H-reduce:iv} & row addition at index $r$: solve, new column, downdate of the later indices & append: one forward substitution, $t^2$ \\
+removal of a column, \ref{thm:H-expand:i} & row deletion: rank-one update of the later indices & delete: rank-one update of the later positions, $2(t-\ell)^2$ \\
+surplus, \ref{thm:H-expand:iii} and~\ref{thm:H-reduce:v} & rank-one update or downdate along the elimination tree & \cref{alg:c1} from the first nonzero, at most $2t^2$ \\
 solve & sparse solve on $\reach_L(\Nx)$ & two triangular solves, $2t^2$ \\
 new pivot of a release & $D_{22}'\ge\sigma_r$; later pivots change & $d_{t+1} = \sigma_r$; no other pivot changes \\
 stored entries & grow with every update (\cref{sec:refactorization}) & exactly $t(t-1)/2$ (\cref{prop:no-zeros}) \\
 periodic refactorization & required, every $\tau$ updates & not required \\
-floating-point memory & proportional to the stored pattern & at most $(m+1)^2$ \\
+factor memory (floating point) & proportional to the stored pattern & at most $(m+1)^2$ \\
 \bottomrule
 \end{tabular}
 \caption{The two factorizations of the effective reduced Hessian. Costs are arithmetic
@@ -598,6 +649,9 @@ dense factorization is the better choice, as \cref{sec:results-factorizations} s
 
 Nothing in \cref{chap:qpas,chap:nullspace,chap:singular} depends on the choice. The
 active-set method, the hot start of \cref{thm:hot-start} and the singularity treatment of
-\cref{alg:singular} only use the operations of the table, so the two factorizations
-produce the same sequence of iterates in exact arithmetic, and \cref{alg:hot-qpas} applies
-unchanged, with the refactorization in its last line triggered only by the pivot invariant.
+\cref{alg:singular} only use the operations of the table, so in exact arithmetic the two factorizations
+produce the same sequence of iterates, as long as their pivot tests decide the same way. (The
+individual pivots depend on the elimination order, so a release whose scaled pivot is close to
+$\varepsilon_{\mathrm{piv}}$ may be accepted by one and rejected by the other; an exactly singular
+release is rejected by both.) \Cref{alg:hot-qpas} applies unchanged, with the refactorization in
+its last line triggered only by the pivot invariant.

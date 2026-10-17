@@ -51,7 +51,7 @@ increasing index order controls (\cref{chap:updates}). Since $\Heff$ is small an
 instead be factorized densely in the order in which its indices became active
 (\cref{chap:dense}). A released column is then appended, a removed index is deleted by a
 rank-one update of the positions behind it, and the surplus operations are rank-one updates
-and downdates by the method of Gill, Golub, Murray and Saunders. This factor never contains a
+and downdates by the method of Gill, Golub, Murray and Saunders \cite{gill1974methods}. This factor never contains a
 stale entry and needs no periodic refactorization; its new pivot is exactly the Schur
 complement of a released column, its downdates fail exactly when the downdated matrix is
 singular, and removals never decrease a pivot.
