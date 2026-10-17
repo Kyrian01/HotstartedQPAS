@@ -1,21 +1,23 @@
-# KKT system of the regularized master problem in nullspace form (thesis §4.3–4.4).
+# KKT system of the regularized master problem in nullspace form (thesis §5.2, The Reduced KKT
+# System, and Chapter 6, Efficient Updates of the KKT System).
 #
-# The KKT system (thesis eq. 4.17) is never formed. With p = Zy it reduces to
+# The KKT system (thesis eq. 4.5) is never formed. With p = Zy it reduces to
 #
 #     H_eff y = -δ Zᵀg̃,     H_eff = (A_eff Z)ᵀ(A_eff Z),
 #
 # where A_eff holds the equality rows and the inequality rows whose slack is in the working set
-# (docs/qpas_inequality_extension.md, Cor. 3.3). Without inequality rows A_eff = A and H_eff is
+# (thesis Cor. 5.2.3, Effective linking matrix). Without inequality rows A_eff = A and H_eff is
 # the reduced Hessian H of the thesis. H_eff is kept as an LDLᵀ factor of a matrix of size n_max
 # that is the identity on indices outside N, and updated in place whenever N or the slack status
 # changes. The factor is either CHOLMOD's (stores all n_max indices, sparse) or the dense backend
 # (stores only N, |N| ≤ m), see src/backends/ldlt_interface.jl:
 #
-#   index j enters N  →  rowadd(j, H_eff[:, j])         (reduction, thesis §4.4.2)
-#   index j leaves N  →  rowdel(j)                      (expansion, thesis §4.4.1)
+#   index j enters N  →  rowadd(j, H_eff[:, j])         (reduction, thesis §6.3, Thm. 6.3.1 (iv))
+#   index j leaves N  →  rowdel(j)                      (expansion, thesis §6.2, Thm. 6.2.4)
 #   representative of block b changes  →  rowdel + rowadd for every j ∈ N of block b
-#   slack of row i becomes active      →  H_eff += vvᵀ  (row i enters A_eff)
-#   slack of row i becomes free        →  H_eff -= vvᵀ  (row i leaves A_eff),  v = Zᵀ(row i of A)
+#   slack of row i becomes active      →  H_eff += vvᵀ  (row i enters A_eff; Thm. 6.2.4 (iii))
+#   slack of row i becomes free        →  H_eff -= vvᵀ  (row i leaves A_eff; Thm. 6.3.1 (v)),
+#                                         v = Zᵀ(row i of A)
 #
 # Column j of H_eff is assembled on demand from the column pool:
 #   u = a_j - a_rep(j) with the free rows zeroed,  H_eff[k, j] = (a_k - a_rep(k))ᵀ u  (k ∈ N),
@@ -106,7 +108,7 @@ function _hessian_column!(kkt::KKTSystem, pool::ColumnPool, j::Int)
     column_axpy!(u, -1.0, pool, r)
     # unmasked ‖u‖², used as the pivot scale of index j
     scale = column_dot(pool, j, u) - column_dot(pool, r, u)
-    # rows with a free slack are not part of A_eff: drop them from u (Cor. 3.3)
+    # rows with a free slack are not part of A_eff: drop them from u (thesis Cor. 5.2.3)
     masked = any_free(kkt.surplus)
     masked && _mask_rows!(u, kkt.surplus.row_free, pool, j, r)
     fill!(kkt.rep_dot_valid, false)
@@ -214,7 +216,7 @@ Assemble the rank-one vector of slack `σ` into `kkt.v_rows[1:nnz]`, `kkt.v_vals
     v = Zᵀ âᵢ,   v_k = (a_k)ᵢ - (a_rep(k))ᵢ   (k ∈ N),   i = row of σ,
 
 i.e. row `i` of `AZ`. Activating the slack adds `vvᵀ` to `H_eff`, freeing it subtracts `vvᵀ`
-(docs/qpas_inequality_extension.md, Thm. 4.1/4.2).
+(thesis Thm. 6.2.4 (iii), H_eff expansion, eq. 6.1; Thm. 6.3.1 (v), H_eff reduction, eq. 6.3).
 """
 function surplus_vector!(kkt::KKTSystem, pool::ColumnPool, σ::Int)
     return @timed_section kkt.timer :assemble _surplus_vector!(kkt, pool, σ)
@@ -280,8 +282,9 @@ min_pivot_ratio(kkt::KKTSystem) =
     refactor!(kkt, pool)
 
 Rebuild the factorization from scratch: reset to the identity and re-activate every index
-of `N` against the current row mask. Used for periodic refactorization and as a fallback when
-pivots degrade.
+of `N` against the current row mask. Used to undo a singular release or downdate (after `r`
+was moved back to `W` or the slack fixed again), for periodic refactorization, and as a
+fallback when pivots degrade.
 
 Indices are re-activated in increasing order: with CHOLMOD's natural ordering every
 `rowadd` then appends the last row of the factor (one triangular solve, no update of

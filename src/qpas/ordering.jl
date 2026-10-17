@@ -1,4 +1,5 @@
-# Column generation ordering [S, W, N] (thesis Theorem 4.2.3).
+# Column generation ordering [S, W, N] (thesis Def. 4.4.4, Extended ordering, and Thm. 4.4.5,
+# Reordering theorem; the slacks' split W_s / N_s is kept in `SurplusSet`).
 #
 #   S : list of representatives, one column per block (S[b] = rep[b])
 #   W : working set, columns fixed at zero
@@ -29,7 +30,7 @@ ColumnOrdering(n_blocks::Integer, capacity::Integer) =
     ColumnOrdering(zeros(Int, n_blocks), IndexSet(capacity), IndexSet(capacity),
                    fill(NOT_REGISTERED, capacity))
 
-"Representative `rep(j) = S[ψ(j)]` of column `j` (thesis eq. 4.28)."
+"Representative `rep(j) = S[ψ(j)]` of column `j` (thesis Def. 4.4.3, Representatives)."
 @inline representative(ord::ColumnOrdering, block::Vector{Int}, j::Integer) =
     @inbounds ord.rep[block[j]]
 
@@ -37,7 +38,7 @@ ColumnOrdering(n_blocks::Integer, capacity::Integer) =
 @inline in_W(ord::ColumnOrdering, j::Integer) = @inbounds ord.set_of[j] == IN_W
 @inline in_N(ord::ColumnOrdering, j::Integer) = @inbounds ord.set_of[j] == IN_N
 
-"Dimension of the nullspace, `|N| = n - p - |W|`."
+"Size of the column nullspace set, `|N| = n - p - |W|` (thesis `|N_x|`, the dimension of `H_eff`)."
 nullspace_dimension(ord::ColumnOrdering) = length(ord.N)
 
 function move_to_W!(ord::ColumnOrdering, j::Integer)
@@ -65,7 +66,7 @@ function make_representative!(ord::ColumnOrdering, block::Vector{Int}, j::Intege
     return ord
 end
 
-# ── surpluses of inequality rows (docs/qpas_inequality_extension.md) ──────────────────────
+# ── surpluses of inequality rows (thesis §2.4, Rem. 2.4.4; Def. 4.4.4) ─────────────────────
 #
 # Every inequality coupling row i gets one slack variable sσ ≥ 0 so that it becomes an equality
 #

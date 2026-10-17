@@ -1,7 +1,8 @@
 """
     HighsEliminatedQPMaster(; output = false)
 
-Stabilized restricted master problem in the *eliminated* form (thesis eq. 4.5/4.6), where
+Stabilized restricted master problem in the *eliminated* form (thesis Thm. 3.3.1, Eliminated
+regularized master problem, eq. 3.5 with c̃ from eq. 3.6), where
 `w = (b - AXλ)/δ` has been substituted, solved by HiGHS' QP solver on a persistent instance:
 
 ```
@@ -175,7 +176,7 @@ function solve!(m::HighsEliminatedQPMaster)
     copyto!(sol.weights, 1, m.col_value, 1, n)
     # recover π = π̂ + w with w = (b - AXλ)/δ from the primal λ
     coupling_product!(m.Ax, pool, m.col_value)
-    @. sol.π = m.center + (m.rhs - m.Ax) / δ              # thesis eq. 4.4
+    @. sol.π = m.center + (m.rhs - m.Ax) / δ              # thesis eq. 3.9 (dual estimate)
     copyto!(sol.μ, 1, m.row_dual, 1, m.n_blocks)
     # HiGHS' objective drops the constants of c̃, so the stabilized objective is rebuilt
     sol.objective = stabilized_objective(dot(view(pool.cost, 1:n), λ), sol.π, m.center, δ)

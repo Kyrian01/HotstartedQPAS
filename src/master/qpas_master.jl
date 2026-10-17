@@ -1,15 +1,17 @@
 """
     QPASMaster(; kwargs...)
 
-Stabilized restricted master problem in the eliminated form (thesis eq. 4.6), solved by the
-hot-started nullspace active-set method of thesis Chapter 4. The [`QPASState`](@ref) (iterate,
+Stabilized restricted master problem in the eliminated form (thesis eq. 3.5, written as eq. 4.1),
+solved by the hot-started nullspace active-set method of thesis Chapters 4–8 (Alg. 6.1,
+Hot-Started Nullspace Active-Set Method). The [`QPASState`](@ref) (iterate,
 working set, ordering and LDLᵀ factor of the reduced Hessian) is carried over between
 column generation iterations; a new column only joins the working set. The factor backend is
 `QPASOptions.factorization` (`:cholmod` or `:dense`).
 
 Coupling rows may be equalities, `≥` rows or `≤` rows (one finite bound). Every inequality row
 gets a slack variable, `aᵢᵀλ - sᵢ = ℓᵢ` or `aᵢᵀλ + sᵢ = uᵢ`, which makes the eliminated form
-valid again (docs/qpas_inequality_extension.md). Range rows with two different finite bounds
+valid again (thesis §2.4, Surplus Variables and the Unified Formulation; Rem. 2.4.4 for `≤`
+rows). Range rows with two different finite bounds
 are not supported.
 
 Keyword arguments are forwarded to [`QPASOptions`](@ref).
@@ -117,7 +119,7 @@ function solver_details(m::QPASMaster)
         "factorization backend" => LDLt.backend_name(st.kkt.factor),
         "factor updates (row add/del, rank-one)" => c.factor_updates,
         "refactorizations" => c.refactorizations,
-        "final |N| (nullspace dim.)" => nullspace_dimension(st.kkt.ordering),
+        "final |N_x| (dim. of H_eff)" => nullspace_dimension(st.kkt.ordering),
     ]
     # contents of the final factor: stored pattern vs numerically nonzero entries
     dg = qpas_diagnostics(st)

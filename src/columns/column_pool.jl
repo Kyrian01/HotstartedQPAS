@@ -8,7 +8,7 @@ extreme point (a path) of block `block[j]` and holds
 - its cost `c_j = cₖᵀ xⱼ`,
 - the path itself (edge indices) for solution recovery.
 
-`capacity` is the fixed maximum number of columns `n_max` (thesis §4.5.1); all solver
+`capacity` is the fixed maximum number of columns `n_max` (thesis §6.1, Fixed-length representation); all solver
 structures are sized against it so no resizing happens during column generation.
 """
 mutable struct ColumnPool

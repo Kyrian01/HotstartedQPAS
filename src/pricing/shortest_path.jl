@@ -1,8 +1,9 @@
 """
     ShortestPathPricer(instance)
 
-Pricing oracle of the crew scheduling master problem (thesis eq. 1.26). For pilot `k` and
-coupling duals `π`, it finds the source–sink path `x` minimising the reduced edge costs
+Pricing oracle of the crew scheduling master problem (thesis eq. 2.5, the pricing problem, as
+a shortest path problem in §9.1.1). For pilot `k` and coupling duals `π`, it finds the
+source–sink path `x` minimising the reduced edge costs
 
     (cₖ - A_taskᵀ π)ᵀ x
 

@@ -5,7 +5,8 @@ Column generation for the multi-block crew scheduling LP, with quadratic proxima
 stabilization and a hot-started nullspace active-set QP solver (QPAS) whose reduced-Hessian
 LDLᵀ factor is maintained by row updates: with CHOLMOD (sparse, fixed size `n_max`) or as a
 dense factor of the active block (`QPASOptions(factorization = :dense)`). Master's thesis of
-K. Bäumer, "Hot-Started Active-Set Method for Regularized Column Generation".
+K. Bäumer, "A Hot-Started Nullspace Active-Set Method for Regularized Column Generation with
+Equality and Inequality Linking Constraints" (`thesis/`).
 
 Solvers:
 

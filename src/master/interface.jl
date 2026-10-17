@@ -53,7 +53,7 @@ Result of one restricted master solve. The vectors are reused between iterations
 
 - `weights`: column weights `λ` (length = capacity; entries beyond the column count are 0)
 - `π`: coupling duals passed to pricing. For stabilized masters `π = π̂ + w`
-  (thesis eq. 4.4).
+  (thesis eq. 3.4 in Thm. 3.2.2).
 - `μ`: convexity duals, one per block
 - `objective`: master objective (including Big-M penalties or the proximal term)
 - `inner_iterations`: simplex / QP / active-set iterations of this solve
@@ -90,7 +90,12 @@ diagnostics(::AbstractMasterSolver; residual::Bool = false) = nothing
 set_center!(m::AbstractMasterSolver, ::AbstractVector) =
     throw(ArgumentError("$(method_name(m)) is not a stabilized master"))
 
-"Stabilized objective `cᵀλ + δ/2‖π‖² - δ/2‖π̂‖²` given `π = π̂ + (b - Aλ)/δ` (thesis eq. 4.3a)."
+"""
+Stabilized objective `cᵀλ + δ/2‖π‖² - δ/2‖π̂‖²` given the dual estimate `π = π̂ + (b - Āy)/δ`
+with `y = (λ, s)` and `Ā = [A K]`, i.e. `π = π̂ + (b - Aλ - Ks)/δ` where `K` places the slack
+sign `κσ = ∓1` of each inequality row (`π = π̂ + (b - Aλ)/δ` with equality rows only)
+(thesis Prop. 3.3.4, Objective value; dual estimate eq. 3.9).
+"""
 function stabilized_objective(cost_term::Float64, π::AbstractVector{Float64},
                               center::AbstractVector{Float64}, delta::Float64)
     return cost_term + 0.5 * delta * (sum(abs2, π) - sum(abs2, center))

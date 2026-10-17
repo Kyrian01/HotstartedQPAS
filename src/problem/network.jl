@@ -3,7 +3,8 @@
 
 Directed acyclic graph on nodes `1:n_nodes` whose nodes are numbered in topological order
 (`tail[e] < head[e]` for every edge `e`). Each pilot's schedule is a `source → sink` path
-(thesis §5.1.1). Outgoing edges are stored in CSR form for the pricing dynamic program.
+(thesis §9.1.1, The model). Outgoing edges are stored in CSR form for the pricing dynamic
+program.
 """
 struct FlowNetwork
     n_nodes::Int
@@ -54,7 +55,8 @@ n_edges(net::FlowNetwork) = length(net.tail)
 """
     incidence_matrix(net) -> SparseMatrixCSC
 
-Node-edge flow matrix `F` (thesis eq. 5.1b): `F[tail(e), e] = +1`, `F[head(e), e] = -1`.
+Node-edge flow matrix `F` (thesis eq. 9.1, flow constraint `F ξₖ = b⁽ᵏ⁾`):
+`F[tail(e), e] = +1`, `F[head(e), e] = -1`.
 """
 function incidence_matrix(net::FlowNetwork)
     E = n_edges(net)

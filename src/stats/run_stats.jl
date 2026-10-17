@@ -10,10 +10,10 @@ Per-iteration traces (all of equal length `iterations`):
 | `master_time`      | wall-clock seconds of the restricted master solve                       |
 | `pricing_time`     | wall-clock seconds of the pricing round                                 |
 | `master_objective` | objective of the restricted master (incl. Big-M / proximal terms)       |
-| `operational_cost` | `cᵀλ` of the master solution (the "Obj" column of the thesis tables)    |
+| `operational_cost` | `cᵀλ` of the master solution (its gap to z* is the thesis "cost error") |
 | `infeasibility`    | `‖violation of row_lower ≤ Aλ ≤ row_upper‖∞`                            |
 | `lower_bound`      | Lagrangian bound `θ(π)` (NaN if not all pilots were priced)             |
-| `dual_change`      | `‖πₖ - πₖ₋₁‖∞` (dual oscillation, thesis Fig. 5.5)                      |
+| `dual_change`      | `‖πₖ - πₖ₋₁‖∞` (dual oscillation, thesis Fig. 9.1, right)              |
 | `n_columns`        | columns in the master after the iteration                               |
 | `inner_iterations` | simplex / QP / active-set iterations of the master solve                |
 | `columns_added`    | columns added by the pricing round                                      |

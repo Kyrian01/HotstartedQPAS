@@ -40,7 +40,7 @@ max_iterations         = 100000
 max_columns            = 20000              # column capacity n_max (fixed-size structures)
 time_limit             = 600.0              # seconds per solver run (use inf for none)
 pricing                = "all_blocks"       # "first_improving": random pilot order, add the first
-                                            #   improving column (thesis); "all_blocks": one column
+                                            #   improving column (thesis Alg. 3.1); "all_blocks": one column
                                             #   per pilot (~2x faster on I3)
 reduced_cost_tolerance = 1e-6               # a column improves if its reduced cost < -tol
 center_tolerance       = 1e-6               # stabilized runs stop once ‖π − π̂‖∞ ≤ tol·max(1, ‖π‖∞)
@@ -63,11 +63,11 @@ max_iterations     = 100000   # active-set iterations per master solve
 step_tolerance     = 1e-10    # ‖p‖∞ below which the direction counts as zero
 dual_tolerance     = 1e-10    # optimal if all multipliers ≥ −tol · max(1, max|c|)
 ratio_tolerance    = 1e-14    # direction components ≥ −tol are ignored in the ratio test
-singular_tolerance = 1e-10    # relative pivot below which the reduced Hessian is singular
+singular_tolerance = 1e-10    # scaled pivot D[k]/‖a_k - a_rep(k)‖² below which H_eff is singular
 check_pivots       = true     # inspect pivots after expansions
 factorization      = "dense"  # LDLᵀ backend: "dense" (active block |N| × |N| only, 2–5x faster
-                              #   master; docs/dense_ldlt_backend.md) or "cholmod" (sparse,
-                              #   n_max × n_max, the thesis method)
+                              #   master; thesis Ch. 8) or "cholmod" (sparse,
+                              #   n_max × n_max, thesis Ch. 6)
 refactor_interval  = 150      # cholmod: rebuild the factor every this many updates (0 = never)
 dense_refactor_interval = 0   # dense: rebuild every this many updates (0 = never; not needed)
 sparse_solves      = true     # solve only on the nullspace set N (cost independent of n_max)
@@ -107,7 +107,7 @@ save_instance = false         # also save the generated instance (instance.jls)
 #  results/summary.csv collects one row per experiment and solver for all of them.
 # ══════════════════════════════════════════════════════════════════════════════════════════
 
-# ── A: thesis instances (sizes as in thesis Table 5.1), exact LP as reference ───────────
+# ── A: thesis instances (sizes as in thesis Table 9.1), exact LP as reference ───────────
 
 [[experiment]]
 name = "I1"                   # small: every solver, finishes in seconds
@@ -219,7 +219,7 @@ factorization = "dense"
 # ── C: pricing rule (compare with I3, which uses the default all_blocks) ─────────────────
 
 [[experiment]]
-name = "I3_first_improving"   # thesis Alg. 1.3: one column per master solve
+name = "I3_first_improving"   # thesis Alg. 3.1: one column per master solve
 [experiment.instance]
 n_nodes          = 175
 edge_probability = 0.091

@@ -6,8 +6,8 @@ QPAS needs:
 
 - a simplicial LDLᵀ factor in natural ordering that starts as the identity,
 - in-place symmetric row/column modifications with `cholmod_l_rowadd` / `cholmod_l_rowdel`
-  (thesis §4.4.3), and rank-one updates/downdates with `cholmod_l_updown` (inequality rows,
-  `docs/qpas_inequality_extension.md` §4.3),
+  (thesis §6.4.1, Row additions and deletions), and rank-one updates/downdates with
+  `cholmod_l_updown` (inequality rows, thesis §6.4.2, Rank-one modifications),
 - repeated solves with `cholmod_l_solve2`, whose workspace is allocated once and reused.
 
 File layout:

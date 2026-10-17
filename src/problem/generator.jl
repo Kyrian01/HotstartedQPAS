@@ -1,4 +1,4 @@
-# Random instance generator for the crew scheduling LP (thesis §5.2.3).
+# Random instance generator for the crew scheduling LP (thesis §9.1.2, Instance generator).
 #
 # Pipeline:
 #   1. `generate_network`       : time-ordered DAG = backbone chain i → i+1 plus random skip edges

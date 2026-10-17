@@ -2,7 +2,7 @@
     HighsLPMaster(; big_m = 1e4, output = false)
 
 Classical (unstabilized) LP restricted master problem solved by a persistent HiGHS instance
-(thesis Alg. 5.1). New columns are appended with `Highs_addCols`, so every solve
+(thesis Alg. 2.1, Classical Column Generation; setup in §9.2). New columns are appended with `Highs_addCols`, so every solve
 warm-starts from the previous simplex basis.
 
 ```

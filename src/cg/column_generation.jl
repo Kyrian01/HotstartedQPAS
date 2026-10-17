@@ -1,6 +1,6 @@
-# Column generation driver (thesis Alg. 1.3 for the LP master, Alg. 4.1 for the regularized
-# master). The driver is independent of how the restricted master is solved: it talks to an
-# `AbstractMasterSolver` through the interface in `src/master/interface.jl`.
+# Column generation driver (thesis Alg. 2.1, Classical Column Generation, for the LP master;
+# Alg. 3.1, Regularized Column Generation, for the regularized masters). The driver is
+# independent of how the restricted master is solved: it talks to an `AbstractMasterSolver` through the interface in `src/master/interface.jl`.
 
 """
     solve_column_generation(instance, master; options = CGOptions()) -> CGResult
@@ -60,7 +60,10 @@ function solve_column_generation(inst::CrewSchedulingInstance, master::AbstractM
     if stabilized
         set_center!(master, center)
         if stab.center_update === :best_bound
-            center_value = lagrangian_bound(pricer, center, lo, hi, P)
+            # θ(π̂⁺) at the projected center (thesis §3.4.3), like the bound of the master
+            # duals below: a wrong-signed entry of a user-supplied center would give -Inf
+            center_value = lagrangian_bound(pricer, project_duals!(similar(center), center, lo, hi),
+                                            lo, hi, P)
         end
     end
 

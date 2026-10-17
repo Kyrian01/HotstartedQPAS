@@ -10,8 +10,9 @@ active indices, packed into *slots* `1:k` in the order they were activated:
 where slot `s` holds index `index[s]` (`slot[index[s]] = s`). Every other index of the `n × n`
 matrix `M` is an identity row and is not stored.
 
-Because `|N| ≤ rank(A_eff) ≤ m` (the reduced Hessian stays positive definite), the factor
-never exceeds `m × m`, independent of the column capacity `n_max`. In the crew scheduling
+Because `|N| ≤ rank(A_eff) ≤ m` while the reduced Hessian is positive definite, plus one
+dependent index that is appended before a singular release is undone, the factor never exceeds
+`(m+1) × (m+1)`, independent of the column capacity `n_max`. In the crew scheduling
 instances `H_eff` is ≈ 100 % dense, so a dense factor stores nothing a sparse one would not,
 and it never accumulates structural zeros.
 
@@ -264,7 +265,8 @@ end
 `M ← M + vvᵀ` (`update`) or `M ← M - vvᵀ`, `v = (rows, vals)[1:nnz]` on active indices.
 Method C1 runs from the first slot where `v` is nonzero (earlier columns are unchanged).
 Returns `false` as soon as a downdated pivot is `≤ 0`; the factor is then invalid and must be
-rebuilt by the caller, exactly as with the CHOLMOD backend.
+rebuilt by the caller. (The CHOLMOD backend does not detect this; there, the caller's pivot
+test catches it.)
 """
 function updown!(F::DenseLDLtFactor, update::Bool, rows::AbstractVector{<:Integer},
                  vals::AbstractVector{Float64}, nnz::Integer)

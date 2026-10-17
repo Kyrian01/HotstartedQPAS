@@ -9,7 +9,7 @@ Settings of the hot-started active-set solver.
 | `step_tolerance`      | 1e-10    | `‖p‖∞` below which the search direction is treated as zero                  |
 | `dual_tolerance`      | 1e-10    | multipliers `λⱼ ≥ -dual_tolerance ⋅ max(1, maxⱼ|cⱼ|)` are accepted          |
 | `ratio_tolerance`     | 1e-14    | components `pⱼ ≥ -ratio_tolerance` are ignored in the ratio test            |
-| `singular_tolerance`  | 1e-10    | relative pivot `D[k]/H[k,k]` below which the reduced Hessian is singular    |
+| `singular_tolerance`  | 1e-10    | scaled pivot `D[k]/‖a_k - a_rep(k)‖²` (unmasked norm) below which the reduced Hessian is singular |
 | `check_pivots`        | true     | also inspect the pivots after expansions (rebuild the factor if one decays) |
 | `factorization`       | :cholmod | LDLᵀ backend of the reduced Hessian: `:cholmod` or `:dense`, see below      |
 | `refactor_interval`   | 150      | CHOLMOD: rebuild the factor after this many updates (0 = never), see below  |
@@ -20,9 +20,9 @@ Settings of the hot-started active-set solver.
 Backends (`src/backends/ldlt_interface.jl`, `docs/dense_ldlt_backend.md`):
 
 - `:cholmod`: sparse simplicial LDLᵀ of fixed size `n_max × n_max` (identity outside `N`),
-  updated with `cholmod_l_rowadd` / `rowdel` / `updown` (the thesis method);
-- `:dense`: dense LDLᵀ of the active block only (`|N| × |N|`, `|N| ≤ m`), new indices are
-  appended, deletions compact the factor.
+  updated with `cholmod_l_rowadd` / `rowdel` / `updown` (thesis Ch. 6);
+- `:dense`: dense LDLᵀ of the active block only (`|N| × |N|`, `|N| ≤ m+1`), new indices are
+  appended, deletions compact the factor (thesis Ch. 8).
 
 Why periodic refactorization (CHOLMOD): `cholmod_rowdel` zeroes a row/column numerically but
 leaves its entries in the sparsity pattern of `L`. Over thousands of working-set updates these
@@ -69,13 +69,14 @@ Event counters of the active-set solver (per solve and cumulative).
 
 - `iterations`: active-set iterations (direction computations + multiplier checks)
 - `steps`, `full_steps`: primal steps taken, and those with `α = 1`
-- `expansions`: blocking constraints added to W (thesis §4.4.1)
+- `expansions`: blocking constraints added to W (thesis §6.2, Expanding the working set)
 - `representative_swaps`: expansions where the blocking index was a representative
-- `reductions`: constraints released from W (thesis §4.4.2)
+- `reductions`: constraints released from W (thesis §6.3, Reducing the working set)
 - `slack_expansions`, `slack_reductions`: of the expansions/reductions, those of an
   inequality-row slack (rank-one update/downdate of `H_eff`)
 - `singular_steps`: zero-curvature steps taken because the reduced Hessian would become
-  singular (thesis §4.4.5)
+  singular (thesis Ch. 7: Prop. 7.1.1, Singular reductions; Thm. 7.3.1 / 7.3.2,
+  zero-curvature directions for a released column / surplus)
 - `factor_updates`: factor row additions + deletions + rank-one updates
 - `refactorizations`: rebuilds of the factor from scratch
 """

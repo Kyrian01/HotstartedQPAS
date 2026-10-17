@@ -1,8 +1,9 @@
-# State of the hot-started active-set solver (thesis §4.5).
+# State of the hot-started active-set solver (thesis §6.6, Hot Start Between Column Generation
+# Iterations; Alg. 6.1, Hot-Started Nullspace Active-Set Method).
 #
 # The QP solved at every column generation iteration is the eliminated regularized master
-# problem (thesis eq. 4.6), extended by one slack sσ per inequality coupling row
-# (docs/qpas_inequality_extension.md, eq. 2.1). With y = [x; s] and Ā = [A  K] (K places κσ in
+# problem (thesis eq. 3.5, written as eq. 4.1 in §4.1), with one slack sσ per inequality
+# coupling row (thesis §2.4, Surplus Variables and the Unified Formulation). With y = [x; s] and Ā = [A  K] (K places κσ in
 # the row of slack σ):
 #
 #     min  1/(2δ) yᵀĀᵀĀy + c̃ᵀy,   c̃ = [c; 0] - Āᵀ(π̂ + b/δ),   s.t.  Cx = 1,  x ≥ 0,  s ≥ 0.
@@ -13,8 +14,8 @@
 #
 # i.e. g_j = c_j - a_jᵀπ is the reduced cost of column j without the convexity dual, the
 # gradient of slack σ is g_σ = -κσ πᵢ (the dual of its row up to sign), and π is exactly the
-# dual vector passed to pricing (thesis eq. 4.4). The solver therefore maintains the m-vector π
-# instead of the gradient and evaluates g_j = c_j - a_jᵀπ only where it is needed:
+# dual vector passed to pricing (thesis Def. 3.3.2, Dual estimate, eq. 3.9). The solver
+# therefore maintains the m-vector π instead of the gradient and evaluates g_j = c_j - a_jᵀπ only where it is needed:
 #
 #   - on N ∪ S to build the reduced right-hand side (O((|N| + p)·nnz)),
 #   - on W only when checking multipliers at a subspace minimizer (O(nnz(A))).
@@ -108,8 +109,8 @@ end
 """
     register_columns!(state)
 
-Hot start (thesis §4.5.2): columns appended to the pool since the last call enter the working
-set with weight 0. Neither the nullspace basis nor the factor changes.
+Hot start (thesis Thm. 6.6.1, Hot start, case (i)): columns appended to the pool since the
+last call enter the working set with weight 0. Neither the nullspace basis nor the factor changes.
 """
 function register_columns!(st::QPASState)
     ord = st.kkt.ordering
@@ -145,7 +146,10 @@ end
 @inline surplus_gradient(st::QPASState, σ::Integer) =
     @inbounds -st.kkt.surplus.sign[σ] * st.π[st.kkt.surplus.row[σ]]
 
-"Convexity duals `μ_b = g_rep(b)` (thesis Theorem 4.3.5: μ = h_S, and h = g at p = 0)."
+"""
+Convexity duals `μ_b = g_rep(b)` (thesis Thm. 5.3.1, Lagrange multipliers: `μ = h_S`, and
+`h = g` at `p = 0`; Cor. 5.3.2, Multipliers at a subspace minimizer).
+"""
 function update_convexity_duals!(st::QPASState)
     ord = st.kkt.ordering
     @inbounds for b in eachindex(ord.rep)
@@ -158,9 +162,9 @@ end
     masked_duals!(state) -> (π_eff, μ_eff)
 
 The duals entering the right-hand side of the effective reduced system
-(docs/qpas_inequality_extension.md, eq. 3.6): `π` with the rows of free slacks set to zero,
-and the convexity duals `μ_b = c_rep(b) - a_rep(b)ᵀπ_eff` computed from it. Without free slacks
-this is `(π, μ)` itself.
+(thesis Cor. 5.2.3, Effective linking matrix, eq. 5.10): `π` with the rows of free slacks set
+to zero, and the convexity duals `μ_b = c_rep(b) - a_rep(b)ᵀπ_eff` computed from it. Without
+free slacks this is `(π, μ)` itself.
 """
 function masked_duals!(st::QPASState)
     sp = st.kkt.surplus

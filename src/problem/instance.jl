@@ -1,7 +1,7 @@
 """
     CrewSchedulingInstance
 
-LP relaxation of the multi-pilot crew scheduling problem (thesis eq. 5.2):
+LP relaxation of the multi-pilot crew scheduling problem (thesis eq. 9.1, §9.1.1 The model):
 
 ```
 min  Σₖ cₖᵀ xₖ

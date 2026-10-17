@@ -1,6 +1,7 @@
 # `LDLtFactor`: fixed-size, updatable LDLᵀ factorization backed by CHOLMOD.
 #
-# Thesis §4.4.3 / §4.5.1: the reduced Hessian is stored as an n_max × n_max symmetric matrix that
+# Thesis §6.4 (Updating the LDLᵀ factorization) / §6.1 (Fixed-length representation, Def. 6.1.1):
+# the (effective) reduced Hessian is stored as an n_max × n_max symmetric matrix that
 # equals the identity on all inactive indices. Activating index k (moving it into the nullspace
 # set N) is a `rowadd`, deactivating it is a `rowdel`. The factor uses CHOLMOD's natural ordering
 # (no fill-reducing permutation), so index k of the factor is index k of the reduced Hessian.
@@ -143,7 +144,9 @@ Set row and column `k` of the factorized matrix to the sparse vector given by th
 entries of `rows` (1-based, any order, must include `k` itself) and `vals`, and update the
 factorization in place. Row/column `k` must currently be an identity row.
 
-Returns `true` if CHOLMOD reports the updated matrix as numerically positive definite.
+Returns `true` unless CHOLMOD flags the result as not positive definite. In practice
+`cholmod_l_rowadd` does not check definiteness (a negative new pivot is returned with `true`),
+so callers must test the pivots themselves (`min_scaled_pivot`).
 """
 function rowadd!(F::LDLtFactor, k::Integer, rows::AbstractVector{<:Integer},
                  vals::AbstractVector{Float64}, nnz::Integer)
@@ -187,7 +190,9 @@ otherwise, where `v` is the sparse vector given by the first `nnz` entries of `r
 (1-based, any order, no duplicates) and `vals`. The factor is updated in place.
 
 Returns `false` if CHOLMOD reports that a downdate lost positive definiteness; the factor is
-then unusable and must be rebuilt by the caller.
+then unusable and must be rebuilt by the caller. In practice `cholmod_l_updown` does not check
+definiteness and returns success with a negative pivot, so callers must test the pivots
+themselves (`min_scaled_pivot`); the solver does so after every downdate.
 """
 function updown!(F::LDLtFactor, update::Bool, rows::AbstractVector{<:Integer},
                  vals::AbstractVector{Float64}, nnz::Integer)
@@ -206,7 +211,7 @@ function updown!(F::LDLtFactor, update::Bool, rows::AbstractVector{<:Integer},
     flag = update ? CHOLMOD_TRUE : CHOLMOD_FALSE
     ret = GC.@preserve F cholmod_l_updown(flag, F.C, F.L, cp)
     st = status(F.common)
-    # a downdate that destroys positive definiteness is reported as a warning, not a failure
+    # CHOLMOD_NOT_POSDEF would be a warning, not a failure (in practice updown does not check)
     ret == CHOLMOD_TRUE || st == CHOLMOD_NOT_POSDEF || throw(CholmodError("cholmod_l_updown", st))
     return ret == CHOLMOD_TRUE && st != CHOLMOD_NOT_POSDEF
 end

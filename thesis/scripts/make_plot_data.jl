@@ -191,7 +191,7 @@ open(joinpath(DATA, "tab_qpas_counters.tex"), "w") do io
                           g("singular-Hessian steps"),
                           tex_int(num(g("factor updates (row add/del, rank-one)"))),
                           (refs == "" ? "--" : tex_int(num(refs))) * " / " * g("refactorizations"),
-                          g("final |N| (nullspace dim.)"),
+                          g("final |N_x| (dim. of H_eff)"),
                           nfree == "" ? "--" : nfree], " & "), " \\\\")
     end
 end

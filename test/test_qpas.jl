@@ -38,7 +38,7 @@ function _highs_reference(pool, b, δ, center)
     return (objective = sol.objective, π = copy(sol.π), μ = copy(sol.μ))
 end
 
-# Reference with inequality rows lo ≤ AXλ ≤ hi: the explicit form (thesis eq. 4.3) in HiGHS.
+# Reference with inequality rows lo ≤ AXλ ≤ hi: the explicit form (thesis Def. 3.2.1, eq. 3.3) in HiGHS.
 function _highs_ineq_reference(pool, lo, hi, δ, center)
     spec = HQ.MasterSpec(lo, hi, pool.n_blocks, pool.capacity, δ)
     master = HighsExplicitQPMaster()
@@ -162,7 +162,7 @@ end
         @test HQ.nullspace_dimension(st.kkt.ordering) <= m
     end
 
-    # Constructed hot-start cases that force a dependent nullspace column (thesis §4.4.5).
+    # Constructed hot-start cases that force a dependent nullspace column (thesis Ch. 7, Prop. 7.1.1 / Thm. 7.3.1).
     # One block; rep a₁ = 0, a₂ = e₁, a₃ = e₂. After the first solve N = {2, 3} at π = 0.
     # Column 4 with a₄ = s·(e₁ + e₂) = s·(u₂ + u₃) and negative cost then enters dependent.
     #   s = 1   : d = z₄ - z₂ - z₃ raises the representative; an N-column blocks.

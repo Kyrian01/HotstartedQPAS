@@ -18,8 +18,8 @@ _status(r::ExactResult) = r.status
 """
     compare_results(results...; reference = nothing, io = stdout)
 
-Print a comparison table in the style of thesis Table 5.5: iterations, total time, average
-master and pricing time, total inner (simplex / QP / active-set) iterations, objective, and
+Print a comparison table in the style of thesis Tables 9.2 / 9.3 (all methods, equality /
+inequality variant): iterations, total time, average master and pricing time, total inner (simplex / QP / active-set) iterations, objective, and
 the gap `objective - reference` to the reference objective (e.g. the exact LP).
 """
 function compare_results(results::AnyResult...; reference = nothing, io::IO = stdout)

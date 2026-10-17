@@ -7,7 +7,7 @@
 """
     stacked_constraint_matrix(network, task_matrix, n_pilots) -> SparseMatrixCSC
 
-Constraint matrix of the direct formulation (thesis eq. 5.2):
+Constraint matrix of the direct formulation (thesis eq. 9.1, §9.1.1 The model):
 
 ```
 [ A_task  A_task  ⋯  A_task ]

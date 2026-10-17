@@ -8,7 +8,7 @@ backend is a configuration choice (`QPASOptions(factorization = …)`):
 | backend   | type                         | storage                                                  |
 |:----------|:-----------------------------|:---------------------------------------------------------|
 | `:cholmod`| `Cholmod.LDLtFactor`         | sparse simplicial LDLᵀ of fixed size `n_max × n_max`, identity outside `N` |
-| `:dense`  | `DenseLDLt.DenseLDLtFactor`  | dense LDLᵀ of the active block only, `|N| × |N|` (`|N| ≤ m`) |
+| `:dense`  | `DenseLDLt.DenseLDLtFactor`  | dense LDLᵀ of the active block only, `|N| × |N|` (`|N| ≤ m+1`) |
 
 Both represent a symmetric `n × n` matrix `M` (`n = n_max`) that equals the identity on every
 inactive index. The operations, with `k` an index in `1:n`:
@@ -17,7 +17,8 @@ inactive index. The operations, with `k` an index in `1:n`:
   vector, which may only couple `k` to active indices; `k` becomes active
 - `rowdel!(F, k)`: row/column `k` becomes the identity again; `k` becomes inactive
 - `updown!(F, update, rows, vals, nnz) -> Bool`: `M ± vvᵀ` with `v` supported on active indices;
-  `false` if a downdate lost positive definiteness (the factor must then be rebuilt)
+  `false` if a downdate is detected to lose positive definiteness (the factor must then be
+  rebuilt); only the dense backend detects this, so callers also test the pivots
 - `solve!(F)`, `solve!(F, pattern, npattern)`: solve with `rhs_buffer(F)`
 - `pivot(F, k)`, `min_scaled_pivot(F, indices, scale)`: the diagonal `D`
 - `reset!(F)`: back to the identity

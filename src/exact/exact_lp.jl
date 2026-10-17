@@ -1,7 +1,7 @@
 """
     ExactResult
 
-Solution of the direct edge-based LP relaxation (thesis eq. 5.2 with `0 ≤ x ≤ 1`).
+Solution of the direct edge-based LP relaxation (thesis eq. 9.1, the crew scheduling model of §9.1.1, with `0 ≤ x ≤ 1`).
 
 - `objective`: optimal value
 - `flows`: `n_edges × n_pilots` edge flows (column `k` is pilot `k`)

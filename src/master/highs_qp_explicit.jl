@@ -2,7 +2,8 @@
     HighsExplicitQPMaster(; output = false)
 
 Stabilized restricted master problem in the *explicit* form that keeps the auxiliary
-variable `w` (thesis eq. 4.3, "explicit QP formulation"), solved by HiGHS' QP solver on a
+variable `w` (thesis Def. 3.2.1, Explicit regularized master
+problem, eq. 3.3), solved by HiGHS' QP solver on a
 persistent instance:
 
 ```
@@ -140,7 +141,7 @@ function solve!(m::HighsExplicitQPMaster)
     # columns are [w; λ]: λ starts after the T w-columns
     copyto!(sol.weights, 1, m.col_value, T + 1, n)
     @inbounds for i in 1:T
-        sol.π[i] = m.center[i] + m.col_value[i]           # π = π̂ + w   (thesis eq. 4.4)
+        sol.π[i] = m.center[i] + m.col_value[i]           # π = π̂ + w   (thesis eq. 3.4)
     end
     copyto!(sol.μ, 1, m.row_dual, T + 1, P)
     sol.objective = model_objective(model)                # = cᵀλ + δ/2‖w+π̂‖² - δ/2‖π̂‖²

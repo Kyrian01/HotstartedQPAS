@@ -1,9 +1,10 @@
-# Active-set method with efficient working-set updates (thesis Alg. 4.3), extended to
-# inequality coupling rows (docs/qpas_inequality_extension.md, Alg. 4.4).
+# Active-set method with efficient working-set updates, including inequality coupling rows
+# (thesis Alg. 6.1, Hot-Started Nullspace Active-Set Method; one iteration is Alg. 5.1, the
+# singular case Alg. 7.1).
 #
 #   repeat
 #       if not at a subspace minimizer:
-#           solve H_eff y = -δ Zᵀg̃, p_x = Zy, p_s from (3.7)        (compute_direction!)
+#           solve H_eff y = -δ Zᵀg̃, p_x = Zy, p_s from eq. 5.8 / Rem. 5.3.3   (compute_direction!)
 #       if ‖p‖ ≈ 0 (subspace minimizer):
 #           λⱼ = gⱼ - μ_ψ(j) on W_x, λσ = -κσ πᵢ on W_s;
 #           if min λ ≥ -tol → optimal                               (most_negative_multiplier)
@@ -48,7 +49,7 @@ function qpas_solve!(st::QPASState)
         end
 
         if at_minimizer
-            # subspace minimizer: KKT multipliers of the working set (thesis Thm. 4.3.5)
+            # subspace minimizer: KKT multipliers of the working set (thesis Cor. 5.3.2)
             λmin, r, is_slack = @timed_section timer :multipliers most_negative_multiplier(st)
             if r == 0 || λmin >= -opts.dual_tolerance * st.cost_scale
                 status = :optimal
@@ -67,7 +68,7 @@ function qpas_solve!(st::QPASState)
             clear_direction!(st)
             ctr.steps += 1
             if q == 0
-                # α = 1: minimizer on the current subspace (Prop. 2 of the notes)
+                # α = 1: minimizer on the current subspace (thesis Prop. 5.2.6, Full step)
                 ctr.full_steps += 1
                 at_minimizer = true
             elseif q_slack
@@ -90,8 +91,8 @@ end
 """
     compute_direction!(state) -> ‖p‖∞
 
-Solve the reduced KKT system and expand the direction (thesis eq. 4.32, extended by
-docs/qpas_inequality_extension.md, Thm. 3.2):
+Solve the reduced KKT system and expand the direction (thesis Thm. 5.2.2, Decoupling of the
+reduced system, eqs. 5.7–5.8, and §5.2.4, The search direction):
 
 - column part: `H_eff y = -δ Zᵀ(c - A_effᵀπ_eff)`, i.e. the right-hand side uses the duals
   with the rows of free slacks zeroed. With `zⱼ = eⱼ - e_rep(j)`: `pⱼ = yⱼ`, `p_rep(j) -= yⱼ`;
@@ -129,7 +130,7 @@ function compute_direction!(st::QPASState)
         end
     end
     if any_free(sp)
-        # slack part (eq. 3.7): p_σ = κσ (δπᵢ - (A p_x)ᵢ)
+        # slack part (thesis Rem. 5.3.3, "≤" rows): p_σ = κσ (δπᵢ - (A p_x)ᵢ)
         _column_product!(st, 0)
         @inbounds for σ in items(sp.free)
             i = sp.row[σ]
@@ -267,7 +268,7 @@ function take_step!(st::QPASState, α::Float64, extra::Int, extra_s::Int)
         _step_slack!(st, sp, σ, α)
     end
     extra_s != 0 && _step_slack!(st, sp, extra_s, α)
-    # π is affine in y (eq. 1.6): π -= (α/δ) Āp
+    # π is affine in y (thesis eq. 3.9, Dual estimate): π -= (α/δ) Āp
     scale = α / st.delta
     @inbounds for i in eachindex(st.π)
         st.π[i] -= scale * Ap[i]
@@ -296,8 +297,9 @@ end
 """
     most_negative_multiplier(state) -> (λmin, r, r_is_slack)
 
-At a subspace minimizer `h = g`, so by thesis Theorem 4.3.5 (and its extension, Thm. 3.6 of
-the inequality notes) `μ = g_S` and
+At a subspace minimizer `h = g`, so by thesis Thm. 5.3.1 (Lagrange multipliers) and
+Cor. 5.3.2 (Multipliers at a subspace minimizer) `μ = g_S` and the bound multipliers (thesis
+`ν_x`, `ν_s`) are
 
 - `λⱼ = gⱼ - μ_ψ(j)` for columns `j ∈ W_x`: the reduced cost of column `j`;
 - `λσ = g_σ = -κσ πᵢ` for slacks `σ ∈ W_s`: the dual of row `i`, signed so that `λσ ≥ 0`
@@ -329,12 +331,14 @@ end
 """
     expand_working_set!(state, q)
 
-Add the blocking column `q` to the working set (thesis §4.4.1, Lemma 4.4.1):
+Add the blocking column `q` to the working set (thesis §6.2, Expanding the working set;
+Lemma 6.2.2, Existence of a replacement):
 
 - `q ∈ N`: delete row/column `q` from the factor.
 - `q ∈ S`: pick a replacement representative `r` among the N-columns of the same block (the
   one with the largest weight), and refresh every affected column `j ∈ ν` of the factor,
-  since `zⱼ` changes from `eⱼ - e_q` to `eⱼ - e_r` (thesis Theorem 4.4.2, eq. 4.58).
+  since `zⱼ` changes from `eⱼ - e_q` to `eⱼ - e_r` (thesis Thm. 6.2.3 (ii), Update of the
+  nullspace basis; Thm. 6.2.4 (ii), Update of the effective reduced Hessian, expansion).
 """
 function expand_working_set!(st::QPASState, q::Int)
     kkt = st.kkt
@@ -387,12 +391,13 @@ end
 """
     reduce_working_set!(state, r)
 
-Release column `r` (negative multiplier) from the working set into `N` (thesis §4.4.2) by
-adding row/column `r` to the factor.
+Release column `r` (negative multiplier) from the working set into `N` (thesis §6.3, Reducing the
+working set; Thm. 6.3.1 (iv)) by adding row/column `r` to the factor.
 
 If the new column `A_eff z_r` depends on the columns of `A_eff Z`, the effective reduced
-Hessian becomes singular (thesis §4.4.5); this shows up as a vanishing LDLᵀ pivot right after
-the `rowadd`. The update is then undone (refactorization without `r`), and with `t = H⁻¹h` the
+Hessian becomes singular (thesis Prop. 7.1.1 (i), Singular reductions; the step below is
+Thm. 7.3.1, Zero-curvature direction, column, and Alg. 7.1); this shows up as a vanishing
+LDLᵀ pivot right after the `rowadd`. The update is then undone (refactorization without `r`), and with `t = H⁻¹h` the
 direction `d = z_r - Σ tₖ zₖ` (plus the slack components that keep `Ād = 0`) satisfies
 `Ād = 0` and `gᵀd = λ_r < 0`: a zero-curvature descent direction. The solver steps along `d`
 until a variable blocks, adds that index to `W` (which removes the dependency), and retries.
@@ -510,8 +515,9 @@ end
     expand_surplus!(state, σ)
 
 The free slack `σ` reached zero and enters the working set (`N_s → W_s`). Its row joins
-`A_eff`, so `H_eff ← H_eff + vvᵀ` with `v = Zᵀâᵢ` (docs/qpas_inequality_extension.md,
-Thm. 4.1). An update cannot destroy positive definiteness.
+`A_eff`, so `H_eff ← H_eff + vvᵀ` with `v = Zᵀâᵢ` (thesis Thm. 6.2.4 (iii), Update of the
+effective reduced Hessian, expansion; eq. 6.1). An update cannot destroy positive
+definiteness.
 """
 function expand_surplus!(st::QPASState, σ::Int)
     kkt = st.kkt
@@ -530,12 +536,15 @@ end
     reduce_surplus!(state, σ)
 
 Release slack `σ` (negative multiplier `-κσ πᵢ < 0`) from the working set (`W_s → N_s`). Its
-row leaves `A_eff`, so `H_eff ← H_eff - vvᵀ` (Thm. 4.2).
+row leaves `A_eff`, so `H_eff ← H_eff - vvᵀ` (thesis Thm. 6.3.1 (v), Update of the effective
+reduced Hessian, reduction; eq. 6.3).
 
-The downdate is singular exactly when `vᵀH_eff⁻¹v = 1` (§4.5); this shows up as a vanishing
+The downdate is singular exactly when `vᵀH_eff⁻¹v = 1` (thesis Prop. 7.1.1 (ii), Singular
+reductions); this shows up as a vanishing
 pivot. The update is then undone (refactorization with the row kept), and with
 `t = H_eff⁻¹v` the direction `d_x = -κσ Σ tₖ zₖ` with slack components `-κ (A d_x)` on the free
-rows and on row `i` has `Ād = 0`, `d_σ = 1` and `gᵀd = λσ < 0` (Remark 4.5): the solver steps
+rows and on row `i` has `Ād = 0`, `d_σ = 1` and `gᵀd = λσ < 0` (thesis Thm. 7.3.2, Zero-curvature direction, surplus, with the
+sign `κ` of Rem. 7.3.3): the solver steps
 along it until a variable blocks, adds that variable to the working set and retries.
 """
 function reduce_surplus!(st::QPASState, σ::Int)
@@ -604,6 +613,12 @@ function _check_factor!(st::QPASState)
     due = interval > 0 && kkt.updates_since_refactor >= interval
     if due || (opts.check_pivots && min_pivot_ratio(kkt) < opts.singular_tolerance)
         _refactor!(st)
+        # A rebuild cannot raise a pivot that is small in exact arithmetic. This happens only if
+        # a representative swap made H_eff itself nearly singular (the re-appended rows get new
+        # vectors and scales); later releases would then fail the pivot test spuriously.
+        if opts.check_pivots && min_pivot_ratio(kkt) < opts.singular_tolerance
+            @warn "QPAS: pivot invariant violated after a rebuild; H_eff is nearly singular" maxlog = 1
+        end
     end
     return nothing
 end

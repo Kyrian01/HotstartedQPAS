@@ -1,14 +1,17 @@
 """
     StabilizationOptions(; delta = 1.0, center_update = :every_iteration)
 
-Quadratic proximal stabilization (thesis §2.3, Chapter 4).
+Quadratic proximal stabilization (thesis Chapter 3: §3.1 Proximal Stabilization of the Dual,
+§3.4.1 Center updates).
 
 - `delta`: proximal parameter `δ > 0` (larger = stronger stabilization)
 - `center_update`:
-  - `:every_iteration`: `π̂ ← π` after every master solve (proximal point method)
-  - `:best_bound`: `π̂ ← π` only when the Lagrangian bound improves, i.e. the stability
-    center is the best dual point found so far (bundle method, thesis §2.3.1). This needs the
-    bound at every iteration, so all pilots are priced every iteration.
+  - `:every_iteration`: `π̂ ← π` after every master solve (proximal point rule)
+  - `:best_bound`: in iterations that add columns, `π̂ ← π` only when the Lagrangian bound
+    `θ(π⁺)` improves, i.e. the stability center is the best dual point found so far (bundle
+    rule, thesis §3.4.1 Center updates). This needs the bound at every iteration, so all
+    pilots are priced every iteration. In iterations without a new column the center always
+    moves (center-only iteration, as in thesis Alg. 3.1), unless the run has converged.
 - `initial_center`: starting `π̂` (`nothing` = zero vector)
 """
 Base.@kwdef struct StabilizationOptions
@@ -25,11 +28,11 @@ Settings of [`solve_column_generation`](@ref).
 | field                 | default            | meaning                                                         |
 |:----------------------|:-------------------|:----------------------------------------------------------------|
 | `max_iterations`      | 100_000            | maximum number of CG iterations                                 |
-| `max_columns`         | 20_000             | column capacity `n_max` (fixed-size structures, thesis §4.5.1)  |
+| `max_columns`         | 20_000             | column capacity `n_max` (fixed-size structures, thesis §6.1)    |
 | `time_limit`          | `Inf`              | wall-clock limit in seconds                                     |
 | `pricing`             | `:first_improving` | `:first_improving`: pilots in random order, stop at the first   |
-|                       |                    | negative reduced cost (thesis Alg. 1.3); `:all_blocks`: one     |
-|                       |                    | column per pilot with negative reduced cost                     |
+|                       |                    | negative reduced cost (thesis Alg. 3.1); `:all_blocks`: one     |
+|                       |                    | column per pilot with negative reduced cost (thesis Alg. 2.1)   |
 | `reduced_cost_tolerance` | 1e-6            | a column is improving if its reduced cost is `< -tol`           |
 | `center_tolerance`    | 1e-6               | stabilized runs stop only once `‖π - π̂‖∞ ≤ tol·max(1, ‖π‖∞)`   |
 | `compute_bound`       | false              | price all pilots every iteration to record the Lagrangian bound |

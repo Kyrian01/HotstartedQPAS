@@ -278,7 +278,7 @@ if "D" in SECTIONS
                         @sprintf("%.3e", r.infeasibility), ex.status,
                         @sprintf("%.4f", ex.stats.setup_time + ex.stats.solve_time),
                         @sprintf("%.10f", zstar), d["refactorizations"],
-                        d["final |N| (nullspace dim.)"]])
+                        d["final |N_x| (dim. of H_eff)"]])
         end
     end
 end
